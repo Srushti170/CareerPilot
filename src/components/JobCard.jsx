@@ -1,10 +1,9 @@
 import { motion } from 'motion/react';
 
-export function JobCard(job) {
+export function JobCard({ job }) {
   const logo = job.logo || `https://ui-avatars.com/api/?name=${encodeURIComponent(job.company)}&background=random`;
-  
   return (
-    <motion.div 
+    <motion.div
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       whileHover={{ y: -4 }}
@@ -19,7 +18,7 @@ export function JobCard(job) {
           <p className="text-xs text-slate-500 truncate">{job.company} • {job.location}</p>
         </div>
       </div>
-      
+
       <div className="flex flex-wrap gap-2 mb-4">
         <span className="px-3 py-1 bg-secondary-container/20 text-secondary text-[10px] font-bold rounded-full border border-secondary/10">
           {job.match}% Match

@@ -51,14 +51,14 @@ export function Applications() {
           <p className="text-slate-500 mt-2">Track your progress across 8 ongoing recruitment cycles.</p>
         </div>
         <div className="flex gap-4">
-           <div className="flex -space-x-2">
-             {[1,2,3,4].map(i => (
-               <div key={i} className="w-8 h-8 rounded-full border-2 border-white bg-slate-200 overflow-hidden">
-                 <img src={`https://i.pravatar.cc/100?img=${i+10}`} alt="avatar" />
-               </div>
-             ))}
-             <div className="w-8 h-8 rounded-full border-2 border-white bg-primary text-white text-[10px] font-bold flex items-center justify-center">+4</div>
-           </div>
+          <div className="flex -space-x-2">
+            {[1, 2, 3, 4].map(i => (
+              <div key={i} className="w-8 h-8 rounded-full border-2 border-white bg-slate-200 overflow-hidden">
+                <img src={`https://i.pravatar.cc/100?img=${i + 10}`} alt="avatar" />
+              </div>
+            ))}
+            <div className="w-8 h-8 rounded-full border-2 border-white bg-primary text-white text-[10px] font-bold flex items-center justify-center">+4</div>
+          </div>
         </div>
       </div>
 
@@ -80,11 +80,10 @@ export function Applications() {
                     <h3 className="text-lg font-bold text-on-surface truncate tracking-tight">{app.role}</h3>
                     <span className={cn(
                       "px-2 py-0.5 rounded-full text-[10px] font-bold border uppercase tracking-wider",
-                      statusColors[app.status]
+                      statusColors[app.status] ?? 'bg-slate-50 text-slate-600 border-slate-100'
                     )}>
                       {app.status}
-                    </span>
-                  </div>
+                    </span>                  </div>
                   <div className="flex items-center gap-4 text-xs font-medium text-slate-500">
                     <span className="flex items-center gap-1">
                       <span className="material-symbols-outlined text-sm">domain</span>
@@ -105,7 +104,6 @@ export function Applications() {
                   </button>
                 </div>
               </div>
-              
               {/* Timeline Preview */}
               <div className="bg-surface-container-low/30 px-6 py-3 flex items-center justify-between border-t border-outline-variant/5">
                 <div className="flex items-center gap-8">
@@ -119,13 +117,15 @@ export function Applications() {
                   </div>
                 </div>
                 <div className="text-[10px] font-black text-primary uppercase tracking-widest cursor-pointer hover:underline">
-                  View Full Timeline →
+                  <button type="button" className="text-[10px] font-black text-primary uppercase tracking-widest cursor-pointer hover:underline bg-transparent border-none">
+                    View Full Timeline →
+                  </button>
                 </div>
               </div>
             </Card>
-          </motion.div>
+              </motion.div>
         ))}
-      </div>
-    </div>
-  );
+            </div>
+          </div>
+        );
 }

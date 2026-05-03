@@ -4,6 +4,9 @@
 <head>
   <meta charset="utf-8" />
   <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+  <title>CareerPilot - The Future of Campus Hiring</title>
+  <meta name="description"
+    content="CareerPilot connects top campus talent with global industry leaders through a seamless, intelligent recruitment ecosystem." />
   <link
     href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400;1,500;1,600;1,700&amp;display=swap"
     rel="stylesheet" />
@@ -129,9 +132,9 @@
   <nav class="sticky top-0 w-full z-50 bg-[#f7f9fb]/80 backdrop-blur-md dark:bg-slate-950/80">
     <div class="flex justify-between items-center px-10 py-5 w-full max-w-screen-2xl mx-auto">
       <div class="flex items-center -my-8">
-        <img src="/logo.png" alt="CareerPilot Logo" class="h-32 md:h-48 w-auto object-contain" />
+        <img src="/logo.png" alt="CareerPilot Logo" class="h-10 md:h-48 w-auto object-contain" />
       </div>
-      <div class="hidden md:flex items-center space-x-10">
+      <div class="hidden md:flex items-center space-x-10" id="nav-links">
         <a class="text-[#07584e] dark:text-[#14B8A6] border-b-2 border-[#07584e] pb-1 font-['Poppins'] font-bold tracking-tight"
           href="#">Platform</a>
         <a class="text-slate-600 dark:text-slate-400 hover:text-[#07584e] dark:hover:text-[#14B8A6] transition-all duration-300 font-['Poppins'] font-bold tracking-tight"
@@ -142,7 +145,14 @@
           href="#">Pricing</a>
       </div>
       <div class="flex items-center space-x-6">
-        <button class="text-slate-600 dark:text-slate-400 hover:opacity-90 font-bold transition-all">Login</button>
+        <!-- Mobile menu button -->
+        <button
+          class="md:hidden text-slate-600 dark:text-slate-400 hover:opacity-90 font-bold transition-all p-2 rounded"
+          id="mobile-menu-button" aria-label="Open main menu" aria-expanded="false">
+          <span class="material-symbols-outlined">menu</span>
+        </button>
+        <a href="/app.html"
+          class="text-slate-600 dark:text-slate-400 hover:opacity-90 font-bold transition-all">Login</a>
         <button
           class="bg-primary text-on-primary px-6 py-2.5 rounded-full font-bold hover:opacity-90 transition-all scale-95 active:scale-90">Request
           Demo</button>
@@ -165,23 +175,25 @@
           through a seamless, intelligent ecosystem.
         </p>
         <div class="flex flex-wrap gap-4" data-aos="fade-up" data-aos-delay="400">
-          <button
-            class="editorial-gradient text-on-primary text-lg px-10 py-5 rounded-xl font-bold shadow-2xl shadow-primary/20 hover:scale-[1.02] transition-transform">
+          <a href="/app.html"
+            class="editorial-gradient text-on-primary text-lg px-10 py-5 rounded-xl font-bold shadow-2xl shadow-primary/20 hover:scale-[1.02] transition-transform inline-block text-center">
             Get Started as a Student
-          </button>
-          <button
-            class="bg-surface-container-highest text-primary text-lg px-10 py-5 rounded-xl font-bold hover:bg-surface-container-high transition-colors">
+          </a>
+          <a href="/app.html"
+            class="bg-surface-container-highest text-primary text-lg px-10 py-5 rounded-xl font-bold hover:bg-surface-container-high transition-colors inline-block text-center">
             Partner with Us
-          </button>
+          </a>
         </div>
       </div>
       <div class="lg:col-span-4 relative h-[600px] flex items-center justify-center" data-aos="zoom-in"
         data-aos-duration="1200">
-        <div class="absolute w-96 h-96 bg-[#07584e] opacity-60 blur-[100px] rounded-full"></div>
+        <div class="absolute w-96 h-96 bg-[#07584e] opacity-80 blur-[100px] rounded-full"></div>
         <div
           class="relative w-80 h-80 rounded-3xl bg-white shadow-2xl rotate-12 flex items-center justify-center p-8 hover:rotate-0 transition-all duration-700">
-          <img alt="Companies Grid Background" src="/@fs/C:/Users/jaush/.gemini/antigravity/brain/3a73a882-94bd-40af-8f47-124fed28acf1/media__1777811694504.jpg" class="absolute inset-0 w-full h-full object-cover opacity-50 rounded-3xl" />
-          <img alt="CareerPilot Logo" class="relative z-10 w-full h-full object-contain transition-all duration-700 drop-shadow-xl"
+          <img alt="Companies Grid Background" src="349e1854-9910-445f-8d27-7df947434e13.jpg"
+            class="absolute inset-0 w-full h-full object-cover opacity-50 rounded-3xl" />
+          <img alt="CareerPilot Logo"
+            class="relative z-10 w-full h-full object-contain transition-all duration-700 drop-shadow-xl"
             src="/logo.png" />
           <div class="absolute inset-0 ring-1 ring-inset ring-white/20 rounded-3xl pointer-events-none z-20"></div>
         </div>
@@ -205,7 +217,7 @@
         <div class="flex flex-col gap-2 transform translate-y-0" data-aos="fade-up" data-aos-duration="800">
           <span class="text-8xl font-black text-primary-container tracking-tighter">98%</span>
           <h3 class="text-2xl font-bold text-on-primary">Placement Rate</h3>
-          <p class="text-on-primary/80">Industry-leading success across all partner campuses.</p>
+          <p class="text-on-primary/80">Real students finding their dream starts every day.</p>
         </div>
         <div class="flex flex-col gap-2 transform md:translate-y-20" data-aos="fade-up" data-aos-duration="800"
           data-aos-delay="200">
@@ -319,7 +331,9 @@
       <div class="relative group" data-aos="zoom-in-left" data-aos-duration="1200">
         <div
           class="aspect-[4/5] bg-surface-container-highest rounded-[2rem] overflow-hidden relative shadow-[0_30px_60px_rgba(0,0,0,0.2)] transition-transform hover:-translate-y-2 duration-500">
-          <img src="/ai_interview.png" class="w-full h-full object-cover" alt="AI Interview Record" />
+          <img
+            src="/@fs/C:/Users/jaush/.gemini/antigravity/brain/3a73a882-94bd-40af-8f47-124fed28acf1/media__1777814203935.jpg"
+            class="w-full h-full object-cover" alt="AI Interview Record" />
         </div>
       </div>
     </div>
@@ -412,10 +426,10 @@
         <h2 class="text-[clamp(2.5rem,7vw,5rem)] font-black text-on-surface mb-12 tracking-tight">Ready to <span
             class="text-primary italic">Pilot</span> Your Career?</h2>
         <div class="flex flex-col md:flex-row justify-center items-center gap-6">
-          <button
-            class="bg-primary text-on-primary text-2xl font-black px-16 py-8 rounded-[2rem] hover:scale-105 transition-all shadow-xl shadow-primary/20">
+          <a href="/app.html"
+            class="bg-primary text-on-primary text-2xl font-black px-16 py-8 rounded-[2rem] hover:scale-105 transition-all shadow-xl shadow-primary/20 inline-block text-center">
             Join the Pilot
-          </button>
+          </a>
           <button class="text-on-surface-variant font-bold text-xl hover:text-primary transition-colors px-10 py-6">
             See How it Works
           </button>
@@ -454,6 +468,27 @@
       once: true,
       offset: 50
     });
+
+    // Mobile menu toggle
+    const mobileMenuButton = document.getElementById('mobile-menu-button');
+    const navLinks = document.getElementById('nav-links');
+
+    if (mobileMenuButton && navLinks) {
+      mobileMenuButton.addEventListener('click', () => {
+        const isOpen = navLinks.classList.toggle('hidden');
+        navLinks.classList.toggle('md:flex');
+        mobileMenuButton.setAttribute('aria-expanded', String(!isOpen));
+
+        // Update aria-label based on state
+        if (!isOpen) {
+          mobileMenuButton.setAttribute('aria-label', 'Close main menu');
+          mobileMenuButton.innerHTML = '<span class="material-symbols-outlined">close</span>';
+        } else {
+          mobileMenuButton.setAttribute('aria-label', 'Open main menu');
+          mobileMenuButton.innerHTML = '<span class="material-symbols-outlined">menu</span>';
+        }
+      });
+    }
   </script>
 </body>
 

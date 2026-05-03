@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Sidebar, SidebarItem } from './components/Sidebar';
+import { Sidebar } from './components/Sidebar';
 import { TopBar } from './components/TopBar';
 import { StudentDashboard } from './components/StudentDashboard';
 import { RecruiterDashboard } from './components/RecruiterDashboard';
@@ -12,9 +12,11 @@ import { Candidates } from './components/Candidates';
 import { JobManagement } from './components/JobManagement';
 import { Companies } from './components/Companies';
 import { StudentRecords } from './components/StudentRecords';
+import { Login } from './components/Login';
 import { motion, AnimatePresence } from 'motion/react';
 
 export default function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [persona, setPersona] = useState('student');
   const [activeTab, setActiveTab] = useState('dashboard');
 
@@ -74,6 +76,19 @@ export default function App() {
 
   const sidebarData = getSidebarData();
 
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    setPersona('student');
+    setActiveTab('dashboard');
+  };
+
+  if (!isAuthenticated) {
+    return <Login onLogin={(role) => {
+      setPersona(role);
+      setIsAuthenticated(true);
+    }} />;
+  }
+
   return (
     <div className="min-h-screen bg-surface">
       <Sidebar
@@ -83,6 +98,9 @@ export default function App() {
         personaTitle="CareerPilot"
         personaSubtitle={sidebarData.title}
         bottomItems={bottomItems}
+        onBottomItemClick={(id) => {
+          if (id === 'logout') handleLogout();
+        }}
       />
 
       <main className="ml-64 min-h-screen">

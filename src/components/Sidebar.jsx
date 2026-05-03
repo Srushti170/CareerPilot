@@ -6,7 +6,8 @@ export function Sidebar({
   onItemSelect,
   personaTitle,
   personaSubtitle,
-  bottomItems = []
+  bottomItems = [],
+  onBottomItemClick
 }) {
   return (
     <aside className="fixed left-0 top-0 h-full flex flex-col p-4 w-64 bg-slate-50 dark:bg-slate-950 z-40">
@@ -42,7 +43,7 @@ export function Sidebar({
         {bottomItems.map((item) => (
           <button
             key={item.id}
-            onClick={() => onItemSelect(item.id)}
+            onClick={() => onBottomItemClick ? onBottomItemClick(item.id) : onItemSelect(item.id)}
             className={cn(
               "w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold transition-all duration-200 hover:translate-x-1",
               item.id === 'logout' ? "text-tertiary" : "text-slate-600 dark:text-slate-400 hover:bg-slate-200/50"
