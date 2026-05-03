@@ -104,6 +104,7 @@ export function Applications() {
                   </button>
                 </div>
               </div>
+
               {/* Timeline Preview */}
               <div className="bg-surface-container-low/30 px-6 py-3 flex items-center justify-between border-t border-outline-variant/5">
                 <div className="flex items-center gap-8">
@@ -117,15 +118,13 @@ export function Applications() {
                   </div>
                 </div>
                 <div className="text-[10px] font-black text-primary uppercase tracking-widest cursor-pointer hover:underline">
-                  <button type="button" className="text-[10px] font-black text-primary uppercase tracking-widest cursor-pointer hover:underline bg-transparent border-none">
-                    View Full Timeline →
-                  </button>
+                  View Full Timeline →
                 </div>
               </div>
             </Card>
-              </motion.div>
+          </motion.div>
         ))}
-            </div>
-          </div>
-        );
+      </div>
+    </div>
+  );
 }
