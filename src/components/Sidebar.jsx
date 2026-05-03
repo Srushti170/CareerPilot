@@ -1,28 +1,13 @@
 import { cn } from '../lib/utils';
 
-export interface SidebarItem {
-  id: string;
-  label: string;
-  icon: string;
-}
-
-interface SidebarProps {
-  items: SidebarItem[];
-  activeId: string;
-  onItemSelect: (id: string) => void;
-  personaTitle: string;
-  personaSubtitle: string;
-  bottomItems?: SidebarItem[];
-}
-
-export function Sidebar({ 
-  items, 
-  activeId, 
-  onItemSelect, 
-  personaTitle, 
+export function Sidebar({
+  items,
+  activeId,
+  onItemSelect,
+  personaTitle,
   personaSubtitle,
   bottomItems = []
-}: SidebarProps) {
+}) {
   return (
     <aside className="fixed left-0 top-0 h-full flex flex-col p-4 w-64 bg-slate-50 dark:bg-slate-950 z-40">
       <div className="flex items-center gap-3 px-2 mb-10">
@@ -30,11 +15,11 @@ export function Sidebar({
           <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>all_inclusive</span>
         </div>
         <div>
-          <h1 className="text-xl font-black text-primary tracking-tighter leading-tight">HireLoop</h1>
+          <h1 className="text-xl font-black text-primary tracking-tighter leading-tight">CareerPilot</h1>
           <p className="text-[10px] uppercase tracking-widest text-slate-500 font-bold">{personaSubtitle}</p>
         </div>
       </div>
-      
+
       <nav className="flex-1 space-y-2">
         {items.map((item) => (
           <button
@@ -42,8 +27,8 @@ export function Sidebar({
             onClick={() => onItemSelect(item.id)}
             className={cn(
               "w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold transition-all duration-200 hover:translate-x-1",
-              activeId === item.id 
-                ? "text-primary bg-white dark:bg-slate-900 shadow-sm" 
+              activeId === item.id
+                ? "text-primary bg-white dark:bg-slate-900 shadow-sm"
                 : "text-slate-600 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-800/50"
             )}
           >

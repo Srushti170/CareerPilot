@@ -1,12 +1,6 @@
-import { motion, type HTMLMotionProps } from 'motion/react';
-import type { ReactNode } from 'react';
+import { motion } from 'motion/react';
 
-interface CardProps extends HTMLMotionProps<"div"> {
-  children: ReactNode;
-  className?: string;
-}
-
-export function Card({ children, className = "", ...props }: CardProps) {
+export function Card({ children, className = "", ...props }) {
   return (
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
@@ -19,14 +13,7 @@ export function Card({ children, className = "", ...props }: CardProps) {
   );
 }
 
-export function MetricCard({ label, value, subtext, progress, color = "primary", icon }: { 
-  label: string, 
-  value: string | number, 
-  subtext?: string, 
-  progress?: number, 
-  color?: "primary" | "secondary" | "tertiary",
-  icon?: string
-}) {
+export function MetricCard({ label, value, subtext, progress, color = "primary", icon }) {
   const colorClass = {
     primary: "text-primary bg-primary",
     secondary: "text-secondary bg-secondary",

@@ -2,17 +2,8 @@ import { motion } from 'motion/react';
 import { Card } from './MetricCard';
 import { cn } from '../lib/utils';
 
-interface Application {
-  id: string;
-  company: string;
-  role: string;
-  appliedDate: string;
-  status: 'Reviewing' | 'Interview' | 'Offered' | 'Rejected' | 'Applied';
-  logo: string;
-}
-
 export function Applications() {
-  const apps: Application[] = [
+  const apps = [
     {
       id: '1',
       company: 'Google',
@@ -40,7 +31,7 @@ export function Applications() {
   ];
 
   // Fix broken logos with generic ones if needed, but I'll use placeholders
-  const getLogo = (app: Application) => {
+  const getLogo = (app) => {
     return `https://ui-avatars.com/api/?name=${encodeURIComponent(app.company)}&background=random&size=128`;
   };
 

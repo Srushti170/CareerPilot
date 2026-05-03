@@ -1,13 +1,6 @@
 import { cn } from '../lib/utils';
 
-interface TopBarProps {
-  userName: string;
-  userRole: string;
-  avatarUrl: string;
-  placeholder?: string;
-}
-
-export function TopBar({ userName, userRole, avatarUrl, placeholder = "Search for jobs, skills, or companies..." }: TopBarProps) {
+export function TopBar({ userName, userRole, avatarUrl, placeholder = "Search for jobs, skills, or companies..." }) {
   return (
     <header className="fixed top-0 right-0 left-64 z-30 flex justify-between items-center px-8 h-16 bg-white/70 dark:bg-slate-900/70 backdrop-blur-md transition-all">
       <div className="flex items-center w-1/3">

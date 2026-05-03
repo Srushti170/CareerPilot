@@ -2,21 +2,8 @@ import { motion } from 'motion/react';
 import { Card, MetricCard } from './MetricCard';
 import { cn } from '../lib/utils';
 
-interface Candidate {
-  id: string;
-  name: string;
-  ref: string;
-  university: string;
-  branch: string;
-  cgpa: number;
-  skills: string[];
-  match: number;
-  status: string;
-  avatar: string;
-}
-
 export function RecruiterDashboard() {
-  const candidates: Candidate[] = [
+  const candidates = [
     {
       id: '1',
       name: 'Ethan Wright',

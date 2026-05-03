@@ -1,14 +1,460 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>HireLoop | Recruitment Portal</title>
-    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
-</html>
+<!DOCTYPE html>
+<html class="light" lang="en">
 
+<head>
+  <meta charset="utf-8" />
+  <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400;1,500;1,600;1,700&amp;display=swap"
+    rel="stylesheet" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+    rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet">
+  <script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "tertiary-fixed-dim": "#ffb59e",
+            "on-primary": "#ffffff",
+            "tertiary-fixed": "#ffdbd0",
+            "error": "#ba1a1a",
+            "secondary": "#006a63",
+            "on-surface": "#191c1e",
+            "on-secondary-fixed-variant": "#00504a",
+            "secondary-fixed-dim": "#80d5cb",
+            "on-secondary": "#ffffff",
+            "primary-container": "#14b8a6",
+            "on-secondary-fixed": "#00201d",
+            "inverse-on-surface": "#eff1f3",
+            "on-tertiary-fixed": "#3a0b00",
+            "surface-container-high": "#e6e8ea",
+            "surface-container-highest": "#e0e3e5",
+            "on-primary-fixed-variant": "#005048",
+            "on-primary-container": "#00423b",
+            "inverse-primary": "#4fdbc8",
+            "surface": "#f7f9fb",
+            "on-primary-fixed": "#00201c",
+            "surface-variant": "#e0e3e5",
+            "secondary-fixed": "#9cf2e8",
+            "tertiary-container": "#f38764",
+            "primary-fixed": "#71f8e4",
+            "secondary-container": "#99efe5",
+            "background": "#f7f9fb",
+            "primary": "#07584e",
+            "surface-dim": "#d8dadc",
+            "surface-container-low": "#f2f4f6",
+            "on-tertiary-fixed-variant": "#7c2d11",
+            "on-secondary-container": "#006f67",
+            "on-surface-variant": "#3c4947",
+            "tertiary": "#9b4426",
+            "inverse-surface": "#2d3133",
+            "surface-bright": "#f7f9fb",
+            "on-error": "#ffffff",
+            "on-error-container": "#93000a",
+            "primary-fixed-dim": "#4fdbc8",
+            "on-tertiary-container": "#6c2106",
+            "on-background": "#191c1e",
+            "surface-tint": "#07584e",
+            "outline": "#6c7a77",
+            "on-tertiary": "#ffffff",
+            "outline-variant": "#bbcac6",
+            "surface-container": "#eceef0",
+            "surface-container-lowest": "#ffffff"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          "fontFamily": {
+            "headline": ["Poppins"],
+            "display": ["Poppins"],
+            "body": ["Poppins"],
+            "label": ["Poppins"]
+          }
+        },
+      }
+    }
+  </script>
+  <style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+
+    .editorial-gradient {
+      background: linear-gradient(135deg, #07584e 0%, #14b8a6 100%);
+    }
+
+    .glass-panel {
+      background: rgba(247, 249, 251, 0.7);
+      backdrop-filter: blur(20px);
+    }
+
+    .text-editorial {
+      letter-spacing: -0.02em;
+      line-height: 1.1;
+    }
+
+    /* Extra scrollbar styling for sleekness */
+    ::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: #f7f9fb;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: #14b8a6;
+      border-radius: 4px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: #07584e;
+    }
+
+    body {
+      overflow-x: hidden;
+    }
+  </style>
+</head>
+
+<body class="bg-surface font-body text-on-surface selection:bg-primary-container selection:text-on-primary-container">
+  <!-- TopNavBar -->
+  <nav class="sticky top-0 w-full z-50 bg-[#f7f9fb]/80 backdrop-blur-md dark:bg-slate-950/80">
+    <div class="flex justify-between items-center px-10 py-5 w-full max-w-screen-2xl mx-auto">
+      <div class="flex items-center -my-8">
+        <img src="/logo.png" alt="CareerPilot Logo" class="h-32 md:h-48 w-auto object-contain" />
+      </div>
+      <div class="hidden md:flex items-center space-x-10">
+        <a class="text-[#07584e] dark:text-[#14B8A6] border-b-2 border-[#07584e] pb-1 font-['Poppins'] font-bold tracking-tight"
+          href="#">Platform</a>
+        <a class="text-slate-600 dark:text-slate-400 hover:text-[#07584e] dark:hover:text-[#14B8A6] transition-all duration-300 font-['Poppins'] font-bold tracking-tight"
+          href="#">Talent Network</a>
+        <a class="text-slate-600 dark:text-slate-400 hover:text-[#07584e] dark:hover:text-[#14B8A6] transition-all duration-300 font-['Poppins'] font-bold tracking-tight"
+          href="#">Intelligence</a>
+        <a class="text-slate-600 dark:text-slate-400 hover:text-[#07584e] dark:hover:text-[#14B8A6] transition-all duration-300 font-['Poppins'] font-bold tracking-tight"
+          href="#">Pricing</a>
+      </div>
+      <div class="flex items-center space-x-6">
+        <button class="text-slate-600 dark:text-slate-400 hover:opacity-90 font-bold transition-all">Login</button>
+        <button
+          class="bg-primary text-on-primary px-6 py-2.5 rounded-full font-bold hover:opacity-90 transition-all scale-95 active:scale-90">Request
+          Demo</button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Hero Section -->
+  <section class="relative min-h-[90vh] flex items-center overflow-hidden pt-20">
+    <div class="container mx-auto px-10 grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+      <div class="lg:col-span-8 z-10" data-aos="fade-right" data-aos-duration="1000">
+        <span class="text-primary font-bold tracking-widest uppercase text-sm mb-6 block">Editorial Recruitment</span>
+        <h1 class="text-[clamp(3.5rem,8vw,6.5rem)] font-black text-editorial text-on-surface mb-8 leading-[0.9]">
+          The Future of <br />
+          <span class="text-primary-container italic">Campus Hiring</span> <br />
+          is Fluid.
+        </h1>
+        <p class="text-xl text-on-surface-variant max-w-xl mb-12 font-medium" data-aos="fade-up" data-aos-delay="200">
+          Break the grid of traditional recruitment. CareerPilot connects top campus talent with global industry leaders
+          through a seamless, intelligent ecosystem.
+        </p>
+        <div class="flex flex-wrap gap-4" data-aos="fade-up" data-aos-delay="400">
+          <button
+            class="editorial-gradient text-on-primary text-lg px-10 py-5 rounded-xl font-bold shadow-2xl shadow-primary/20 hover:scale-[1.02] transition-transform">
+            Get Started as a Student
+          </button>
+          <button
+            class="bg-surface-container-highest text-primary text-lg px-10 py-5 rounded-xl font-bold hover:bg-surface-container-high transition-colors">
+            Partner with Us
+          </button>
+        </div>
+      </div>
+      <div class="lg:col-span-4 relative h-[600px] flex items-center justify-center" data-aos="zoom-in"
+        data-aos-duration="1200">
+        <div class="absolute w-96 h-96 bg-[#07584e] opacity-60 blur-[100px] rounded-full"></div>
+        <div
+          class="relative w-80 h-80 rounded-3xl bg-white shadow-2xl rotate-12 flex items-center justify-center p-8 hover:rotate-0 transition-all duration-700">
+          <img alt="Companies Grid Background" src="/@fs/C:/Users/jaush/.gemini/antigravity/brain/3a73a882-94bd-40af-8f47-124fed28acf1/media__1777811694504.jpg" class="absolute inset-0 w-full h-full object-cover opacity-50 rounded-3xl" />
+          <img alt="CareerPilot Logo" class="relative z-10 w-full h-full object-contain transition-all duration-700 drop-shadow-xl"
+            src="/logo.png" />
+          <div class="absolute inset-0 ring-1 ring-inset ring-white/20 rounded-3xl pointer-events-none z-20"></div>
+        </div>
+        <div class="absolute bottom-4 -left-10 glass-panel p-6 rounded-2xl shadow-xl max-w-[240px]" data-aos="fade-up"
+          data-aos-delay="600">
+          <div class="flex items-center gap-3 mb-3">
+            <div class="w-2 h-2 rounded-full bg-primary-container animate-pulse"></div>
+            <span class="text-xs font-bold uppercase tracking-tighter text-on-surface-variant">Live Insights</span>
+          </div>
+          <p class="text-sm font-semibold leading-snug">New talent detected in Computer Science, Stanford University.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Stats Section -->
+  <section class="py-32 bg-primary">
+    <div class="container mx-auto px-10">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-24 md:gap-12">
+        <div class="flex flex-col gap-2 transform translate-y-0" data-aos="fade-up" data-aos-duration="800">
+          <span class="text-8xl font-black text-primary-container tracking-tighter">98%</span>
+          <h3 class="text-2xl font-bold text-on-primary">Placement Rate</h3>
+          <p class="text-on-primary/80">Industry-leading success across all partner campuses.</p>
+        </div>
+        <div class="flex flex-col gap-2 transform md:translate-y-20" data-aos="fade-up" data-aos-duration="800"
+          data-aos-delay="200">
+          <span class="text-8xl font-black text-tertiary-container tracking-tighter">10k+</span>
+          <h3 class="text-2xl font-bold text-on-primary">Student Success Stories</h3>
+          <p class="text-on-primary/80">Real students finding their dream starts everyday.</p>
+        </div>
+        <div class="flex flex-col gap-2 transform md:translate-y-40" data-aos="fade-up" data-aos-duration="800"
+          data-aos-delay="400">
+          <span class="text-8xl font-black text-secondary-container tracking-tighter">500+</span>
+          <h3 class="text-2xl font-bold text-on-primary">Partner Companies</h3>
+          <p class="text-on-primary/80">From Fortune 500 giants to the hottest Silicon Valley startups.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Resume Section -->
+  <section class="py-40 overflow-hidden">
+    <div class="container mx-auto px-10">
+      <div
+        class="bg-surface-container-lowest rounded-[3rem] p-12 md:p-20 relative shadow-sm flex flex-col lg:flex-row items-center gap-16">
+        <div class="lg:w-1/2 order-2 lg:order-1" data-aos="fade-right" data-aos-duration="1000">
+          <div class="relative group">
+            <div
+              class="absolute -inset-10 bg-primary/5 blur-3xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
+            </div>
+            <div
+              class="bg-surface p-8 rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.1)] relative border border-outline-variant/10 hover:-translate-y-2 transition-transform duration-500">
+              <div class="flex justify-between items-center mb-8">
+                <div class="flex gap-2">
+                  <div class="w-3 h-3 rounded-full bg-error/20"></div>
+                  <div class="w-3 h-3 rounded-full bg-tertiary-container/20"></div>
+                  <div class="w-3 h-3 rounded-full bg-primary-container/20"></div>
+                </div>
+                <span class="material-symbols-outlined text-primary" data-icon="auto_awesome">auto_awesome</span>
+              </div>
+              <div class="space-y-4">
+                <div class="h-4 w-3/4 bg-surface-container-high rounded-full overflow-hidden">
+                  <div class="h-full w-2/3 bg-primary-container rounded-full" data-aos="slide-right"
+                    data-aos-duration="1500" data-aos-delay="500"></div>
+                </div>
+                <div class="h-4 w-full bg-surface-container-high rounded-full"></div>
+                <div class="h-4 w-5/6 bg-surface-container-high rounded-full"></div>
+                <div class="pt-8 flex flex-wrap gap-3">
+                  <span class="px-4 py-1.5 rounded-full bg-primary/10 text-primary text-xs font-bold" data-aos="zoom-in"
+                    data-aos-delay="800">ATS Score: 94</span>
+                  <span class="px-4 py-1.5 rounded-full bg-secondary/10 text-secondary text-xs font-bold"
+                    data-aos="zoom-in" data-aos-delay="1000">Keyword Match: High</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="lg:w-1/2 order-1 lg:order-2" data-aos="fade-left" data-aos-duration="1000">
+          <span class="text-primary font-black uppercase tracking-widest text-xs mb-6 block">Intelligence Engine</span>
+          <h2 class="text-5xl md:text-6xl font-black text-on-surface mb-8 leading-tight">AI Resume <br /><span
+              class="text-primary-container italic">Intelligence.</span></h2>
+          <p class="text-xl text-on-surface-variant mb-10 leading-relaxed">
+            Don't just build a resume, optimize it for the ATS. Our proprietary intelligence maps your unique story to
+            what recruiters are actually searching for.
+          </p>
+          <button class="flex items-center gap-3 text-on-surface font-bold group">
+            Analyze my Resume
+            <span class="material-symbols-outlined transition-transform group-hover:translate-x-2"
+              data-icon="arrow_forward">arrow_forward</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Interview Hub -->
+  <section class="relative min-h-screen bg-primary overflow-hidden flex items-center py-20">
+    <div class="absolute inset-0 opacity-40">
+      <div
+        class="absolute top-0 right-0 w-[800px] h-[800px] bg-on-primary/10 rounded-full blur-[180px] -translate-y-1/2 translate-x-1/2"
+        data-aos="fade-in" data-aos-duration="2000"></div>
+      <div
+        class="absolute bottom-0 left-0 w-[600px] h-[600px] bg-on-primary/10 rounded-full blur-[150px] translate-y-1/2 -translate-x-1/4"
+        data-aos="fade-in" data-aos-duration="2000" data-aos-delay="500"></div>
+    </div>
+    <div class="container mx-auto px-10 relative z-10 grid grid-cols-1 lg:grid-cols-2 gap-20 items-center">
+      <div class="text-white" data-aos="fade-right" data-aos-duration="1000">
+        <span class="text-primary-container font-black uppercase tracking-[0.2em] text-xs mb-6 block">The Virtual
+          Arena</span>
+        <h2 class="text-6xl md:text-7xl font-black mb-10 leading-[0.9]">Master the <br /><span
+            class="text-tertiary-container">Interview.</span></h2>
+        <p class="text-xl text-on-primary/80 mb-12 max-w-lg leading-relaxed">
+          Practice with AI-driven roleplay tailored to your dream job. Receive instant feedback on tone, sentiment, and
+          technical accuracy before you step into the real room.
+        </p>
+        <div class="space-y-6">
+          <div class="flex items-start gap-4" data-aos="fade-up" data-aos-delay="200">
+            <span class="material-symbols-outlined text-primary-container mt-1" data-icon="verified">verified</span>
+            <div>
+              <h4 class="font-bold text-lg">Real-time Sentiment Analysis</h4>
+              <p class="text-on-primary/70 text-sm">Understand how your body language and tone impacts your score.
+              </p>
+            </div>
+          </div>
+          <div class="flex items-start gap-4" data-aos="fade-up" data-aos-delay="400">
+            <span class="material-symbols-outlined text-primary-container mt-1" data-icon="psychology">psychology</span>
+            <div>
+              <h4 class="font-bold text-lg">Dynamic Scenario Generation</h4>
+              <p class="text-on-primary/70 text-sm">Each session is unique, reacting to your previous answers.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="relative group" data-aos="zoom-in-left" data-aos-duration="1200">
+        <div
+          class="aspect-[4/5] bg-surface-container-highest rounded-[2rem] overflow-hidden relative shadow-[0_30px_60px_rgba(0,0,0,0.2)] transition-transform hover:-translate-y-2 duration-500">
+          <img src="/ai_interview.png" class="w-full h-full object-cover" alt="AI Interview Record" />
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Testimonials -->
+  <section class="py-40 bg-surface relative overflow-hidden">
+    <div class="absolute inset-0 z-0">
+      <img src="/meeting_grid.png" class="w-full h-full object-cover opacity-50" alt="Meeting grid" />
+      <div class="absolute inset-0 bg-gradient-to-b from-surface via-transparent to-surface"></div>
+    </div>
+    <div class="container mx-auto px-10 relative z-10">
+      <div class="flex flex-col md:flex-row justify-between items-end mb-24">
+        <div class="max-w-2xl" data-aos="fade-right">
+          <span class="text-primary font-bold tracking-widest uppercase text-xs mb-6 block">Voices of the Loop</span>
+          <h2 class="text-5xl md:text-7xl font-black text-on-surface text-editorial">Loved by those <br />shaping the
+            <span class="text-primary">Future.</span>
+          </h2>
+        </div>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-8 items-start">
+        <div
+          class="md:col-span-7 bg-surface-container-lowest/90 backdrop-blur-md p-12 rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.1)] relative overflow-hidden group hover:-translate-y-2 transition-transform duration-500"
+          data-aos="fade-up">
+          <div class="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full -translate-y-1/2 translate-x-1/2">
+          </div>
+          <p class="text-3xl font-bold text-on-surface mb-8 leading-snug">
+            "CareerPilot transformed our campus engagement. We're not just finding candidates; we're discovering future
+            leaders who align perfectly with our culture."
+          </p>
+          <div class="flex items-center gap-4">
+            <div class="w-12 h-12 rounded-full bg-surface-container-high overflow-hidden"></div>
+            <div>
+              <h4 class="font-bold">Marcus Thorne</h4>
+              <p class="text-on-surface-variant text-sm">Head of Talent, Vertex AI</p>
+            </div>
+          </div>
+        </div>
+        <div
+          class="md:col-span-5 bg-primary/95 backdrop-blur-md text-on-primary p-12 rounded-[2.5rem] md:mt-24 shadow-[0_20px_50px_rgba(0,107,95,0.3)] hover:-translate-y-2 transition-transform duration-500"
+          data-aos="fade-up" data-aos-delay="200">
+          <p class="text-xl font-medium mb-8 leading-relaxed">
+            "The resume intelligence alone is worth it. I went from zero call-backs to three interviews in one week at
+            top-tier firms. Truly a game changer for students."
+          </p>
+          <div class="flex items-center gap-4">
+            <div class="w-12 h-12 rounded-full bg-on-primary/20 overflow-hidden"></div>
+            <div>
+              <h4 class="font-bold">Lina Chen</h4>
+              <p class="text-on-primary/70 text-sm">Computer Science Junior, MIT</p>
+            </div>
+          </div>
+        </div>
+        <div
+          class="md:col-span-5 md:-mt-12 bg-surface-container-low/90 backdrop-blur-md p-10 rounded-[2rem] shadow-[0_20px_50px_rgba(0,0,0,0.1)] hover:-translate-y-2 transition-transform duration-500"
+          data-aos="fade-up" data-aos-delay="400">
+          <p class="text-lg font-semibold text-on-surface mb-6 italic">
+            "The interview hub practice made the real thing feel like a conversation I'd already had. I felt prepared
+            for every curveball."
+          </p>
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-full bg-surface-container-high overflow-hidden"></div>
+            <h4 class="font-bold text-sm">Jordan Smith, Wharton Alumni</h4>
+          </div>
+        </div>
+        <div
+          class="md:col-span-7 bg-surface-container-highest/50 backdrop-blur-md p-12 rounded-[2rem] border border-outline-variant/10 shadow-[0_20px_50px_rgba(0,0,0,0.1)] hover:-translate-y-2 transition-transform duration-500"
+          data-aos="fade-up" data-aos-delay="600">
+          <p class="text-2xl font-bold text-on-surface mb-8">
+            "Authentic connection at scale. CareerPilot represents the first major innovation in campus hiring in a
+            decade."
+          </p>
+          <div class="flex items-center gap-4">
+            <div class="w-12 h-12 rounded-full bg-surface-container-high overflow-hidden"></div>
+            <div>
+              <h4 class="font-bold text-lg">Dr. Elena Rodriguez</h4>
+              <p class="text-on-surface-variant text-sm">Director of Career Services, GT</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Final CTA -->
+  <section class="py-40 bg-primary relative overflow-hidden">
+    <div class="container mx-auto px-10 text-center relative z-10" data-aos="zoom-in" data-aos-duration="1000">
+      <div
+        class="bg-surface-container-lowest rounded-[3rem] p-12 md:p-20 relative shadow-[0_20px_50px_rgba(0,0,0,0.2)] max-w-5xl mx-auto flex flex-col items-center justify-center">
+        <h2 class="text-[clamp(2.5rem,7vw,5rem)] font-black text-on-surface mb-12 tracking-tight">Ready to <span
+            class="text-primary italic">Pilot</span> Your Career?</h2>
+        <div class="flex flex-col md:flex-row justify-center items-center gap-6">
+          <button
+            class="bg-primary text-on-primary text-2xl font-black px-16 py-8 rounded-[2rem] hover:scale-105 transition-all shadow-xl shadow-primary/20">
+            Join the Pilot
+          </button>
+          <button class="text-on-surface-variant font-bold text-xl hover:text-primary transition-colors px-10 py-6">
+            See How it Works
+          </button>
+        </div>
+      </div>
+    </div>
+    <div class="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-on-primary/10 to-transparent"></div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="bg-[#f2f4f6] dark:bg-slate-900 w-full py-20 font-['Poppins'] text-sm tracking-wide">
+    <div class="flex flex-col gap-8 md:flex-row justify-between items-center px-12 max-w-7xl mx-auto">
+      <div class="flex items-center -my-8">
+        <img src="/logo.png" alt="CareerPilot Logo" class="h-32 md:h-48 w-auto object-contain" />
+      </div>
+      <div class="flex flex-wrap justify-center gap-10">
+        <a class="text-slate-500 dark:text-slate-400 hover:text-[#9b4426] transition-colors duration-300"
+          href="#">Privacy</a>
+        <a class="text-slate-500 dark:text-slate-400 hover:text-[#9b4426] transition-colors duration-300"
+          href="#">Terms</a>
+        <a class="text-slate-500 dark:text-slate-400 hover:text-[#9b4426] transition-colors duration-300"
+          href="#">Recruitment Ethics</a>
+        <a class="text-slate-500 dark:text-slate-400 hover:text-[#9b4426] transition-colors duration-300"
+          href="#">Campus Partners</a>
+      </div>
+      <div class="text-slate-500 dark:text-slate-400 text-center md:text-right">
+        © 2026 CareerPilot The Editorial Recruitment Journey.
+      </div>
+    </div>
+  </footer>
+  <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
+  <script>
+    AOS.init({
+      duration: 800,
+      easing: 'ease-out-cubic',
+      once: true,
+      offset: 50
+    });
+  </script>
+</body>
+
+</html>

@@ -1,20 +1,6 @@
 import { motion } from 'motion/react';
 
-export interface JobProps {
-  id?: string;
-  title: string;
-  company: string;
-  location: string;
-  logo?: string;
-  match: number;
-  type: string;
-  missingSkills: string[];
-  salary?: string;
-  tags?: string[];
-  key?: any;
-}
-
-export function JobCard(job: JobProps) {
+export function JobCard(job) {
   const logo = job.logo || `https://ui-avatars.com/api/?name=${encodeURIComponent(job.company)}&background=random`;
   
   return (

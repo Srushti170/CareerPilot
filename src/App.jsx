@@ -14,13 +14,11 @@ import { Companies } from './components/Companies';
 import { StudentRecords } from './components/StudentRecords';
 import { motion, AnimatePresence } from 'motion/react';
 
-type Persona = 'student' | 'recruiter' | 'admin';
-
 export default function App() {
-  const [persona, setPersona] = useState<Persona>('student');
+  const [persona, setPersona] = useState('student');
   const [activeTab, setActiveTab] = useState('dashboard');
 
-  const studentItems: SidebarItem[] = [
+  const studentItems = [
     { id: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
     { id: 'search', label: 'Search & Match', icon: 'search' },
     { id: 'applications', label: 'My Applications', icon: 'assignment_turned_in' },
@@ -28,7 +26,7 @@ export default function App() {
     { id: 'interviews', label: 'Mock Interviews', icon: 'interpreter_mode' },
   ];
 
-  const recruiterItems: SidebarItem[] = [
+  const recruiterItems = [
     { id: 'dashboard', label: 'Recruiter Hub', icon: 'dashboard' },
     { id: 'jobs', label: 'Job Management', icon: 'work' },
     { id: 'candidates', label: 'Talent Pool', icon: 'group' },
@@ -36,7 +34,7 @@ export default function App() {
     { id: 'settings', label: 'Team Settings', icon: 'settings' },
   ];
 
-  const adminItems: SidebarItem[] = [
+  const adminItems = [
     { id: 'dashboard', label: 'Placement Hub', icon: 'analytics' },
     { id: 'companies', label: 'Partner Companies', icon: 'domain' },
     { id: 'students', label: 'Student Records', icon: 'school' },
@@ -44,7 +42,7 @@ export default function App() {
     { id: 'settings', label: 'Coordination', icon: 'tune' },
   ];
 
-  const bottomItems: SidebarItem[] = [
+  const bottomItems = [
     { id: 'help', label: 'Help Center', icon: 'help' },
     { id: 'logout', label: 'Logout', icon: 'logout' },
   ];
@@ -68,7 +66,7 @@ export default function App() {
         };
       default:
         return {
-          title: 'HireLoop Portal',
+          title: 'CareerPilot Portal',
           items: studentItems,
         };
     }
@@ -78,17 +76,17 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-surface">
-      <Sidebar 
+      <Sidebar
         items={sidebarData.items}
         activeId={activeTab}
         onItemSelect={setActiveTab}
-        personaTitle="HireLoop"
+        personaTitle="CareerPilot"
         personaSubtitle={sidebarData.title}
         bottomItems={bottomItems}
       />
-      
+
       <main className="ml-64 min-h-screen">
-        <TopBar 
+        <TopBar
           userName="Alex Rivera"
           userRole={persona === 'student' ? 'CS Senior Student' : persona === 'recruiter' ? 'Talent Lead' : 'Placement Head'}
           avatarUrl="https://lh3.googleusercontent.com/aida-public/AB6AXuC42WzyRRM9i-A-ICmV_pg60wrnV6wmP2YNel9d09qWP8QDl2Z5I0UTb-etCnEIu3CR6etIn6A1mvu9hW8Nu905W_iU-v39Jmhr3643oecpxiMi__iNi9fkrb5kxEv150M8m9agiFNGNyqvy1n9Tlo54Czu1umtCZOmVVDeD6ga9MEaDTIFsB23F95vkFtAHieg1w2r4MxiQwjFr6r77oUKzRgPhI45cIwOIef4r0P29jWL9GS1Y_j85DmndrFu8roy5VTB0UHtRB0"
@@ -98,20 +96,20 @@ export default function App() {
         <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 bg-white/80 backdrop-blur p-2 rounded-2xl shadow-xl border border-primary/10">
           <p className="text-[10px] font-bold text-center text-slate-400 uppercase tracking-widest px-2">Preview Role</p>
           <div className="flex gap-1">
-            <button 
-              onClick={() => setPersona('student')} 
+            <button
+              onClick={() => setPersona('student')}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${persona === 'student' ? 'bg-primary text-white' : 'hover:bg-slate-100'}`}
             >
               Student
             </button>
-            <button 
-              onClick={() => setPersona('recruiter')} 
+            <button
+              onClick={() => setPersona('recruiter')}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${persona === 'recruiter' ? 'bg-primary text-white' : 'hover:bg-slate-100'}`}
             >
               Recruiter
             </button>
-            <button 
-              onClick={() => setPersona('admin')} 
+            <button
+              onClick={() => setPersona('admin')}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${persona === 'admin' ? 'bg-primary text-white' : 'hover:bg-slate-100'}`}
             >
               Admin
@@ -135,7 +133,7 @@ export default function App() {
                 {persona === 'admin' && <PlacementDashboard />}
               </>
             )}
-            
+
             {persona === 'student' && (
               <>
                 {activeTab === 'search' && <JobSearch />}
@@ -165,7 +163,7 @@ export default function App() {
                 <div className="bg-surface-container-lowest p-12 rounded-2xl shadow-sm border border-outline-variant/10 flex flex-col items-center justify-center text-center gap-4">
                   <span className="material-symbols-outlined text-6xl text-slate-200">construction</span>
                   <h2 className="text-2xl font-bold text-on-surface">{activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} Coming Soon</h2>
-                  <p className="text-slate-500 max-w-md">The {activeTab} section for {persona}s is currently being optimized for the "HireLoop Editorial" experience.</p>
+                  <p className="text-slate-500 max-w-md">The {activeTab} section for {persona}s is currently being optimized for the "CareerPilot Editorial" experience.</p>
                 </div>
               </div>
             )}
@@ -174,7 +172,7 @@ export default function App() {
       </main>
 
       {/* Floating Action Button (for appropriate tabs) */}
-      <motion.button 
+      <motion.button
         whileHover={{ scale: 1.1 }}
         whileTap={{ scale: 0.9 }}
         className="fixed bottom-8 right-8 w-14 h-14 rounded-full bg-gradient-to-br from-primary to-primary-container text-white shadow-2xl flex items-center justify-center hover:shadow-primary/30 transition-transform z-40"
