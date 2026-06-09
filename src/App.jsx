@@ -13,11 +13,24 @@ import { JobManagement } from './components/JobManagement';
 import { Companies } from './components/Companies';
 import { StudentRecords } from './components/StudentRecords';
 import { Login } from './components/Login';
+import { Settings } from './components/Settings';
+import { InterviewDesk } from './components/InterviewDesk';
+import { GlobalReports } from './components/GlobalReports';
 import { motion, AnimatePresence } from 'motion/react';
 
 export default function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [persona, setPersona] = useState('student');
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [currentUser, setCurrentUser] = useState(() => {
+    const stored = localStorage.getItem('careerpilot_current_user');
+    return stored ? JSON.parse(stored) : null;
+  });
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    return localStorage.getItem('careerpilot_current_user') !== null;
+  });
+  const [persona, setPersona] = useState(() => {
+    const stored = localStorage.getItem('careerpilot_current_user');
+    return stored ? JSON.parse(stored).role : 'student';
+  });
   const [activeTab, setActiveTab] = useState('dashboard');
 
   const studentItems = [
@@ -26,6 +39,7 @@ export default function App() {
     { id: 'applications', label: 'My Applications', icon: 'assignment_turned_in' },
     { id: 'profile', label: 'Student Profile', icon: 'person' },
     { id: 'interviews', label: 'Mock Interviews', icon: 'interpreter_mode' },
+    { id: 'settings', label: 'Settings', icon: 'settings' },
   ];
 
   const recruiterItems = [
@@ -33,7 +47,7 @@ export default function App() {
     { id: 'jobs', label: 'Job Management', icon: 'work' },
     { id: 'candidates', label: 'Talent Pool', icon: 'group' },
     { id: 'schedule', label: 'Interview Desk', icon: 'calendar_month' },
-    { id: 'settings', label: 'Team Settings', icon: 'settings' },
+    { id: 'settings', label: 'Settings', icon: 'settings' },
   ];
 
   const adminItems = [
@@ -41,7 +55,7 @@ export default function App() {
     { id: 'companies', label: 'Partner Companies', icon: 'domain' },
     { id: 'students', label: 'Student Records', icon: 'school' },
     { id: 'reports', label: 'Global Reports', icon: 'description' },
-    { id: 'settings', label: 'Coordination', icon: 'tune' },
+    { id: 'settings', label: 'Settings', icon: 'settings' },
   ];
 
   const bottomItems = [
@@ -77,14 +91,18 @@ export default function App() {
   const sidebarData = getSidebarData();
 
   const handleLogout = () => {
+    localStorage.removeItem('careerpilot_current_user');
+    setCurrentUser(null);
     setIsAuthenticated(false);
     setPersona('student');
     setActiveTab('dashboard');
   };
 
   if (!isAuthenticated) {
-    return <Login onLogin={(role) => {
-      setPersona(role);
+    return <Login onLogin={(user) => {
+      localStorage.setItem('careerpilot_current_user', JSON.stringify(user));
+      setCurrentUser(user);
+      setPersona(user.role);
       setIsAuthenticated(true);
     }} />;
   }
@@ -101,11 +119,13 @@ export default function App() {
         onBottomItemClick={(id) => {
           if (id === 'logout') handleLogout();
         }}
+        isCollapsed={isSidebarCollapsed}
+        onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
       />
 
-      <main className="ml-64 min-h-screen">
+      <main className={`min-h-screen transition-all duration-300 ${isSidebarCollapsed ? 'ml-20' : 'ml-64'}`}>
         <TopBar
-          userName="Alex Rivera"
+          userName={currentUser?.name || "Alex Rivera"}
           userRole={persona === 'student' ? 'CS Senior Student' : persona === 'recruiter' ? 'Talent Lead' : 'Placement Head'}
           avatarUrl="https://lh3.googleusercontent.com/aida-public/AB6AXuC42WzyRRM9i-A-ICmV_pg60wrnV6wmP2YNel9d09qWP8QDl2Z5I0UTb-etCnEIu3CR6etIn6A1mvu9hW8Nu905W_iU-v39Jmhr3643oecpxiMi__iNi9fkrb5kxEv150M8m9agiFNGNyqvy1n9Tlo54Czu1umtCZOmVVDeD6ga9MEaDTIFsB23F95vkFtAHieg1w2r4MxiQwjFr6r77oUKzRgPhI45cIwOIef4r0P29jWL9GS1Y_j85DmndrFu8roy5VTB0UHtRB0"
         />
@@ -152,6 +172,8 @@ export default function App() {
               </>
             )}
 
+            {activeTab === 'settings' && <Settings />}
+
             {persona === 'student' && (
               <>
                 {activeTab === 'search' && <JobSearch />}
@@ -165,6 +187,7 @@ export default function App() {
               <>
                 {activeTab === 'jobs' && <JobManagement />}
                 {activeTab === 'candidates' && <Candidates />}
+                {activeTab === 'schedule' && <InterviewDesk />}
               </>
             )}
 
@@ -172,16 +195,17 @@ export default function App() {
               <>
                 {activeTab === 'companies' && <Companies />}
                 {activeTab === 'students' && <StudentRecords />}
+                {activeTab === 'reports' && <GlobalReports />}
               </>
             )}
 
             {/* Fallback for components not yet implemented */}
-            {((persona !== 'student' && activeTab !== 'dashboard' && activeTab !== 'jobs' && activeTab !== 'candidates' && activeTab !== 'companies' && activeTab !== 'students')) && (
+            {activeTab === 'help' && (
               <div className="pt-24 px-8 pb-12 max-w-7xl mx-auto">
-                <div className="bg-surface-container-lowest p-12 rounded-2xl shadow-sm border border-outline-variant/10 flex flex-col items-center justify-center text-center gap-4">
-                  <span className="material-symbols-outlined text-6xl text-slate-200">construction</span>
-                  <h2 className="text-2xl font-bold text-on-surface">{activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} Coming Soon</h2>
-                  <p className="text-slate-500 max-w-md">The {activeTab} section for {persona}s is currently being optimized for the "CareerPilot Editorial" experience.</p>
+                <div className="bg-white p-12 rounded-2xl shadow-sm border border-slate-100 flex flex-col items-center justify-center text-center gap-4">
+                  <span className="material-symbols-outlined text-6xl text-slate-300">construction</span>
+                  <h2 className="text-2xl font-bold text-slate-800">Help Center Coming Soon</h2>
+                  <p className="text-slate-500 max-w-md">The Help Center guide is currently being compiled for the CareerPilot editorial experience.</p>
                 </div>
               </div>
             )}

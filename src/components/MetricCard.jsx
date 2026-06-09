@@ -3,9 +3,9 @@ import { motion } from 'motion/react';
 export function Card({ children, className = "", ...props }) {
   return (
     <motion.div 
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 15 }}
       animate={{ opacity: 1, y: 0 }}
-      className={`bg-surface-container-lowest p-6 rounded-xl shadow-sm border border-outline-variant/10 relative overflow-hidden group ${className}`}
+      className={`bg-white p-6 rounded-2xl border border-slate-100 shadow-sm relative overflow-hidden transition-all duration-300 hover:shadow-md hover:border-slate-200/80 group ${className}`}
       {...props}
     >
       {children}
@@ -14,42 +14,57 @@ export function Card({ children, className = "", ...props }) {
 }
 
 export function MetricCard({ label, value, subtext, progress, color = "primary", icon }) {
-  const colorClass = {
-    primary: "text-primary bg-primary",
-    secondary: "text-secondary bg-secondary",
-    tertiary: "text-tertiary bg-tertiary"
+  const bgClasses = {
+    primary: "bg-primary/5 text-primary",
+    secondary: "bg-secondary/5 text-secondary",
+    tertiary: "bg-tertiary/5 text-tertiary"
   };
 
+  const isPositiveChange = subtext && (subtext.startsWith('+') || subtext.toLowerCase().includes('active') || subtext.toLowerCase().includes('accepted'));
+
   return (
-    <Card className="hover:shadow-md transition-shadow">
-      <div className="absolute -right-4 -top-4 w-24 h-24 bg-opacity-5 rounded-full group-hover:scale-110 transition-transform flex items-center justify-center pointer-events-none">
-        <div className={`w-full h-full ${color === 'primary' ? 'bg-primary' : color === 'secondary' ? 'bg-secondary' : 'bg-tertiary'} opacity-5 rounded-full`}></div>
+    <Card>
+      <div className="flex justify-between items-center mb-5">
+        {icon && (
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${bgClasses[color] || 'bg-slate-50 text-slate-600'}`}>
+            <span className="material-symbols-outlined text-xl">{icon}</span>
+          </div>
+        )}
+        {progress !== undefined ? (
+          <span className="text-xs font-bold text-slate-400 bg-slate-50 px-2.5 py-1 rounded-lg">
+            {progress}% Rate
+          </span>
+        ) : subtext && isPositiveChange ? (
+          <span className="text-[10px] font-black text-teal-600 bg-teal-50 px-2.5 py-1 rounded-full border border-teal-100 uppercase tracking-wider">
+            {subtext}
+          </span>
+        ) : null}
       </div>
-      <div className="flex justify-between items-start mb-4">
-        <span className="text-slate-500 font-semibold text-xs uppercase tracking-widest">{label}</span>
-        <span className={`font-black text-2xl ${color === 'primary' ? 'text-primary' : color === 'secondary' ? 'text-secondary' : 'text-tertiary'}`}>
+
+      <div className="space-y-1">
+        <h4 className="text-3xl font-black text-slate-800 tracking-tight leading-none">
           {value}
-        </span>
+        </h4>
+        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-normal">
+          {label}
+        </p>
       </div>
+
+      {subtext && !isPositiveChange && (
+        <div className="mt-4 pt-3 border-t border-slate-50 flex items-center gap-1.5 text-xs text-slate-500 font-semibold">
+          <span>{subtext}</span>
+        </div>
+      )}
+      
       {progress !== undefined && (
-        <div className="w-full bg-surface-container-high h-3 rounded-full mb-3">
+        <div className="mt-4 w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
           <motion.div 
             initial={{ width: 0 }}
             animate={{ width: `${progress}%` }}
             transition={{ duration: 1, ease: "easeOut" }}
-            className={`h-3 rounded-full relative ${color === 'primary' ? 'bg-primary' : color === 'secondary' ? 'bg-secondary' : 'bg-tertiary'}`}
-          >
-            {color === 'primary' && progress > 80 && (
-              <div className="absolute right-0 top-0 h-3 w-3 bg-white rounded-full border-2 border-primary animate-pulse"></div>
-            )}
-          </motion.div>
+            className={`h-full rounded-full ${color === 'primary' ? 'bg-primary' : color === 'secondary' ? 'bg-secondary' : 'bg-tertiary'}`}
+          />
         </div>
-      )}
-      {subtext && (
-        <p className="text-[11px] text-slate-500 flex items-center gap-1">
-          {icon && <span className="material-symbols-outlined text-sm">{icon}</span>}
-          {subtext}
-        </p>
       )}
     </Card>
   );

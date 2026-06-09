@@ -1,7 +1,15 @@
 import { motion } from 'motion/react';
 
-export function JobCard({ job }) {
-  const logo = job.logo || `https://ui-avatars.com/api/?name=${encodeURIComponent(job.company)}&background=random`;
+export function JobCard({ job, ...rest }) {
+  const data = job || rest;
+  const company = data.company || '';
+  const title = data.title || '';
+  const location = data.location || '';
+  const match = data.match || 0;
+  const type = data.type || 'Full-time';
+  const missingSkills = data.missingSkills || [];
+  const logo = data.logo || `https://ui-avatars.com/api/?name=${encodeURIComponent(company)}&background=random`;
+
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.95 }}
@@ -11,27 +19,27 @@ export function JobCard({ job }) {
     >
       <div className="flex items-center gap-4 mb-5">
         <div className="w-12 h-12 bg-surface-container-high rounded-lg flex items-center justify-center overflow-hidden shrink-0">
-          <img src={logo} alt={job.company} className="w-8 h-8 object-contain" />
+          <img src={logo} alt={company} className="w-8 h-8 object-contain" />
         </div>
         <div className="min-w-0">
-          <h4 className="font-bold text-on-surface truncate">{job.title}</h4>
-          <p className="text-xs text-slate-500 truncate">{job.company} • {job.location}</p>
+          <h4 className="font-bold text-on-surface truncate">{title}</h4>
+          <p className="text-xs text-slate-500 truncate">{company} • {location}</p>
         </div>
       </div>
 
       <div className="flex flex-wrap gap-2 mb-4">
         <span className="px-3 py-1 bg-secondary-container/20 text-secondary text-[10px] font-bold rounded-full border border-secondary/10">
-          {job.match}% Match
+          {match}% Match
         </span>
         <span className="px-3 py-1 bg-surface-container-low text-slate-500 text-[10px] font-bold rounded-full">
-          {job.type}
+          {type}
         </span>
       </div>
 
       <div className="mb-6">
         <p className="text-[10px] text-slate-400 font-bold uppercase mb-1">Missing Skills</p>
         <div className="flex flex-wrap gap-2">
-          {job.missingSkills.map(skill => (
+          {missingSkills.map(skill => (
             <span key={skill} className="text-xs text-tertiary bg-tertiary-container/10 px-2 py-0.5 rounded border border-tertiary/10">
               {skill}
             </span>

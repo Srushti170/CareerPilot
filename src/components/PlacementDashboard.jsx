@@ -1,32 +1,87 @@
-import { motion } from 'motion/react';
+import { useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { Card, MetricCard } from './MetricCard';
 
 export function PlacementDashboard() {
-  const placements = [
+  const [showModal, setShowModal] = useState(false);
+  const [placements] = useState([
     { name: "Arjun Sharma", company: "Microsoft", package: "44.0", dept: "Computer Science", status: "Accepted", initial: "AS" },
     { name: "Priya Das", company: "Goldman Sachs", package: "28.5", dept: "Electronics", status: "Accepted", initial: "PD" },
     { name: "Rohan Kapoor", company: "Adobe", package: "32.0", dept: "Information Tech", status: "Pending Signature", initial: "RK" },
-  ];
+  ]);
 
   const visits = [
-    { name: "TechNexus Solutions", date: "Oct 24, 2023", roles: "CS, IT, ECE", status: "Confirmed", logo: "https://lh3.googleusercontent.com/aida-public/AB6AXuBSf-YwvPQZjwUV6yeZZrjScJULSYV9F4DLRlpZLuAxvVl-f3C2YCwJ-sUSnwLxB3RgCLhfAeoQ7wD1x52rqjMz5q9zGECap6IhxQtlgZjQ_9jJARVPVQ_Y_cMySXzl8XsX_W86TaWLfgOKwxFkPK0Hi12Exwyhu1C491JvnxnW2wWoXjSkSnAmy039icfg_wDxlCIr2xoys1r1QVx_ydMrvR2s3WYIQuVxt3XQwT5tAhN8y1Sf-Iv83D6V6zsU3a5nir2IDLWycI4" },
-    { name: "FinBridge Global", date: "Oct 28, 2023", roles: "All Streams", status: "Interviewing", logo: "https://lh3.googleusercontent.com/aida-public/AB6AXuCOE5WIIgZuOFRVvuImIamfHIA-Efu1X-ArfcVMikFFwGLFRnHHFkYhO-yK4-LrW4GB6oiWN6ZoPBKvVY7s8urcqjPuJGeSse0J44ayQQ1M9_rVErBzSEH5J12UtPLD_wd4SUiJs_0gqjbrWRvcAgNtZYfwdtXVbjdRLKUEiAveqSxlwp0Glqj2A0KDLb0TIj_CKF7yxuPFsRe22zjWV10aUQ1SCCfLIh8zupdlL9hoLMjSfB0d8hSqeTJusv_arWR4BmiJKqYA3hw" },
+    { name: "TechNexus Solutions", date: "Oct 24, 2023", roles: "CS, IT, ECE", status: "Confirmed", logo: "https://ui-avatars.com/api/?name=TechNexus&background=random" },
+    { name: "FinBridge Global", date: "Oct 28, 2023", roles: "All Streams", status: "Interviewing", logo: "https://ui-avatars.com/api/?name=FinBridge&background=random" },
   ];
+
+  // Company registration form states
+  const [companyName, setCompanyName] = useState('');
+  const [tier, setTier] = useState('Platinum');
+  const [hiring, setHiring] = useState(1);
+  const [visitsCount, setVisitsCount] = useState(1);
+
+  const handleExportCSV = () => {
+    const headers = ['Student Name', 'Company', 'Package (LPA)', 'Department', 'Status'];
+    const rows = placements.map(p => [p.name, p.company, p.package, p.dept, p.status]);
+    const csvContent = "data:text/csv;charset=utf-8," 
+      + [headers.join(','), ...rows.map(e => e.map(val => `"${val}"`).join(","))].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", "careerpilot_placement_report.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleRegisterCompany = (e) => {
+    e.preventDefault();
+    if (!companyName) return;
+
+    // Load existing corporate partners
+    const existing = JSON.parse(localStorage.getItem('careerpilot_companies') || '[]');
+    const newPartner = {
+      name: companyName,
+      tier,
+      hiring: Number(hiring),
+      visits: Number(visitsCount),
+      logo: `https://ui-avatars.com/api/?name=${encodeURIComponent(companyName)}&background=random`
+    };
+
+    const updated = [newPartner, ...existing];
+    localStorage.setItem('careerpilot_companies', JSON.stringify(updated));
+
+    // Reset forms & close
+    setCompanyName('');
+    setTier('Platinum');
+    setHiring(1);
+    setVisitsCount(1);
+    setShowModal(false);
+
+    alert(`Successfully registered ${companyName}! You can view it under the Partner Companies tab.`);
+  };
 
   return (
     <div className="pt-24 px-8 pb-12 max-w-7xl mx-auto space-y-10">
-      <div className="flex justify-between items-end mb-10">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-10 gap-4">
         <div>
           <h3 className="text-3xl font-extrabold font-headline text-on-surface tracking-tight mb-2">Performance Analytics</h3>
           <p className="text-on-surface-variant opacity-80 font-medium">Overview for 2023-2024 Academic Year</p>
         </div>
         <div className="flex gap-4">
-          <button className="flex items-center gap-2 px-6 py-3 bg-surface-container-highest text-primary font-bold rounded-xl hover:bg-surface-container-high transition-colors">
-            <span className="material-symbols-outlined">ios_share</span>
+          <button 
+            onClick={handleExportCSV}
+            className="flex items-center gap-2 px-6 py-3 bg-surface-container-highest text-primary font-bold rounded-xl hover:bg-surface-container-high transition-colors text-xs"
+          >
+            <span className="material-symbols-outlined text-sm">ios_share</span>
             Export Placement Report
           </button>
-          <button className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-primary to-primary-container text-white font-bold rounded-xl shadow-lg shadow-primary/20 hover:scale-[0.98] transition-transform">
-            <span className="material-symbols-outlined">add</span>
+          <button 
+            onClick={() => setShowModal(true)}
+            className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-primary to-primary-container text-white font-bold rounded-xl shadow-lg shadow-primary/20 hover:scale-[0.98] transition-transform text-xs"
+          >
+            <span className="material-symbols-outlined text-sm">add</span>
             Register New Company
           </button>
         </div>
@@ -35,21 +90,8 @@ export function PlacementDashboard() {
       <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <MetricCard label="Companies Registered" value="142" subtext="+12%" color="primary" icon="domain" />
         <MetricCard label="Students Placed" value="842" subtext="Active" color="secondary" icon="person_check" />
-        <div className="bg-surface-container-lowest p-6 rounded-xl relative overflow-hidden group border border-outline-variant/10">
-          <div className="flex justify-between items-start mb-4">
-            <div className="p-3 bg-surface-container-low rounded-lg text-tertiary">
-              <span className="material-symbols-outlined">analytics</span>
-            </div>
-            <div className="h-12 w-12 flex items-center justify-center">
-              <svg className="w-full h-full text-tertiary" viewBox="0 0 36 36">
-                <path className="stroke-current fill-none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" strokeDasharray="85, 100" strokeWidth="3" />
-              </svg>
-            </div>
-          </div>
-          <p className="text-sm font-medium text-on-surface-variant opacity-70 mb-1">Placement Percentage</p>
-          <h4 className="text-3xl font-extrabold font-headline">85%</h4>
-        </div>
-        <MetricCard label="Average Package (LPA)" value="₹12.4" color="primary" icon="payments" />
+        <MetricCard label="Placement Percentage" value="85%" progress={85} color="tertiary" icon="analytics" />
+        <MetricCard label="Average Package" value="₹12.4 LPA" subtext="Top package: ₹44.0 LPA" color="primary" icon="payments" />
       </section>
 
       <div className="grid grid-cols-12 gap-6">
@@ -152,6 +194,97 @@ export function PlacementDashboard() {
           </table>
         </div>
       </section>
+
+      {/* Register Company Modal */}
+      <AnimatePresence>
+        {showModal && (
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white w-full max-w-md rounded-[2.5rem] border border-slate-100 shadow-2xl p-8 space-y-6"
+            >
+              <div className="flex justify-between items-center border-b border-slate-100 pb-4">
+                <h3 className="text-xl font-black text-slate-800">Register New Company</h3>
+                <button 
+                  onClick={() => setShowModal(false)}
+                  className="p-1.5 hover:bg-slate-50 rounded-lg text-slate-400 hover:text-slate-600 transition-colors"
+                >
+                  <span className="material-symbols-outlined text-xl">close</span>
+                </button>
+              </div>
+
+              <form onSubmit={handleRegisterCompany} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">Company Name</label>
+                  <input 
+                    type="text" 
+                    value={companyName}
+                    onChange={(e) => setCompanyName(e.target.value)}
+                    required
+                    placeholder="e.g. Google India"
+                    className="w-full px-4 py-2.5 rounded-xl bg-surface-container-lowest border border-outline-variant/30 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all text-sm font-medium"
+                  />
+                </div>
+
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="col-span-1">
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">Tier</label>
+                    <select
+                      value={tier}
+                      onChange={(e) => setTier(e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-xl bg-surface-container-lowest border border-outline-variant/30 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all text-sm font-medium"
+                    >
+                      <option>Platinum</option>
+                      <option>Gold</option>
+                      <option>Silver</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">Open Roles</label>
+                    <input 
+                      type="number" 
+                      value={hiring}
+                      onChange={(e) => setHiring(e.target.value)}
+                      required
+                      min="1"
+                      className="w-full px-4 py-2.5 rounded-xl bg-surface-container-lowest border border-outline-variant/30 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all text-sm font-medium"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">Visits</label>
+                    <input 
+                      type="number" 
+                      value={visitsCount}
+                      onChange={(e) => setVisitsCount(e.target.value)}
+                      required
+                      min="1"
+                      className="w-full px-4 py-2.5 rounded-xl bg-surface-container-lowest border border-outline-variant/30 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all text-sm font-medium"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-4 flex justify-end gap-3">
+                  <button 
+                    type="button" 
+                    onClick={() => setShowModal(false)}
+                    className="px-5 py-2.5 bg-slate-50 text-slate-600 text-xs font-bold rounded-xl hover:bg-slate-100 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    type="submit"
+                    className="px-5 py-2.5 bg-primary text-white text-xs font-bold rounded-xl shadow-lg shadow-primary/20 hover:scale-[1.01] active:scale-[0.99] transition-all"
+                  >
+                    Register Company
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
