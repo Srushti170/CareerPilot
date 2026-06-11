@@ -56,6 +56,14 @@ export function Settings() {
       const updatedUser = { ...currentUser, name, email };
       localStorage.setItem('careerpilot_users', JSON.stringify(users));
       localStorage.setItem('careerpilot_current_user', JSON.stringify(updatedUser));
+      
+      if (currentUser.role === 'student') {
+        const studentProfile = JSON.parse(localStorage.getItem('careerpilot_student_profile') || '{}');
+        studentProfile.name = name;
+        studentProfile.email = email;
+        localStorage.setItem('careerpilot_student_profile', JSON.stringify(studentProfile));
+      }
+      
       setCurrentUser(updatedUser);
       setSuccess('Profile details updated successfully!');
 

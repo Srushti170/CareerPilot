@@ -81,23 +81,40 @@ export function Login({ onLogin }) {
         return;
       }
 
-      // Check if email already exists
-      const emailExists = users.some((u) => u.email.toLowerCase() === email.toLowerCase());
+      const normalizedEmail = email.trim().toLowerCase();
+      const emailExists = users.some((u) => u.email.toLowerCase() === normalizedEmail);
       if (emailExists) {
         setError('An account with this email already exists.');
         return;
       }
 
-      // Create new user
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+        setError('Use a valid email address to create your account.');
+        return;
+      }
+
       const newUser = {
-        name,
-        email: email.toLowerCase(),
+        name: name.trim(),
+        email: normalizedEmail,
         password,
         role
       };
 
       const updatedUsers = [...users, newUser];
       localStorage.setItem('careerpilot_users', JSON.stringify(updatedUsers));
+
+      if (role === 'student') {
+        localStorage.setItem('careerpilot_student_onboarding_complete', 'false');
+        localStorage.setItem('careerpilot_student_profile', JSON.stringify({
+          name: newUser.name,
+          email: newUser.email,
+          role: 'student',
+          education: [],
+          skills: [],
+          socials: { LinkedIn: { connected: false, handle: '' }, GitHub: { connected: false, handle: '' }, Portfolio: { connected: false, handle: '' } },
+          onboardingComplete: false,
+        }));
+      }
 
       setSuccess('Account created successfully! Logging you in...');
       

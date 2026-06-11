@@ -1,6 +1,6 @@
 import { motion } from 'motion/react';
 
-export function JobCard({ job, ...rest }) {
+export function JobCard({ job, onApply, applied, ...rest }) {
   const data = job || rest;
   const company = data.company || '';
   const title = data.title || '';
@@ -48,8 +48,21 @@ export function JobCard({ job, ...rest }) {
       </div>
 
       <div className="mt-auto">
-        <button className="w-full py-2.5 bg-primary text-white font-bold rounded-lg text-sm hover:opacity-90 active:scale-95 transition-all">
-          Apply Now
+        <button 
+          onClick={applied ? undefined : onApply}
+          disabled={applied}
+          className={`w-full py-2.5 font-bold rounded-lg text-sm transition-all text-center flex items-center justify-center gap-1 ${
+            applied 
+              ? "bg-teal-50 text-teal-700 border border-teal-200 cursor-default" 
+              : "bg-primary text-white hover:opacity-90 active:scale-95"
+          }`}
+        >
+          {applied ? (
+            <>
+              <span className="material-symbols-outlined text-sm">check_circle</span>
+              Applied
+            </>
+          ) : "Apply Now"}
         </button>
       </div>
     </motion.div>

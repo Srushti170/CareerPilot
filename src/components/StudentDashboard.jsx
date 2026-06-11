@@ -1,8 +1,11 @@
+import { useState } from 'react';
 import { MetricCard } from './MetricCard';
 import { JobCard } from './JobCard';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 
-export function StudentDashboard() {
+export function StudentDashboard({ applications = [], setApplications, setActiveTab }) {
+  const savedProfile = JSON.parse(localStorage.getItem('careerpilot_student_profile') || '{}');
+  const studentName = savedProfile.name || 'Student';
   const jobs = [
     {
       id: '1',
@@ -27,22 +30,86 @@ export function StudentDashboard() {
   ];
 
   const actions = [
-    { title: "Improve your Resume", desc: "Add your recent Hackathon project.", progress: 90, icon: "edit_document", color: "primary" },
-    { title: "Mock Interview", desc: "Practice System Design concepts.", progress: 45, icon: "interpreter_mode", color: "secondary" },
-    { title: "Apply to 3 Jobs", desc: "Hit your weekly application target.", progress: 33, icon: "send", color: "tertiary" },
+    { title: "Improve your Resume", desc: "Add your recent Hackathon project.", progress: 90, icon: "edit_document", color: "primary", actionKey: "profile" },
+    { title: "Mock Interview", desc: "Practice System Design concepts.", progress: 45, icon: "interpreter_mode", color: "secondary", actionKey: "interviews" },
+    { title: "Apply to 3 Jobs", desc: "Hit your weekly application target.", progress: 33, icon: "send", color: "tertiary", actionKey: "search" },
   ];
+
+  const [activeTrackerIndex, setActiveTrackerIndex] = useState(0);
+
+  const handleApply = (job) => {
+    const isAlreadyApplied = applications.some(
+      app => app.company.toLowerCase() === job.company.toLowerCase() && 
+             app.role.toLowerCase() === job.title.toLowerCase()
+    );
+    if (isAlreadyApplied) return;
+
+    const newApp = {
+      id: Date.now().toString(),
+      company: job.company,
+      role: job.title,
+      appliedDate: new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
+      status: 'Applied',
+      logo: job.logo || `https://ui-avatars.com/api/?name=${encodeURIComponent(job.company)}&background=random`
+    };
+
+    setApplications([newApp, ...applications]);
+  };
+
+  const getStepsForStatus = (status, date) => {
+    return [
+      { label: "Applied", date: date, active: true, done: true, icon: "check" },
+      { 
+        label: "Shortlisted", 
+        date: status !== 'Applied' ? "Completed" : "In Progress", 
+        active: status !== 'Applied', 
+        done: ['Interview', 'Offered', 'Rejected'].includes(status), 
+        current: status === 'Reviewing',
+        icon: status === 'Reviewing' ? "schedule" : "check" 
+      },
+      { 
+        label: "Interview", 
+        date: status === 'Interview' ? "Scheduled" : (['Offered', 'Rejected'].includes(status) ? "Completed" : "Pending"), 
+        active: ['Interview', 'Offered', 'Rejected'].includes(status), 
+        done: ['Offered', 'Rejected'].includes(status), 
+        current: status === 'Interview',
+        icon: status === 'Interview' ? "schedule" : "check" 
+      },
+      { 
+        label: status === 'Rejected' ? "Closed" : "Offer", 
+        date: status === 'Offered' ? "Received" : (status === 'Rejected' ? "Not Selected" : "Pending"), 
+        active: ['Offered', 'Rejected'].includes(status), 
+        done: ['Offered', 'Rejected'].includes(status), 
+        current: false, 
+        icon: status === 'Rejected' ? "cancel" : "celebration" 
+      }
+    ];
+  };
+
+  const activeApps = applications.filter(app => app.status !== 'Rejected');
+  const currentTracker = activeApps[activeTrackerIndex % (activeApps.length || 1)];
+
+  const handlePrevTracker = () => {
+    setActiveTrackerIndex(prev => (prev === 0 ? activeApps.length - 1 : prev - 1));
+  };
+
+  const handleNextTracker = () => {
+    setActiveTrackerIndex(prev => (prev === activeApps.length - 1 ? 0 : prev + 1));
+  };
 
   return (
     <div className="pt-24 px-8 pb-12 max-w-7xl mx-auto space-y-10">
       <section>
-        <motion.h2 
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          className="text-3xl font-extrabold tracking-tighter text-on-surface"
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="rounded-3xl border border-slate-200 bg-[linear-gradient(130deg,#0f172a_0%,#1e3a8a_45%,#2563eb_100%)] p-8 text-white shadow-2xl shadow-primary/10"
         >
-          Welcome back, Alex! <span className="text-primary-container">Ready for the next loop?</span>
-        </motion.h2>
-        <p className="text-slate-500 mt-1">You have 2 upcoming interviews this week. Let's get prepared.</p>
+          <p className="text-xs font-black uppercase tracking-[0.35em] text-blue-100">Student dashboard</p>
+          <h2 className="mt-3 text-3xl font-black tracking-tight">Welcome back, {studentName}.</h2>
+          <p className="mt-2 max-w-2xl text-sm text-blue-100/90">Track applications, polish your profile, and keep your opportunities pipeline moving with a cleaner, recruiter-ready view.</p>
+        </motion.div>
+        <p className="text-slate-500 mt-1">You have {applications.filter(a => a.status === 'Interview').length} upcoming interviews this week. Let's get prepared.</p>
       </section>
 
       <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -55,10 +122,23 @@ export function StudentDashboard() {
         <section className="lg:col-span-2 space-y-6">
           <div className="flex justify-between items-center">
             <h3 className="text-xl font-bold tracking-tight">Recommended for You</h3>
-            <button className="text-primary text-sm font-semibold hover:underline">View All</button>
+            <button onClick={() => setActiveTab('search')} className="text-primary text-sm font-semibold hover:underline">View All</button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {jobs.map(job => <JobCard key={job.id} {...job} />)}
+            {jobs.map(job => {
+              const isApplied = applications.some(
+                app => app.company.toLowerCase() === job.company.toLowerCase() && 
+                       app.role.toLowerCase() === job.title.toLowerCase()
+              );
+              return (
+                <JobCard 
+                  key={job.id} 
+                  job={job} 
+                  applied={isApplied} 
+                  onApply={() => handleApply(job)} 
+                />
+              );
+            })}
           </div>
         </section>
 
@@ -66,7 +146,11 @@ export function StudentDashboard() {
           <h3 className="text-xl font-bold tracking-tight">Next Best Actions</h3>
           <div className="bg-surface-container-lowest rounded-xl p-6 shadow-sm border border-outline-variant/5 space-y-5">
             {actions.map((action, i) => (
-              <div key={i} className="flex gap-4 group">
+              <div 
+                key={i} 
+                className="flex gap-4 group cursor-pointer"
+                onClick={() => setActiveTab(action.actionKey)}
+              >
                 <div className={`mt-1 w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
                   action.color === 'primary' ? 'bg-primary/10 text-primary' : 
                   action.color === 'secondary' ? 'bg-secondary/10 text-secondary' : 'bg-tertiary/10 text-tertiary'
@@ -74,7 +158,7 @@ export function StudentDashboard() {
                   <span className="material-symbols-outlined text-sm">{action.icon}</span>
                 </div>
                 <div className="flex-1 border-b border-slate-100 pb-4 last:border-0">
-                  <p className="text-sm font-bold text-on-surface">{action.title}</p>
+                  <p className="text-sm font-bold text-on-surface group-hover:text-primary transition-colors">{action.title}</p>
                   <p className="text-xs text-slate-500 mb-2">{action.desc}</p>
                   <div className="w-full h-1.5 bg-surface-container rounded-full overflow-hidden">
                     <motion.div 
@@ -96,63 +180,83 @@ export function StudentDashboard() {
       <section className="space-y-6">
         <div className="flex justify-between items-center">
           <h3 className="text-xl font-bold tracking-tight">Active Trackers</h3>
-          <div className="flex gap-2">
-            <button className="p-2 bg-white rounded-lg shadow-sm border border-outline-variant/10 hover:bg-slate-50 transition-colors">
-              <span className="material-symbols-outlined text-slate-500">chevron_left</span>
-            </button>
-            <button className="p-2 bg-white rounded-lg shadow-sm border border-outline-variant/10 hover:bg-slate-50 transition-colors">
-              <span className="material-symbols-outlined text-slate-500">chevron_right</span>
-            </button>
-          </div>
+          {activeApps.length > 1 && (
+            <div className="flex gap-2">
+              <button 
+                onClick={handlePrevTracker} 
+                className="p-2 bg-white rounded-lg shadow-sm border border-outline-variant/10 hover:bg-slate-50 transition-colors"
+              >
+                <span className="material-symbols-outlined text-slate-500">chevron_left</span>
+              </button>
+              <button 
+                onClick={handleNextTracker} 
+                className="p-2 bg-white rounded-lg shadow-sm border border-outline-variant/10 hover:bg-slate-50 transition-colors"
+              >
+                <span className="material-symbols-outlined text-slate-500">chevron_right</span>
+              </button>
+            </div>
+          )}
         </div>
         
-        <div className="bg-surface-container-lowest rounded-xl p-8 shadow-sm border border-outline-variant/5">
-          <div className="flex flex-col md:flex-row items-center justify-between mb-10 gap-4">
-            <div className="flex items-center gap-4">
-              <div className="w-10 h-10 bg-slate-950 rounded-lg flex items-center justify-center overflow-hidden">
-                <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuCwmqkI3ugEyAnfsIVvXzR8vd1J9f9masmOZDuUcNxM7Pmv5auaHnJq4jqZ5RB7EIjvXQsdKUi2ABBHG3llgUqyEP5yE7D0qP5CkjcWdlKUA7oZBD_Dlw2-p_9z5NlKJZYVCIdL0Vm7HIl-f2boEq24HBF7pJTQqExh8pVkjGr08UsJTHsMsobEApFce94gIcP0x-ewbECTANIIia9-IFVjjnPsCN_GKmKcyFq7ad9D5XaRJsmIF7esEeXyeTEQEeY4oE8nnrrOxvY" className="w-7 h-7 object-contain" alt="Stripe" />
-              </div>
-              <div>
-                <h4 className="font-bold">Software Engineer Intern</h4>
-                <p className="text-xs text-slate-500">Stripe • San Francisco, CA</p>
-              </div>
-            </div>
-            <div className="text-center md:text-right">
-              <p className="text-xs text-slate-400 font-bold uppercase mb-1">Status</p>
-              <span className="px-3 py-1 bg-primary/10 text-primary text-[10px] font-black rounded-full uppercase tracking-widest">Interview Stage</span>
-            </div>
+        {activeApps.length === 0 ? (
+          <div className="bg-surface-container-lowest rounded-xl p-8 shadow-sm border border-outline-variant/5 text-center flex flex-col items-center justify-center gap-4">
+            <span className="material-symbols-outlined text-4xl text-slate-300">work_outline</span>
+            <p className="text-slate-500 font-medium">No active applications currently tracking.</p>
+            <button 
+              onClick={() => setActiveTab('search')} 
+              className="px-6 py-2.5 bg-primary text-white text-xs font-bold rounded-xl shadow-lg shadow-primary/10 hover:shadow-primary/25 transition-all uppercase tracking-wider"
+            >
+              Find and Apply for Jobs
+            </button>
           </div>
+        ) : (
+          <div className="bg-surface-container-lowest rounded-xl p-8 shadow-sm border border-outline-variant/5">
+            <div className="flex flex-col md:flex-row items-center justify-between mb-10 gap-4">
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center overflow-hidden border border-slate-200 p-2">
+                  <img 
+                    src={currentTracker.logo || `https://ui-avatars.com/api/?name=${encodeURIComponent(currentTracker.company)}&background=random`} 
+                    className="w-7 h-7 object-contain" 
+                    alt={currentTracker.company} 
+                  />
+                </div>
+                <div>
+                  <h4 className="font-bold">{currentTracker.role}</h4>
+                  <p className="text-xs text-slate-500">{currentTracker.company}</p>
+                </div>
+              </div>
+              <div className="text-center md:text-right">
+                <p className="text-xs text-slate-400 font-bold uppercase mb-1">Status</p>
+                <span className="px-3 py-1 bg-primary/10 text-primary text-[10px] font-black rounded-full uppercase tracking-widest">
+                  {currentTracker.status}
+                </span>
+              </div>
+            </div>
 
-          <div className="relative pt-4 overflow-x-auto">
-            <div className="min-w-[600px] px-8">
-              <div className="absolute top-[48px] left-[calc(12.5%+32px)] right-[calc(12.5%+32px)] h-1 bg-surface-container z-0"></div>
-              <div className="absolute top-[48px] left-[calc(12.5%+32px)] w-[37.5%] h-1 bg-primary z-0"></div>
-              
-              <div className="relative z-10 flex justify-between items-center">
-                {[
-                  { label: "Applied", date: "Oct 12, 2023", active: true, done: true, icon: "check" },
-                  { label: "Shortlisted", date: "Oct 15, 2023", active: true, done: true, icon: "check" },
-                  { label: "Interview", date: "Tomorrow, 10 AM", active: true, current: true, icon: "schedule" },
-                  { label: "Offer", date: "Pending", icon: "celebration" },
-                  { label: "Decision", date: "--", icon: "cancel" }
-                ].map((step, i) => (
-                  <div key={i} className={`flex flex-col items-center gap-2 ${!step.active ? 'opacity-30' : ''}`}>
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center shadow-lg transition-all ${
-                      step.done ? 'bg-primary text-white shadow-primary/20' : 
-                      step.current ? 'bg-white border-2 border-primary text-primary animate-pulse' : 'bg-surface-container text-slate-400'
-                    }`}>
-                      <span className="material-symbols-outlined" style={step.done ? { fontVariationSettings: "'FILL' 1" } : {}}>{step.icon}</span>
+            <div className="relative pt-4 overflow-x-auto">
+              <div className="min-w-[600px] px-8">
+                <div className="absolute top-[48px] left-[calc(12.5%+32px)] right-[calc(12.5%+32px)] h-1 bg-surface-container z-0"></div>
+                
+                <div className="relative z-10 flex justify-between items-center">
+                  {getStepsForStatus(currentTracker.status, currentTracker.appliedDate).map((step, i) => (
+                    <div key={i} className={`flex flex-col items-center gap-2 ${!step.active ? 'opacity-30' : ''}`}>
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center shadow-lg transition-all ${
+                        step.done ? 'bg-primary text-white shadow-primary/20' : 
+                        step.current ? 'bg-white border-2 border-primary text-primary animate-pulse' : 'bg-surface-container text-slate-400'
+                      }`}>
+                        <span className="material-symbols-outlined" style={step.done ? { fontVariationSettings: "'FILL' 1" } : {}}>{step.icon}</span>
+                      </div>
+                      <div className="text-center">
+                        <p className={`text-xs font-bold ${step.current ? 'text-primary' : 'text-on-surface'}`}>{step.label}</p>
+                        <p className={`text-[10px] ${step.current ? 'text-primary-container font-semibold' : 'text-slate-400'}`}>{step.date}</p>
+                      </div>
                     </div>
-                    <div className="text-center">
-                      <p className={`text-xs font-bold ${step.current ? 'text-primary' : 'text-on-surface'}`}>{step.label}</p>
-                      <p className={`text-[10px] ${step.current ? 'text-primary-container font-semibold' : 'text-slate-400'}`}>{step.date}</p>
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        )}
       </section>
     </div>
   );

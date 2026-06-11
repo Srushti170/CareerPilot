@@ -14,6 +14,7 @@ import { Companies } from './components/Companies';
 import { StudentRecords } from './components/StudentRecords';
 import { Login } from './components/Login';
 import { Settings } from './components/Settings';
+import { StudentOnboarding } from './components/StudentOnboarding';
 import { InterviewDesk } from './components/InterviewDesk';
 import { GlobalReports } from './components/GlobalReports';
 import { motion, AnimatePresence } from 'motion/react';
@@ -31,7 +32,71 @@ export default function App() {
     const stored = localStorage.getItem('careerpilot_current_user');
     return stored ? JSON.parse(stored).role : 'student';
   });
+  const [needsOnboarding, setNeedsOnboarding] = useState(() => {
+    const stored = localStorage.getItem('careerpilot_current_user');
+    const user = stored ? JSON.parse(stored) : null;
+    return user?.role === 'student' && localStorage.getItem('careerpilot_student_onboarding_complete') !== 'true';
+  });
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [globalSearchQuery, setGlobalSearchQuery] = useState('');
+
+  const [applications, setApplications] = useState(() => {
+    const stored = localStorage.getItem('careerpilot_applications');
+    if (stored) return JSON.parse(stored);
+    
+    const defaultApps = [
+      {
+        id: '1',
+        company: 'Google',
+        role: 'Software Engineer Intern',
+        appliedDate: 'Oct 12, 2023',
+        status: 'Interview',
+        logo: 'https://lh3.googleusercontent.com/aida-public/AB6AXuC6n9O4Yw1sHm33bnxv42c3Lc__KboJawPt7X0Q7ccBUqzaPBfqbyO3NijginBJ6pnNTcE0_zmA7b1bGoiapK3X6BW-S-8TbXCeAv06XaZs1HCk-oGvvv1g-VLo9cAZjCiqB0aOwe6GDt5BS-e1hdsRwWFNw_UkfrG-HrmWWGQZ8xxzZibnX37QHy3ASKJFheqhCdg0lpHIJRVgXK5s52Z5gSAIq78DMoGGiR60gBtoynaU4cZUm8k_PZT2u6YCkx7jmjC36lPZNho'
+      },
+      {
+        id: '2',
+        company: 'Amazon',
+        role: 'AWS Cloud Support',
+        appliedDate: 'Oct 05, 2023',
+        status: 'Reviewing',
+        logo: ''
+      },
+      {
+        id: '3',
+        company: 'Meta',
+        role: 'Frontend Developer',
+        appliedDate: 'Sep 28, 2023',
+        status: 'Rejected',
+        logo: ''
+      }
+    ];
+    localStorage.setItem('careerpilot_applications', JSON.stringify(defaultApps));
+    return defaultApps;
+  });
+
+  const [notifications, setNotifications] = useState(() => {
+    const stored = localStorage.getItem('careerpilot_notifications');
+    if (stored) return JSON.parse(stored);
+    
+    const defaultNotifs = [
+      { id: '1', title: 'Interview tomorrow', desc: 'Google interview scheduled at 10 AM', time: '5m ago', read: false },
+      { id: '2', title: 'Application Update', desc: 'Amazon status updated to Reviewing', time: '2h ago', read: false },
+      { id: '3', title: 'Profile Views', desc: '3 recruiters viewed your profile today', time: '1d ago', read: true }
+    ];
+    localStorage.setItem('careerpilot_notifications', JSON.stringify(defaultNotifs));
+    return defaultNotifs;
+  });
+
+  const updateApplications = (newApps) => {
+    setApplications(newApps);
+    localStorage.setItem('careerpilot_applications', JSON.stringify(newApps));
+  };
+
+  const updateNotifications = (newNotifs) => {
+    setNotifications(newNotifs);
+    localStorage.setItem('careerpilot_notifications', JSON.stringify(newNotifs));
+  };
+
 
   const studentItems = [
     { id: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
@@ -90,21 +155,39 @@ export default function App() {
 
   const sidebarData = getSidebarData();
 
+  const handleLogin = (user) => {
+    const onboardingRequired = user.role === 'student' && localStorage.getItem('careerpilot_student_onboarding_complete') !== 'true';
+    localStorage.setItem('careerpilot_current_user', JSON.stringify(user));
+    setCurrentUser(user);
+    setPersona(user.role);
+    setNeedsOnboarding(onboardingRequired);
+    setIsAuthenticated(true);
+    setActiveTab('dashboard');
+  };
+
   const handleLogout = () => {
     localStorage.removeItem('careerpilot_current_user');
     setCurrentUser(null);
     setIsAuthenticated(false);
     setPersona('student');
+    setNeedsOnboarding(false);
     setActiveTab('dashboard');
   };
 
   if (!isAuthenticated) {
-    return <Login onLogin={(user) => {
-      localStorage.setItem('careerpilot_current_user', JSON.stringify(user));
-      setCurrentUser(user);
-      setPersona(user.role);
-      setIsAuthenticated(true);
-    }} />;
+    return <Login onLogin={handleLogin} />;
+  }
+
+  if (needsOnboarding && currentUser?.role === 'student') {
+    return (
+      <StudentOnboarding
+        currentUser={currentUser}
+        onComplete={() => {
+          setNeedsOnboarding(false);
+          setActiveTab('dashboard');
+        }}
+      />
+    );
   }
 
   return (
@@ -128,32 +211,17 @@ export default function App() {
           userName={currentUser?.name || "Alex Rivera"}
           userRole={persona === 'student' ? 'CS Senior Student' : persona === 'recruiter' ? 'Talent Lead' : 'Placement Head'}
           avatarUrl="https://lh3.googleusercontent.com/aida-public/AB6AXuC42WzyRRM9i-A-ICmV_pg60wrnV6wmP2YNel9d09qWP8QDl2Z5I0UTb-etCnEIu3CR6etIn6A1mvu9hW8Nu905W_iU-v39Jmhr3643oecpxiMi__iNi9fkrb5kxEv150M8m9agiFNGNyqvy1n9Tlo54Czu1umtCZOmVVDeD6ga9MEaDTIFsB23F95vkFtAHieg1w2r4MxiQwjFr6r77oUKzRgPhI45cIwOIef4r0P29jWL9GS1Y_j85DmndrFu8roy5VTB0UHtRB0"
+          onNavigateSettings={() => setActiveTab('settings')}
+          searchQuery={globalSearchQuery}
+          setSearchQuery={(q) => {
+            setGlobalSearchQuery(q);
+            if (persona === 'student') {
+              setActiveTab('search');
+            }
+          }}
+          notifications={notifications}
+          setNotifications={updateNotifications}
         />
-
-        {/* Persona Switcher (For Demo Purposes) */}
-        <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 bg-white/80 backdrop-blur p-2 rounded-2xl shadow-xl border border-primary/10">
-          <p className="text-[10px] font-bold text-center text-slate-400 uppercase tracking-widest px-2">Preview Role</p>
-          <div className="flex gap-1">
-            <button
-              onClick={() => setPersona('student')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${persona === 'student' ? 'bg-primary text-white' : 'hover:bg-slate-100'}`}
-            >
-              Student
-            </button>
-            <button
-              onClick={() => setPersona('recruiter')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${persona === 'recruiter' ? 'bg-primary text-white' : 'hover:bg-slate-100'}`}
-            >
-              Recruiter
-            </button>
-            <button
-              onClick={() => setPersona('admin')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${persona === 'admin' ? 'bg-primary text-white' : 'hover:bg-slate-100'}`}
-            >
-              Admin
-            </button>
-          </div>
-        </div>
 
         <AnimatePresence mode="wait">
           <motion.div
@@ -166,8 +234,18 @@ export default function App() {
             {/* Direct Routing */}
             {activeTab === 'dashboard' && (
               <>
-                {persona === 'student' && <StudentDashboard />}
-                {persona === 'recruiter' && <RecruiterDashboard />}
+                {persona === 'student' && (
+                  <StudentDashboard 
+                    applications={applications} 
+                    setApplications={updateApplications} 
+                    setActiveTab={setActiveTab} 
+                  />
+                )}
+                {persona === 'recruiter' && (
+                  <RecruiterDashboard 
+                    setActiveTab={setActiveTab} 
+                  />
+                )}
                 {persona === 'admin' && <PlacementDashboard />}
               </>
             )}
@@ -176,9 +254,27 @@ export default function App() {
 
             {persona === 'student' && (
               <>
-                {activeTab === 'search' && <JobSearch />}
-                {activeTab === 'applications' && <Applications />}
-                {activeTab === 'profile' && <Profile />}
+                {activeTab === 'search' && (
+                  <JobSearch 
+                    searchQuery={globalSearchQuery} 
+                    setSearchQuery={setGlobalSearchQuery} 
+                    applications={applications} 
+                    setApplications={updateApplications} 
+                    setActiveTab={setActiveTab}
+                  />
+                )}
+                {activeTab === 'applications' && (
+                  <Applications 
+                    applications={applications} 
+                    setApplications={updateApplications} 
+                  />
+                )}
+                {activeTab === 'profile' && (
+                  <Profile 
+                    currentUser={currentUser} 
+                    setCurrentUser={setCurrentUser} 
+                  />
+                )}
                 {activeTab === 'interviews' && <MockInterviews />}
               </>
             )}
