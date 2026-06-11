@@ -56,7 +56,7 @@ export function Login({ onLogin }) {
       );
 
       if (user) {
-        onLogin(user);
+        onLogin(user, false);
       } else {
         // Double check if user exists with a different role to give a helpful hint
         const anyUserWithEmail = users.find((u) => u.email.toLowerCase() === email.toLowerCase());
@@ -120,7 +120,7 @@ export function Login({ onLogin }) {
       
       // Auto login after 1 second
       setTimeout(() => {
-        onLogin(newUser);
+        onLogin(newUser, true);
       }, 1000);
     }
   };

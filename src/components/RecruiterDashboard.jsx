@@ -7,7 +7,7 @@ export function RecruiterDashboard({ setActiveTab }) {
   const [candidates, setCandidates] = useState(() => {
     const stored = localStorage.getItem('careerpilot_candidates_recruiter');
     if (stored) return JSON.parse(stored);
-    
+
     const defaults = [
       {
         id: '1',
@@ -65,7 +65,7 @@ export function RecruiterDashboard({ setActiveTab }) {
   const handleExportCSV = () => {
     const headers = ['Candidate', 'Ref', 'University', 'Branch', 'CGPA', 'Match Score', 'Status'];
     const rows = candidates.map(c => [c.name, c.ref, c.university, c.branch, c.cgpa, `${c.match}%`, c.status]);
-    const csvContent = "data:text/csv;charset=utf-8," 
+    const csvContent = "data:text/csv;charset=utf-8,"
       + [headers.join(','), ...rows.map(e => e.map(val => `"${val}"`).join(","))].join("\n");
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
@@ -101,14 +101,14 @@ export function RecruiterDashboard({ setActiveTab }) {
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
                 <h2 className="text-xl font-black text-on-surface">Talent Pipeline</h2>
                 <div className="flex items-center gap-2">
-                  <button 
+                  <button
                     onClick={() => setShowAdvanced(!showAdvanced)}
                     className="flex items-center gap-2 px-3 py-1.5 text-sm font-semibold text-slate-600 bg-surface-container-low rounded-lg hover:bg-surface-container-high transition-colors"
                   >
                     <span className="material-symbols-outlined text-sm">filter_list</span>
                     {showAdvanced ? 'Hide Filters' : 'Advanced Filters'}
                   </button>
-                  <button 
+                  <button
                     onClick={handleExportCSV}
                     className="flex items-center gap-2 px-3 py-1.5 text-sm font-semibold text-slate-600 bg-surface-container-low rounded-lg hover:bg-surface-container-high transition-colors"
                   >
@@ -121,7 +121,7 @@ export function RecruiterDashboard({ setActiveTab }) {
               {/* Advanced Filter Drawer */}
               <AnimatePresence>
                 {showAdvanced && (
-                  <motion.div 
+                  <motion.div
                     initial={{ height: 0, opacity: 0 }}
                     animate={{ height: 'auto', opacity: 1 }}
                     exit={{ height: 0, opacity: 0 }}
@@ -129,8 +129,8 @@ export function RecruiterDashboard({ setActiveTab }) {
                   >
                     <div>
                       <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Required Skill Keywords</label>
-                      <select 
-                        value={advancedRole} 
+                      <select
+                        value={advancedRole}
                         onChange={(e) => setAdvancedRole(e.target.value)}
                         className="w-full bg-white border border-slate-200 rounded-lg text-sm p-2 outline-none focus:ring-2 focus:ring-primary/20"
                       >
@@ -144,7 +144,7 @@ export function RecruiterDashboard({ setActiveTab }) {
                       </select>
                     </div>
                     <div className="flex items-end">
-                      <button 
+                      <button
                         onClick={() => { setMinCgpa('All'); setBranch('All'); setMatchPercent('All'); setAdvancedRole('All'); }}
                         className="w-full py-2 bg-slate-200 text-slate-700 font-bold rounded-lg text-xs uppercase tracking-wider hover:bg-slate-300 transition-colors"
                       >
@@ -158,7 +158,7 @@ export function RecruiterDashboard({ setActiveTab }) {
               <div className="flex flex-wrap items-center gap-4">
                 <div className="flex-1 min-w-[120px]">
                   <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Min CGPA</label>
-                  <select 
+                  <select
                     value={minCgpa}
                     onChange={(e) => setMinCgpa(e.target.value)}
                     className="w-full bg-surface-container-low border-none rounded-lg text-sm focus:ring-primary/20 p-2 cursor-pointer font-medium text-slate-700"
@@ -172,7 +172,7 @@ export function RecruiterDashboard({ setActiveTab }) {
 
                 <div className="flex-1 min-w-[120px]">
                   <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Branch</label>
-                  <select 
+                  <select
                     value={branch}
                     onChange={(e) => setBranch(e.target.value)}
                     className="w-full bg-surface-container-low border-none rounded-lg text-sm focus:ring-primary/20 p-2 cursor-pointer font-medium text-slate-700"
@@ -186,7 +186,7 @@ export function RecruiterDashboard({ setActiveTab }) {
 
                 <div className="flex-1 min-w-[120px]">
                   <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Min Match Score</label>
-                  <select 
+                  <select
                     value={matchPercent}
                     onChange={(e) => setMatchPercent(e.target.value)}
                     className="w-full bg-surface-container-low border-none rounded-lg text-sm focus:ring-primary/20 p-2 cursor-pointer font-medium text-slate-700"
@@ -256,13 +256,13 @@ export function RecruiterDashboard({ setActiveTab }) {
                           </div>
                         </td>
                         <td className="px-6 py-4">
-                          <select 
+                          <select
                             value={candidate.status}
                             onChange={(e) => handleStatusChange(candidate.id, e.target.value)}
                             className={cn(
                               "px-3 py-1 text-[10px] font-black uppercase rounded-full border-none focus:ring-1 focus:ring-primary/20 cursor-pointer",
-                              candidate.status === 'Shortlisted' ? "bg-secondary-container text-on-secondary-container" : 
-                              candidate.status === 'Interview' ? "bg-teal-50 text-teal-600" : "bg-surface-container-high text-slate-600"
+                              candidate.status === 'Shortlisted' ? "bg-secondary-container text-on-secondary-container" :
+                                candidate.status === 'Interview' ? "bg-teal-50 text-teal-600" : "bg-surface-container-high text-slate-600"
                             )}
                           >
                             <option value="Applied">Applied</option>
@@ -282,7 +282,7 @@ export function RecruiterDashboard({ setActiveTab }) {
         </div>
 
         <aside className="w-full lg:w-80 space-y-6">
-          <button 
+          <button
             onClick={() => setActiveTab('jobs')}
             className="w-full bg-gradient-to-br from-primary to-primary-container text-white py-4 rounded-xl font-bold text-lg shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-3"
           >
@@ -293,7 +293,7 @@ export function RecruiterDashboard({ setActiveTab }) {
           <Card className="p-6">
             <div className="flex items-center justify-between mb-6">
               <h3 className="font-bold text-on-surface">Recent Jobs</h3>
-              <button 
+              <button
                 onClick={() => setActiveTab('jobs')}
                 className="text-[10px] font-black text-primary uppercase tracking-widest hover:underline bg-transparent border-none"
               >
@@ -302,12 +302,12 @@ export function RecruiterDashboard({ setActiveTab }) {
             </div>
             <div className="space-y-4">
               {[
-                { title: "SDE Intern - Summer 2024", apps: "450", date: "Oct 30", important: true },
+                { title: "SDE Intern - Summer 2026", apps: "450", date: "Oct 30", important: true },
                 { title: "Product Analyst (New Grad)", apps: "128", date: "Nov 12" },
                 { title: "ML Research Associate", apps: "84", date: "Nov 05" }
               ].map((job, i) => (
-                <div 
-                  key={i} 
+                <div
+                  key={i}
                   onClick={() => setActiveTab('jobs')}
                   className="p-4 rounded-lg bg-surface-container-low/50 hover:bg-surface-container-low transition-colors group cursor-pointer"
                 >

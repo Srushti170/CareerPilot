@@ -255,6 +255,15 @@ export function Companies() {
           </div>
         )}
       </AnimatePresence>
+      {/* Floating Action Button */}
+      <motion.button
+        whileHover={{ scale: 1.1 }}
+        whileTap={{ scale: 0.9 }}
+        onClick={handleOpenOnboard}
+        className="fixed bottom-8 right-8 w-14 h-14 rounded-full bg-gradient-to-br from-primary to-primary-container text-white shadow-2xl flex items-center justify-center hover:shadow-primary/30 transition-transform z-40"
+      >
+        <span className="material-symbols-outlined text-3xl">add</span>
+      </motion.button>
     </div>
   );
 }

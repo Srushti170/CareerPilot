@@ -21,7 +21,7 @@ export function Settings() {
   const [autoShortlist, setAutoShortlist] = useState(true);
 
   // Admin specific settings
-  const [placementYear, setPlacementYear] = useState('2023-2024');
+  const [placementYear, setPlacementYear] = useState('2026-2026');
   const [registrationAllowed, setRegistrationAllowed] = useState(true);
 
   // Notifications state
@@ -52,18 +52,18 @@ export function Settings() {
     if (userIndex !== -1) {
       users[userIndex].name = name;
       users[userIndex].email = email;
-      
+
       const updatedUser = { ...currentUser, name, email };
       localStorage.setItem('careerpilot_users', JSON.stringify(users));
       localStorage.setItem('careerpilot_current_user', JSON.stringify(updatedUser));
-      
+
       if (currentUser.role === 'student') {
         const studentProfile = JSON.parse(localStorage.getItem('careerpilot_student_profile') || '{}');
         studentProfile.name = name;
         studentProfile.email = email;
         localStorage.setItem('careerpilot_student_profile', JSON.stringify(studentProfile));
       }
-      
+
       setCurrentUser(updatedUser);
       setSuccess('Profile details updated successfully!');
 
@@ -112,10 +112,10 @@ export function Settings() {
 
       users[userIndex].password = newPassword;
       localStorage.setItem('careerpilot_users', JSON.stringify(users));
-      
+
       const updatedUser = { ...currentUser, password: newPassword };
       localStorage.setItem('careerpilot_current_user', JSON.stringify(updatedUser));
-      
+
       setSuccess('Password updated successfully!');
       setPassword('');
       setNewPassword('');
@@ -211,8 +211,8 @@ export function Settings() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">Full Name</label>
-                    <input 
-                      type="text" 
+                    <input
+                      type="text"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       required
@@ -221,8 +221,8 @@ export function Settings() {
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">Email Address</label>
-                    <input 
-                      type="email" 
+                    <input
+                      type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       required
@@ -269,8 +269,8 @@ export function Settings() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">Company Name</label>
-                        <input 
-                          type="text" 
+                        <input
+                          type="text"
                           value={companyName}
                           onChange={(e) => setCompanyName(e.target.value)}
                           className="w-full px-4 py-2.5 rounded-xl bg-surface-container-lowest border border-outline-variant/30 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all text-sm font-medium"
@@ -301,9 +301,9 @@ export function Settings() {
                           onChange={(e) => setPlacementYear(e.target.value)}
                           className="w-full px-4 py-2.5 rounded-xl bg-surface-container-lowest border border-outline-variant/30 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all text-sm font-medium"
                         >
-                          <option>2023-2024</option>
-                          <option>2024-2025</option>
-                          <option>2025-2026</option>
+                          <option>2026-2026</option>
+                          <option>2026-2026</option>
+                          <option>2026-2026</option>
                         </select>
                       </div>
                       <div className="flex items-center justify-between pt-6">
@@ -321,7 +321,7 @@ export function Settings() {
                 )}
 
                 <div className="pt-4 flex justify-end">
-                  <button 
+                  <button
                     type="submit"
                     className="px-6 py-3 bg-primary text-white font-bold rounded-xl shadow-lg shadow-primary/20 hover:scale-[1.01] active:scale-[0.99] transition-all text-xs uppercase tracking-wider"
                   >
@@ -385,7 +385,7 @@ export function Settings() {
                 </div>
 
                 <div className="pt-4 flex justify-end">
-                  <button 
+                  <button
                     type="submit"
                     className="px-6 py-3 bg-primary text-white font-bold rounded-xl shadow-lg shadow-primary/20 hover:scale-[1.01] active:scale-[0.99] transition-all text-xs uppercase tracking-wider"
                   >
@@ -407,8 +407,8 @@ export function Settings() {
                 <div className="space-y-4">
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">Current Password</label>
-                    <input 
-                      type="password" 
+                    <input
+                      type="password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="••••••••"
@@ -418,8 +418,8 @@ export function Settings() {
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">New Password</label>
-                    <input 
-                      type="password" 
+                    <input
+                      type="password"
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
                       placeholder="••••••••"
@@ -429,8 +429,8 @@ export function Settings() {
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">Confirm New Password</label>
-                    <input 
-                      type="password" 
+                    <input
+                      type="password"
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       placeholder="••••••••"
@@ -441,7 +441,7 @@ export function Settings() {
                 </div>
 
                 <div className="pt-4 flex justify-end">
-                  <button 
+                  <button
                     type="submit"
                     className="px-6 py-3 bg-primary text-white font-bold rounded-xl shadow-lg shadow-primary/20 hover:scale-[1.01] active:scale-[0.99] transition-all text-xs uppercase tracking-wider"
                   >

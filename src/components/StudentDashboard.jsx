@@ -14,18 +14,24 @@ export function StudentDashboard({ applications = [], setApplications, setActive
       location: 'Mountain View, CA',
       logo: 'https://lh3.googleusercontent.com/aida-public/AB6AXuC6n9O4Yw1sHm33bnxv42c3Lc__KboJawPt7X0Q7ccBUqzaPBfqbyO3NijginBJ6pnNTcE0_zmA7b1bGoiapK3X6BW-S-8TbXCeAv06XaZs1HCk-oGvvv1g-VLo9cAZjCiqB0aOwe6GDt5BS-e1hdsRwWFNw_UkfrG-HrmWWGQZ8xxzZibnX37QHy3ASKJFheqhCdg0lpHIJRVgXK5s52Z5gSAIq78DMoGGiR60gBtoynaU4cZUm8k_PZT2u6YCkx7jmjC36lPZNho',
       match: 94,
-      type: 'New Grad',
-      missingSkills: ['GoLang', 'Docker']
+      type: 'Full-time',
+      locationType: 'Hybrid',
+      salary: '$140k - $180k',
+      missingSkills: ['GoLang', 'Docker'],
+      shortDescription: "Contribute to core infrastructure services and improve cloud scalability."
     },
     {
       id: '2',
       title: 'Product Design Intern',
       company: 'Spotify',
-      location: 'Remote',
+      location: 'New York, NY',
       logo: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDg5TCxfVEVTwqJBz3K-PoZz7BV9o2AA5pVePpvL0rcQ2qmEXRmFlA0q4xQj7Ledty0tT-oWh2v2MJfW10NJ7T7tBsXlcXcFhkRCegUsSzWpq1n-AwnLT3vxcZslE9dqzR8qr6GivlnTq0nPfj52oIBX2EI5FBBkYXMZKOXFqLvniLWgMp_jvg1z5bBSSGNYbv98_i3eMvUx7ss6vf3rnSI7gZmquBT9kSXD_J-T9MEFc6Y8BfHITPC-q8VBN9vrnEJMIYTTXdwmiA',
       match: 88,
       type: 'Internship',
-      missingSkills: ['Prototyping']
+      locationType: 'Remote',
+      salary: '$6k/mo',
+      missingSkills: ['Prototyping'],
+      shortDescription: "Design intuitive features for listeners worldwide as part of our summer program."
     }
   ];
 
@@ -113,18 +119,18 @@ export function StudentDashboard({ applications = [], setApplications, setActive
       </section>
 
       <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <MetricCard label="Resume Score" value="82/100" subtext="You're 8% away from top candidates" progress={82} icon="trending_up" color="primary" />
-        <MetricCard label="Job Match Avg" value="76%" subtext="Strong fit for Frontend roles" progress={76} icon="check_circle" color="secondary" />
-        <MetricCard label="Interview Ready" value="Intermediate" subtext="3 mock tests recommended" progress={60} icon="warning" color="tertiary" />
+        <MetricCard label="ATS Resume Score" value="82/100" subtext="Based on standard ATS parsing" progress={82} icon="document_scanner" color="primary" />
+        <MetricCard label="Profile Match Avg" value="76%" subtext="Across your saved job listings" progress={76} icon="radar" color="secondary" />
+        <MetricCard label="Mock Interview Score" value="68%" subtext="Average across 5 technical mocks" progress={68} icon="record_voice_over" color="tertiary" />
       </section>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
-        <section className="lg:col-span-2 space-y-6">
+      <div className="grid grid-cols-1 gap-8 items-start">
+        <section className="space-y-6">
           <div className="flex justify-between items-center">
             <h3 className="text-xl font-bold tracking-tight">Recommended for You</h3>
             <button onClick={() => setActiveTab('search')} className="text-primary text-sm font-semibold hover:underline">View All</button>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {jobs.map(job => {
               const isApplied = applications.some(
                 app => app.company.toLowerCase() === job.company.toLowerCase() && 
@@ -139,40 +145,6 @@ export function StudentDashboard({ applications = [], setApplications, setActive
                 />
               );
             })}
-          </div>
-        </section>
-
-        <section className="space-y-6">
-          <h3 className="text-xl font-bold tracking-tight">Next Best Actions</h3>
-          <div className="bg-surface-container-lowest rounded-xl p-6 shadow-sm border border-outline-variant/5 space-y-5">
-            {actions.map((action, i) => (
-              <div 
-                key={i} 
-                className="flex gap-4 group cursor-pointer"
-                onClick={() => setActiveTab(action.actionKey)}
-              >
-                <div className={`mt-1 w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                  action.color === 'primary' ? 'bg-primary/10 text-primary' : 
-                  action.color === 'secondary' ? 'bg-secondary/10 text-secondary' : 'bg-tertiary/10 text-tertiary'
-                }`}>
-                  <span className="material-symbols-outlined text-sm">{action.icon}</span>
-                </div>
-                <div className="flex-1 border-b border-slate-100 pb-4 last:border-0">
-                  <p className="text-sm font-bold text-on-surface group-hover:text-primary transition-colors">{action.title}</p>
-                  <p className="text-xs text-slate-500 mb-2">{action.desc}</p>
-                  <div className="w-full h-1.5 bg-surface-container rounded-full overflow-hidden">
-                    <motion.div 
-                      initial={{ width: 0 }}
-                      animate={{ width: `${action.progress}%` }}
-                      className={`h-full ${
-                        action.color === 'primary' ? 'bg-primary' : 
-                        action.color === 'secondary' ? 'bg-secondary' : 'bg-tertiary'
-                      }`} 
-                    />
-                  </div>
-                </div>
-              </div>
-            ))}
           </div>
         </section>
       </div>
@@ -233,16 +205,21 @@ export function StudentDashboard({ applications = [], setApplications, setActive
               </div>
             </div>
 
-            <div className="relative pt-4 overflow-x-auto">
-              <div className="min-w-[600px] px-8">
-                <div className="absolute top-[48px] left-[calc(12.5%+32px)] right-[calc(12.5%+32px)] h-1 bg-surface-container z-0"></div>
+            <div className="pt-4 overflow-x-auto">
+              <div className="relative min-w-[600px]">
+                {/* Background Line */}
+                <div className="absolute top-[20px] left-[12.5%] right-[12.5%] h-1 bg-slate-200 z-0"></div>
                 
-                <div className="relative z-10 flex justify-between items-center">
+                {/* Progress Line */}
+                <div className="absolute top-[20px] left-[12.5%] h-1 bg-primary z-0 transition-all duration-500" 
+                     style={{ width: `${(getStepsForStatus(currentTracker.status, currentTracker.appliedDate).filter(s => s.done).length - 1) * 25}%` }}></div>
+                
+                <div className="relative z-10 grid grid-cols-4">
                   {getStepsForStatus(currentTracker.status, currentTracker.appliedDate).map((step, i) => (
                     <div key={i} className={`flex flex-col items-center gap-2 ${!step.active ? 'opacity-30' : ''}`}>
                       <div className={`w-10 h-10 rounded-full flex items-center justify-center shadow-lg transition-all ${
                         step.done ? 'bg-primary text-white shadow-primary/20' : 
-                        step.current ? 'bg-white border-2 border-primary text-primary animate-pulse' : 'bg-surface-container text-slate-400'
+                        step.current ? 'bg-white border-2 border-primary text-primary animate-pulse' : 'bg-white border-2 border-slate-200 text-slate-400'
                       }`}>
                         <span className="material-symbols-outlined" style={step.done ? { fontVariationSettings: "'FILL' 1" } : {}}>{step.icon}</span>
                       </div>

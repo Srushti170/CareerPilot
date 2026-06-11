@@ -11,7 +11,8 @@ export function TopBar({
   searchQuery = "",
   setSearchQuery,
   notifications = [],
-  setNotifications
+  setNotifications,
+  isSidebarCollapsed
 }) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [inputValue, setInputValue] = useState(searchQuery);
@@ -55,7 +56,11 @@ export function TopBar({
   const unreadCount = notifications.filter(n => !n.read).length;
 
   return (
-    <header className="fixed top-0 right-0 left-64 z-30 flex justify-between items-center px-8 h-16 bg-white/70 dark:bg-slate-900/70 backdrop-blur-md transition-all border-b border-outline-variant/10">
+    <header className={cn(
+      "fixed top-0 right-0 z-30 flex justify-between items-center px-8 h-16 transition-all duration-300 border-b border-outline-variant/10",
+      "bg-white shadow-sm dark:bg-slate-900",
+      isSidebarCollapsed ? "left-20" : "left-64"
+    )}>
       <div className="flex items-center w-1/3">
         <form onSubmit={handleSearchSubmit} className="relative w-full max-w-sm group">
           <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm group-focus-within:text-primary transition-colors">search</span>
@@ -69,7 +74,7 @@ export function TopBar({
         </form>
       </div>
       
-      <div className="flex items-center gap-4 relative">
+      <div className="flex items-center gap-4 relative shrink-0">
         {/* Notifications Icon & Panel */}
         <div className="relative" ref={notificationRef}>
           <button 
@@ -151,7 +156,7 @@ export function TopBar({
 
         <div className="flex items-center gap-3 cursor-pointer group">
           <div className="text-right">
-            <p className="text-sm font-bold text-on-surface leading-tight">{userName}</p>
+            <p className="text-sm font-bold text-slate-900 dark:text-white leading-tight">{userName}</p>
             <p className="text-[10px] text-slate-500">{userRole}</p>
           </div>
           <img 

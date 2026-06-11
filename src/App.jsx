@@ -32,24 +32,20 @@ export default function App() {
     const stored = localStorage.getItem('careerpilot_current_user');
     return stored ? JSON.parse(stored).role : 'student';
   });
-  const [needsOnboarding, setNeedsOnboarding] = useState(() => {
-    const stored = localStorage.getItem('careerpilot_current_user');
-    const user = stored ? JSON.parse(stored) : null;
-    return user?.role === 'student' && localStorage.getItem('careerpilot_student_onboarding_complete') !== 'true';
-  });
+  const [needsOnboarding, setNeedsOnboarding] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [globalSearchQuery, setGlobalSearchQuery] = useState('');
 
   const [applications, setApplications] = useState(() => {
     const stored = localStorage.getItem('careerpilot_applications');
     if (stored) return JSON.parse(stored);
-    
+
     const defaultApps = [
       {
         id: '1',
         company: 'Google',
         role: 'Software Engineer Intern',
-        appliedDate: 'Oct 12, 2023',
+        appliedDate: 'Oct 12, 2026',
         status: 'Interview',
         logo: 'https://lh3.googleusercontent.com/aida-public/AB6AXuC6n9O4Yw1sHm33bnxv42c3Lc__KboJawPt7X0Q7ccBUqzaPBfqbyO3NijginBJ6pnNTcE0_zmA7b1bGoiapK3X6BW-S-8TbXCeAv06XaZs1HCk-oGvvv1g-VLo9cAZjCiqB0aOwe6GDt5BS-e1hdsRwWFNw_UkfrG-HrmWWGQZ8xxzZibnX37QHy3ASKJFheqhCdg0lpHIJRVgXK5s52Z5gSAIq78DMoGGiR60gBtoynaU4cZUm8k_PZT2u6YCkx7jmjC36lPZNho'
       },
@@ -57,7 +53,7 @@ export default function App() {
         id: '2',
         company: 'Amazon',
         role: 'AWS Cloud Support',
-        appliedDate: 'Oct 05, 2023',
+        appliedDate: 'Oct 05, 2026',
         status: 'Reviewing',
         logo: ''
       },
@@ -65,7 +61,7 @@ export default function App() {
         id: '3',
         company: 'Meta',
         role: 'Frontend Developer',
-        appliedDate: 'Sep 28, 2023',
+        appliedDate: 'Sep 28, 2026',
         status: 'Rejected',
         logo: ''
       }
@@ -77,7 +73,7 @@ export default function App() {
   const [notifications, setNotifications] = useState(() => {
     const stored = localStorage.getItem('careerpilot_notifications');
     if (stored) return JSON.parse(stored);
-    
+
     const defaultNotifs = [
       { id: '1', title: 'Interview tomorrow', desc: 'Google interview scheduled at 10 AM', time: '5m ago', read: false },
       { id: '2', title: 'Application Update', desc: 'Amazon status updated to Reviewing', time: '2h ago', read: false },
@@ -155,8 +151,8 @@ export default function App() {
 
   const sidebarData = getSidebarData();
 
-  const handleLogin = (user) => {
-    const onboardingRequired = user.role === 'student' && localStorage.getItem('careerpilot_student_onboarding_complete') !== 'true';
+  const handleLogin = (user, isNewUser = false) => {
+    const onboardingRequired = user.role === 'student' && isNewUser;
     localStorage.setItem('careerpilot_current_user', JSON.stringify(user));
     setCurrentUser(user);
     setPersona(user.role);
@@ -221,6 +217,7 @@ export default function App() {
           }}
           notifications={notifications}
           setNotifications={updateNotifications}
+          isSidebarCollapsed={isSidebarCollapsed}
         />
 
         <AnimatePresence mode="wait">
@@ -235,15 +232,15 @@ export default function App() {
             {activeTab === 'dashboard' && (
               <>
                 {persona === 'student' && (
-                  <StudentDashboard 
-                    applications={applications} 
-                    setApplications={updateApplications} 
-                    setActiveTab={setActiveTab} 
+                  <StudentDashboard
+                    applications={applications}
+                    setApplications={updateApplications}
+                    setActiveTab={setActiveTab}
                   />
                 )}
                 {persona === 'recruiter' && (
-                  <RecruiterDashboard 
-                    setActiveTab={setActiveTab} 
+                  <RecruiterDashboard
+                    setActiveTab={setActiveTab}
                   />
                 )}
                 {persona === 'admin' && <PlacementDashboard />}
@@ -255,24 +252,24 @@ export default function App() {
             {persona === 'student' && (
               <>
                 {activeTab === 'search' && (
-                  <JobSearch 
-                    searchQuery={globalSearchQuery} 
-                    setSearchQuery={setGlobalSearchQuery} 
-                    applications={applications} 
-                    setApplications={updateApplications} 
+                  <JobSearch
+                    searchQuery={globalSearchQuery}
+                    setSearchQuery={setGlobalSearchQuery}
+                    applications={applications}
+                    setApplications={updateApplications}
                     setActiveTab={setActiveTab}
                   />
                 )}
                 {activeTab === 'applications' && (
-                  <Applications 
-                    applications={applications} 
-                    setApplications={updateApplications} 
+                  <Applications
+                    applications={applications}
+                    setApplications={updateApplications}
                   />
                 )}
                 {activeTab === 'profile' && (
-                  <Profile 
-                    currentUser={currentUser} 
-                    setCurrentUser={setCurrentUser} 
+                  <Profile
+                    currentUser={currentUser}
+                    setCurrentUser={setCurrentUser}
                   />
                 )}
                 {activeTab === 'interviews' && <MockInterviews />}
@@ -309,14 +306,7 @@ export default function App() {
         </AnimatePresence>
       </main>
 
-      {/* Floating Action Button (for appropriate tabs) */}
-      <motion.button
-        whileHover={{ scale: 1.1 }}
-        whileTap={{ scale: 0.9 }}
-        className="fixed bottom-8 right-8 w-14 h-14 rounded-full bg-gradient-to-br from-primary to-primary-container text-white shadow-2xl flex items-center justify-center hover:shadow-primary/30 transition-transform z-40"
-      >
-        <span className="material-symbols-outlined text-3xl">add</span>
-      </motion.button>
+
     </div>
   );
 }
