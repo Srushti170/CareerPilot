@@ -17,6 +17,7 @@ import { Settings } from './components/Settings';
 import { StudentOnboarding } from './components/StudentOnboarding';
 import { InterviewDesk } from './components/InterviewDesk';
 import { GlobalReports } from './components/GlobalReports';
+import { Card } from './components/ui/Card';
 import { motion, AnimatePresence } from 'motion/react';
 
 export default function App() {
@@ -294,12 +295,14 @@ export default function App() {
 
             {/* Fallback for components not yet implemented */}
             {activeTab === 'help' && (
-              <div className="pt-24 px-8 pb-12 max-w-7xl mx-auto">
-                <div className="bg-white p-12 rounded-2xl shadow-sm border border-slate-100 flex flex-col items-center justify-center text-center gap-4">
-                  <span className="material-symbols-outlined text-6xl text-slate-300">construction</span>
-                  <h2 className="text-2xl font-bold text-slate-800">Help Center Coming Soon</h2>
-                  <p className="text-slate-500 max-w-md">The Help Center guide is currently being compiled for the CareerPilot editorial experience.</p>
-                </div>
+              <div className="mx-auto max-w-7xl px-8 pb-12 pt-24">
+                <Card className="flex flex-col items-center justify-center gap-4 p-12 text-center">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary-soft text-primary">
+                    <span className="material-symbols-outlined text-3xl">support_agent</span>
+                  </div>
+                  <h2 className="text-2xl font-headline font-bold tracking-tight text-slate-900">Help Center coming soon</h2>
+                  <p className="max-w-md text-sm leading-6 text-slate-500">We're putting together guides and answers to help you get the most out of CareerPilot. Check back shortly.</p>
+                </Card>
               </div>
             )}
           </motion.div>

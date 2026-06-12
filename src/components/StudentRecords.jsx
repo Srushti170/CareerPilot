@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Card } from './MetricCard';
+import { Card } from './ui/Card';
 
 const DEFAULT_STUDENTS = [
   { name: 'Alex Rivera', role: 'Full Stack', cgpa: 3.92, placement: 'Placed (Google)', initial: 'AR' },
@@ -9,12 +9,13 @@ const DEFAULT_STUDENTS = [
   { name: 'Mira Nair', role: 'Designer', cgpa: 3.95, placement: 'In-Process', initial: 'MN' },
 ];
 
+const inputClass = "w-full px-4 py-2.5 rounded-lg bg-white border border-slate-200 focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-colors text-sm";
+
 export function StudentRecords() {
   const [students, setStudents] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
 
-  // Form states
   const [name, setName] = useState('');
   const [role, setRole] = useState('Full Stack');
   const [cgpa, setCgpa] = useState('');
@@ -71,9 +72,9 @@ export function StudentRecords() {
   };
 
   return (
-    <div className="pt-24 px-8 pb-12 max-w-7xl mx-auto space-y-10">
+    <div className="pt-24 px-8 pb-12 max-w-7xl mx-auto space-y-8">
       {successMsg && (
-        <div className="p-4 bg-teal-50 border border-teal-200 text-teal-800 text-sm font-semibold rounded-xl flex items-center gap-2">
+        <div className="p-4 bg-success-soft border border-success/20 text-success text-sm font-medium rounded-xl flex items-center gap-2">
           <span className="material-symbols-outlined text-base">check_circle</span>
           <span>{successMsg}</span>
         </div>
@@ -81,141 +82,110 @@ export function StudentRecords() {
 
       <div className="flex justify-between items-end">
         <div>
-          <h2 className="text-3xl font-black text-on-surface tracking-tighter">Student Registry</h2>
-          <p className="text-slate-500 mt-1 font-medium">Monitoring academic and placement progress for university students.</p>
+          <h2 className="text-2xl md:text-3xl font-headline font-semibold text-slate-900 tracking-tight">Student registry</h2>
+          <p className="text-slate-500 mt-1 text-sm">Monitoring academic and placement progress for university students.</p>
         </div>
-        <div className="flex gap-4">
-           <button 
-             onClick={handleBulkImport}
-             className="px-6 py-3 bg-surface-container-low text-on-surface font-bold rounded-xl border border-outline-variant/10 hover:bg-slate-200 transition-colors"
-           >
-             Bulk Import
-           </button>
-           <button 
-             onClick={() => setShowModal(true)}
-             className="px-6 py-3 bg-primary text-white font-black rounded-xl shadow-lg hover:scale-[1.01] transition-transform"
-           >
-             New Student Entry
-           </button>
+        <div className="flex gap-3">
+          <button onClick={handleBulkImport} className="px-4 py-2.5 border border-slate-300 bg-white text-slate-700 font-semibold text-sm rounded-xl hover:bg-slate-50 transition-colors">
+            Bulk import
+          </button>
+          <button onClick={() => setShowModal(true)} className="px-4 py-2.5 bg-primary text-on-primary font-semibold text-sm rounded-xl hover:bg-primary-hover transition-colors focus:outline-none focus:ring-4 focus:ring-primary/10">
+            New student entry
+          </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-12 gap-8">
+      <div className="grid grid-cols-12 gap-6">
         <div className="col-span-12 lg:col-span-4 space-y-6">
-           <Card className="p-8">
-             <h3 className="font-bold text-on-surface mb-6 uppercase text-xs tracking-widest text-slate-400">Department Stats</h3>
-             <div className="space-y-6">
-               {[
-                 { name: 'Computer Science', count: 1200, placed: 85 },
-                 { name: 'Information Tech', count: 850, placed: 72 },
-                 { name: 'Electronics', count: 420, placed: 45 }
-               ].map(dept => (
-                 <div key={dept.name}>
-                   <div className="flex justify-between items-center mb-2">
-                     <span className="text-sm font-bold text-on-surface">{dept.name}</span>
-                     <span className="text-[10px] font-black text-primary">{dept.placed}% Placed</span>
-                   </div>
-                   <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                     <div className="h-full bg-primary" style={{ width: `${dept.placed}%` }}></div>
-                   </div>
-                 </div>
-               ))}
-             </div>
-           </Card>
+          <Card className="p-6">
+            <h3 className="text-xs font-semibold text-slate-500 mb-6">Department stats</h3>
+            <div className="space-y-6">
+              {[
+                { name: 'Computer Science', count: 1200, placed: 85 },
+                { name: 'Information Tech', count: 850, placed: 72 },
+                { name: 'Electronics', count: 420, placed: 45 }
+              ].map(dept => (
+                <div key={dept.name}>
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-sm font-semibold text-slate-900">{dept.name}</span>
+                    <span className="text-xs font-semibold text-primary">{dept.placed}% placed</span>
+                  </div>
+                  <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-primary rounded-full" style={{ width: `${dept.placed}%` }}></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
         </div>
 
         <div className="col-span-12 lg:col-span-8">
           <Card className="p-0 overflow-hidden">
-             <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-surface-container-low/50">
-                    <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Student</th>
-                    <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Target Role</th>
-                    <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">CGPA</th>
-                    <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</th>
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200">
+                  <th className="px-8 py-4 text-[11px] font-semibold text-slate-500">Student</th>
+                  <th className="px-8 py-4 text-[11px] font-semibold text-slate-500">Target role</th>
+                  <th className="px-8 py-4 text-[11px] font-semibold text-slate-500 text-center">CGPA</th>
+                  <th className="px-8 py-4 text-[11px] font-semibold text-slate-500">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {students.map(s => (
+                  <tr key={s.name} className="hover:bg-slate-50 transition-colors">
+                    <td className="px-8 py-4">
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center font-semibold text-xs text-slate-600">{s.initial}</div>
+                        <span className="font-semibold text-slate-900">{s.name}</span>
+                      </div>
+                    </td>
+                    <td className="px-8 py-4 text-sm text-slate-500">{s.role}</td>
+                    <td className="px-8 py-4 text-center font-semibold text-slate-700">{s.cgpa}</td>
+                    <td className="px-8 py-4">
+                      <span className={`px-2.5 py-1 rounded-md text-[11px] font-semibold ${
+                        s.placement.includes('Placed') ? 'bg-primary-soft text-primary' : 'bg-slate-100 text-slate-500'
+                      }`}>
+                        {s.placement}
+                      </span>
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-outline-variant/10">
-                  {students.map(s => (
-                    <tr key={s.name} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-8 py-5">
-                        <div className="flex items-center gap-4">
-                          <div className="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center font-bold text-xs">{s.initial}</div>
-                          <span className="font-bold text-on-surface">{s.name}</span>
-                        </div>
-                      </td>
-                      <td className="px-8 py-5 text-sm font-medium text-slate-500">{s.role}</td>
-                      <td className="px-8 py-5 text-center font-bold text-slate-700">{s.cgpa}</td>
-                      <td className="px-8 py-5">
-                        <span className={`px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${
-                          s.placement.includes('Placed') ? 'bg-primary/10 text-primary' : 'bg-slate-100 text-slate-400'
-                        }`}>
-                          {s.placement}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-             </table>
+                ))}
+              </tbody>
+            </table>
           </Card>
         </div>
       </div>
 
-      {/* New Student Modal */}
       <AnimatePresence>
         {showModal && (
-          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95 }}
+          <div className="fixed inset-0 bg-slate-900/50 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96 }}
               animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white w-full max-w-md rounded-[2.5rem] border border-slate-100 shadow-2xl p-8 space-y-6"
+              exit={{ opacity: 0, scale: 0.96 }}
+              className="bg-white w-full max-w-md rounded-2xl border border-slate-200 elev-md p-8 space-y-6"
             >
               <div className="flex justify-between items-center border-b border-slate-100 pb-4">
-                <h3 className="text-xl font-black text-slate-800">Add Student Record</h3>
-                <button 
-                  onClick={() => setShowModal(false)}
-                  className="p-1.5 hover:bg-slate-50 rounded-lg text-slate-400 hover:text-slate-600 transition-colors"
-                >
+                <h3 className="text-lg font-headline font-semibold text-slate-900">Add student record</h3>
+                <button onClick={() => setShowModal(false)} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition-colors">
                   <span className="material-symbols-outlined text-xl">close</span>
                 </button>
               </div>
 
               <form onSubmit={handleNewEntry} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">Student Name</label>
-                  <input 
-                    type="text" 
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    required
-                    placeholder="e.g. Vijay Kumar"
-                    className="w-full px-4 py-2.5 rounded-xl bg-surface-container-lowest border border-outline-variant/30 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all text-sm font-medium"
-                  />
+                  <label className="block text-xs font-medium text-slate-600 mb-1.5">Student name</label>
+                  <input type="text" value={name} onChange={(e) => setName(e.target.value)} required placeholder="e.g. Vijay Kumar" className={inputClass} />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">CGPA</label>
-                    <input 
-                      type="number" 
-                      value={cgpa}
-                      onChange={(e) => setCgpa(e.target.value)}
-                      required
-                      min="0"
-                      max="4"
-                      step="0.01"
-                      placeholder="e.g. 3.82"
-                      className="w-full px-4 py-2.5 rounded-xl bg-surface-container-lowest border border-outline-variant/30 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all text-sm font-medium"
-                    />
+                    <label className="block text-xs font-medium text-slate-600 mb-1.5">CGPA</label>
+                    <input type="number" value={cgpa} onChange={(e) => setCgpa(e.target.value)} required min="0" max="4" step="0.01" placeholder="e.g. 3.82" className={inputClass} />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">Target Role</label>
-                    <select
-                      value={role}
-                      onChange={(e) => setRole(e.target.value)}
-                      className="w-full px-4 py-2.5 rounded-xl bg-surface-container-lowest border border-outline-variant/30 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all text-sm font-medium"
-                    >
+                    <label className="block text-xs font-medium text-slate-600 mb-1.5">Target role</label>
+                    <select value={role} onChange={(e) => setRole(e.target.value)} className={inputClass}>
                       <option>Full Stack</option>
                       <option>Data Analyst</option>
                       <option>Backend Dev</option>
@@ -226,12 +196,8 @@ export function StudentRecords() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">Placement Status</label>
-                  <select
-                    value={placement}
-                    onChange={(e) => setPlacement(e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-xl bg-surface-container-lowest border border-outline-variant/30 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all text-sm font-medium"
-                  >
+                  <label className="block text-xs font-medium text-slate-600 mb-1.5">Placement status</label>
+                  <select value={placement} onChange={(e) => setPlacement(e.target.value)} className={inputClass}>
                     <option>Open</option>
                     <option>In-Process</option>
                     <option>Placed (Google)</option>
@@ -242,18 +208,11 @@ export function StudentRecords() {
                 </div>
 
                 <div className="pt-4 flex justify-end gap-3">
-                  <button 
-                    type="button" 
-                    onClick={() => setShowModal(false)}
-                    className="px-5 py-2.5 bg-slate-50 text-slate-600 text-xs font-bold rounded-xl hover:bg-slate-100 transition-colors"
-                  >
+                  <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2.5 border border-slate-300 bg-white text-slate-700 text-sm font-semibold rounded-xl hover:bg-slate-50 transition-colors">
                     Cancel
                   </button>
-                  <button 
-                    type="submit"
-                    className="px-5 py-2.5 bg-primary text-white text-xs font-bold rounded-xl shadow-lg shadow-primary/20 hover:scale-[1.01] active:scale-[0.99] transition-all"
-                  >
-                    Save Student Record
+                  <button type="submit" className="px-4 py-2.5 bg-primary text-on-primary text-sm font-semibold rounded-xl hover:bg-primary-hover transition-colors">
+                    Save student record
                   </button>
                 </div>
               </form>
@@ -261,12 +220,12 @@ export function StudentRecords() {
           </div>
         )}
       </AnimatePresence>
-      {/* Floating Action Button */}
+
       <motion.button
-        whileHover={{ scale: 1.1 }}
-        whileTap={{ scale: 0.9 }}
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.95 }}
         onClick={() => setShowModal(true)}
-        className="fixed bottom-8 right-8 w-14 h-14 rounded-full bg-gradient-to-br from-primary to-primary-container text-white shadow-2xl flex items-center justify-center hover:shadow-primary/30 transition-transform z-40"
+        className="fixed bottom-8 right-8 w-14 h-14 rounded-full bg-primary text-on-primary elev-md flex items-center justify-center hover:bg-primary-hover transition-colors z-40"
       >
         <span className="material-symbols-outlined text-3xl">add</span>
       </motion.button>

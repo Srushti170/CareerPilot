@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { Button } from './ui/Button';
+import { Badge } from './ui/Badge';
 
 export function JobCard({ job, onApply, applied, ...rest }) {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -22,40 +24,34 @@ export function JobCard({ job, onApply, applied, ...rest }) {
     "Knowledge of Object-Oriented Programming (OOP) principles"
   ];
 
+  const matchLabel = match >= 90 ? 'Strong match' : match >= 75 ? 'Good match' : 'Fair match';
+
   return (
     <motion.div
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      whileHover={{ y: -4 }}
-      className="bg-surface-container-lowest rounded-xl p-6 shadow-sm border border-outline-variant/5 hover:shadow-md transition-all flex flex-col"
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25, ease: 'easeOut' }}
+      className="flex flex-col rounded-xl border border-slate-200 bg-white p-6 elev-sm transition-colors duration-200 hover:border-slate-300"
     >
-      <div className="flex flex-col gap-4 mb-5">
+      <div className="mb-5 flex flex-col gap-4">
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 bg-surface-container-high rounded-lg flex items-center justify-center overflow-hidden shrink-0">
-            <img src={logo} alt={company} className="w-8 h-8 object-contain" />
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
+            <img src={logo} alt={company} className="h-8 w-8 object-contain" />
           </div>
           <div className="min-w-0">
-            <h4 className="font-bold text-on-surface truncate text-lg">{title}</h4>
-            <p className="text-sm text-slate-500 truncate">{company} • {location}</p>
+            <h4 className="truncate text-base font-semibold text-slate-900">{title}</h4>
+            <p className="mt-0.5 truncate text-sm text-slate-500">{company} • {location}</p>
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <span className="px-3 py-1 bg-surface-container-low text-slate-500 text-xs font-bold rounded-full">
-            {type}
-          </span>
-          <span className="px-3 py-1 bg-surface-container-low text-slate-500 text-xs font-bold rounded-full">
-            {locationType}
-          </span>
-          {salary && (
-            <span className="px-3 py-1 bg-green-50 text-green-700 border border-green-200 text-xs font-bold rounded-full">
-              {salary}
-            </span>
-          )}
+          <Badge tone="neutral">{type}</Badge>
+          <Badge tone="neutral">{locationType}</Badge>
+          {salary && <Badge tone="brand">{salary}</Badge>}
         </div>
       </div>
 
       <div className="mb-6">
-        <p className="text-sm text-slate-700 leading-relaxed font-medium mb-3">
+        <p className="text-sm leading-6 text-slate-600">
           {shortDescription}
         </p>
 
@@ -67,53 +63,40 @@ export function JobCard({ job, onApply, applied, ...rest }) {
               exit={{ opacity: 0, height: 0 }}
               className="overflow-hidden"
             >
-              <div className="pt-2 pb-4">
-                <p className="text-sm text-slate-800 font-bold mb-3">Required Qualifications:</p>
-                <ul className="list-disc pl-5 text-sm text-slate-600 space-y-2 mb-6">
+              <div className="pb-2 pt-4">
+                <p className="mb-3 text-sm font-semibold text-slate-900">Required qualifications</p>
+                <ul className="mb-6 list-disc space-y-2 pl-5 text-sm leading-6 text-slate-600">
                   {description.map((req, i) => (
                     <li key={i}>{req}</li>
                   ))}
                 </ul>
 
-                <div className="bg-[linear-gradient(180deg,#020617_0%,#064e3b_100%)] p-6 rounded-2xl flex flex-col items-center justify-center border border-teal-900/30 shadow-inner mb-4">
-                  <div className="relative w-28 h-28 mb-4">
-                    <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
-                      <path
-                        className="text-teal-900/50"
-                        d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.5"
-                      />
-                      <path
-                        className="text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.8)]"
-                        strokeDasharray={`${match}, 100`}
-                        d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                      />
-                    </svg>
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <span className="text-white text-3xl font-light tracking-tighter">
-                        {match}<span className="text-sm font-bold ml-0.5">%</span>
-                      </span>
+                <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-2xl font-headline font-bold tracking-tight text-slate-900">
+                        {match}<span className="ml-0.5 text-base text-slate-400">%</span>
+                      </p>
+                      <p className="mt-0.5 text-sm text-slate-500">Profile match</p>
                     </div>
+                    <Badge tone={match >= 75 ? 'brand' : 'neutral'}>{matchLabel}</Badge>
                   </div>
-                  <p className="text-white font-black tracking-widest text-sm uppercase">
-                    {match >= 90 ? 'Strong Match' : match >= 75 ? 'Good Match' : 'Fair Match'}
-                  </p>
+                  <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${match}%` }}
+                      transition={{ duration: 0.8, ease: 'easeOut' }}
+                      className="h-full rounded-full bg-primary"
+                    />
+                  </div>
                 </div>
 
                 {missingSkills.length > 0 && (
                   <div>
-                    <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2">Missing Skills</p>
+                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.04em] text-slate-400">Missing skills</p>
                     <div className="flex flex-wrap gap-2">
                       {missingSkills.map(skill => (
-                        <span key={skill} className="text-xs font-bold text-tertiary bg-tertiary/10 px-3 py-1 rounded-md border border-tertiary/20">
-                          {skill}
-                        </span>
+                        <Badge key={skill} tone="danger">{skill}</Badge>
                       ))}
                     </div>
                   </div>
@@ -125,35 +108,34 @@ export function JobCard({ job, onApply, applied, ...rest }) {
 
         <button
           onClick={() => setIsExpanded(!isExpanded)}
-          className="text-primary text-xs font-bold uppercase tracking-widest hover:underline flex items-center gap-1 mt-2"
+          className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-primary transition-colors hover:text-primary-hover"
         >
-          {isExpanded ? 'Show Less' : 'View Full Description'}
-          <span className="material-symbols-outlined text-[14px]">
+          {isExpanded ? 'Show less' : 'View full description'}
+          <span className="material-symbols-outlined text-[16px]">
             {isExpanded ? 'expand_less' : 'expand_more'}
           </span>
         </button>
       </div>
 
       <div className="mt-4 flex gap-3">
-        <button
+        <Button
+          variant={applied ? 'secondary' : 'primary'}
+          size="lg"
           onClick={applied ? undefined : onApply}
           disabled={applied}
-          className={`flex-1 py-3 font-bold rounded-xl text-sm transition-all text-center flex items-center justify-center gap-2 ${applied
-              ? "bg-teal-50 text-teal-700 border border-teal-200 cursor-default"
-              : "bg-primary text-white shadow-lg shadow-primary/20 hover:shadow-primary/40 active:scale-95"
-            }`}
+          className="flex-1"
         >
           {applied ? (
             <>
-              <span className="material-symbols-outlined text-sm">check_circle</span>
+              <span className="material-symbols-outlined text-base">check_circle</span>
               Applied
             </>
-          ) : "Apply Now"}
-        </button>
-        <button className="px-6 py-3 font-bold rounded-xl text-sm transition-all border-2 border-primary text-primary hover:bg-primary/5 flex items-center gap-2 active:scale-95">
-          <span className="material-symbols-outlined text-sm">auto_awesome</span>
-          Tailor Resume
-        </button>
+          ) : "Apply now"}
+        </Button>
+        <Button variant="secondary" size="lg">
+          <span className="material-symbols-outlined text-base">auto_awesome</span>
+          Tailor resume
+        </Button>
       </div>
     </motion.div>
   );

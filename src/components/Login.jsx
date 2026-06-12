@@ -125,149 +125,141 @@ export function Login({ onLogin }) {
     }
   };
 
+  const roles = [
+    { id: 'student', label: 'Student' },
+    { id: 'recruiter', label: 'Recruiter' },
+    { id: 'admin', label: 'Placement' },
+  ];
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-surface relative overflow-hidden">
-      {/* Background blobs */}
-      <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-primary/20 blur-[120px] rounded-full pointer-events-none"></div>
-      <div className="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-secondary/20 blur-[120px] rounded-full pointer-events-none"></div>
-      
+    <div className="flex min-h-screen items-center justify-center bg-surface px-4 py-12">
       <motion.div 
-        initial={{ opacity: 0, y: 20 }}
+        initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-md bg-white p-8 md:p-10 rounded-[2rem] shadow-2xl relative z-10 border border-outline-variant/20"
+        transition={{ duration: 0.25, ease: 'easeOut' }}
+        className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 elev-md md:p-10"
       >
-        <div className="text-center mb-6">
-          <div className="flex justify-center mb-4">
+        <div className="mb-6 text-center">
+          <div className="mb-4 flex justify-center">
             <img src="/logo.png" alt="CareerPilot Logo" className="h-12 object-contain" />
           </div>
-          <h1 className="text-2xl font-black text-on-surface mb-1 tracking-tight">
-            {mode === 'signin' ? 'Welcome Back' : 'Create Account'}
+          <h1 className="mb-1 text-2xl font-headline font-bold tracking-tight text-slate-900">
+            {mode === 'signin' ? 'Welcome back' : 'Create account'}
           </h1>
-          <p className="text-slate-500 text-sm">
-            {mode === 'signin' ? 'Sign in to your CareerPilot account' : 'Join the elite campus recruitment loop'}
+          <p className="text-sm text-slate-500">
+            {mode === 'signin' ? 'Sign in to your CareerPilot account' : 'Join the campus recruitment network'}
           </p>
         </div>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-xs font-semibold rounded-xl flex items-center gap-2">
-            <span className="material-symbols-outlined text-sm">error</span>
+          <div className="mb-4 flex items-center gap-2 rounded-xl border border-danger/20 bg-danger-soft px-3 py-2.5 text-xs font-medium text-danger">
+            <span className="material-symbols-outlined text-base">error</span>
             <span>{error}</span>
           </div>
         )}
 
         {success && (
-          <div className="mb-4 p-3 bg-teal-50 border border-teal-200 text-teal-700 text-xs font-semibold rounded-xl flex items-center gap-2">
-            <span className="material-symbols-outlined text-sm">check_circle</span>
+          <div className="mb-4 flex items-center gap-2 rounded-xl border border-success/20 bg-success-soft px-3 py-2.5 text-xs font-medium text-success">
+            <span className="material-symbols-outlined text-base">check_circle</span>
             <span>{success}</span>
           </div>
         )}
 
-        {/* Role Switcher */}
-        <div className="flex gap-2 p-1 bg-surface-container-low rounded-xl mb-6">
-          <button
-            type="button"
-            onClick={() => setRole('student')}
-            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${role === 'student' ? 'bg-white shadow-sm text-primary' : 'text-slate-500 hover:text-slate-700'}`}
-          >
-            Student
-          </button>
-          <button
-            type="button"
-            onClick={() => setRole('recruiter')}
-            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${role === 'recruiter' ? 'bg-white shadow-sm text-primary' : 'text-slate-500 hover:text-slate-700'}`}
-          >
-            Recruiter
-          </button>
-          <button
-            type="button"
-            onClick={() => setRole('admin')}
-            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${role === 'admin' ? 'bg-white shadow-sm text-primary' : 'text-slate-500 hover:text-slate-700'}`}
-          >
-            Placement
-          </button>
+        {/* Role Switcher (segmented control) */}
+        <div className="mb-6 grid grid-cols-3 gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1">
+          {roles.map((r) => (
+            <button
+              key={r.id}
+              type="button"
+              onClick={() => setRole(r.id)}
+              className={`rounded-lg py-2 text-sm font-medium transition-colors ${role === r.id ? 'bg-white text-primary elev-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              {r.label}
+            </button>
+          ))}
         </div>
 
         <form onSubmit={handleAuth} className="space-y-4">
           {mode === 'signup' && (
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">Full Name</label>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">Full name</label>
               <input 
                 type="text" 
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
                 placeholder="e.g. Alex Rivera"
-                className="w-full px-4 py-2.5 rounded-xl bg-surface-container-lowest border border-outline-variant/30 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all text-sm"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none transition focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10"
               />
             </div>
           )}
 
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">Email Address</label>
+            <label className="mb-1.5 block text-sm font-medium text-slate-700">Email address</label>
             <input 
               type="email" 
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
               placeholder={role === 'student' ? 'student@university.edu' : role === 'recruiter' ? 'hr@company.com' : 'admin@university.edu'}
-              className="w-full px-4 py-2.5 rounded-xl bg-surface-container-lowest border border-outline-variant/30 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all text-sm"
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none transition focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10"
             />
           </div>
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className={mode === 'signup' ? '' : 'col-span-2'}>
-              <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">Password</label>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">Password</label>
               <input 
                 type="password" 
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 placeholder="••••••••"
-                className="w-full px-4 py-2.5 rounded-xl bg-surface-container-lowest border border-outline-variant/30 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all text-sm"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none transition focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10"
               />
             </div>
 
             {mode === 'signup' && (
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">Confirm Password</label>
+                <label className="mb-1.5 block text-sm font-medium text-slate-700">Confirm password</label>
                 <input 
                   type="password" 
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   required
                   placeholder="••••••••"
-                  className="w-full px-4 py-2.5 rounded-xl bg-surface-container-lowest border border-outline-variant/30 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all text-sm"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none transition focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10"
                 />
               </div>
             )}
           </div>
           
           {mode === 'signin' && (
-            <div className="flex items-center justify-between pt-1 pb-2">
-              <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
-                <input type="checkbox" className="rounded border-outline-variant text-primary focus:ring-primary" />
+            <div className="flex items-center justify-between pb-2 pt-1">
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-600">
+                <input type="checkbox" className="rounded border-slate-300 text-primary focus:ring-primary" />
                 Remember me
               </label>
-              <a href="#" onClick={(e) => { e.preventDefault(); setError('Demo mode: Please use standard login.'); }} className="text-xs font-bold text-primary hover:underline">Forgot password?</a>
+              <a href="#" onClick={(e) => { e.preventDefault(); setError('Demo mode: Please use standard login.'); }} className="text-sm font-medium text-primary hover:text-primary-hover">Forgot password?</a>
             </div>
           )}
 
           <button 
             type="submit"
-            className="w-full mt-2 py-3.5 bg-primary text-on-primary font-bold rounded-xl shadow-lg shadow-primary/30 hover:scale-[1.01] active:scale-[0.99] transition-all text-sm"
+            className="mt-2 w-full rounded-xl bg-primary py-3 text-sm font-semibold text-on-primary transition-colors hover:bg-primary-hover focus:outline-none focus:ring-4 focus:ring-primary/10"
           >
-            {mode === 'signin' ? `Sign In as ${role.charAt(0).toUpperCase() + role.slice(1)}` : `Register as ${role.charAt(0).toUpperCase() + role.slice(1)}`}
+            {mode === 'signin' ? `Sign in as ${role.charAt(0).toUpperCase() + role.slice(1)}` : `Register as ${role.charAt(0).toUpperCase() + role.slice(1)}`}
           </button>
         </form>
 
-        <div className="text-center mt-6 pt-4 border-t border-slate-100 text-sm text-slate-500">
+        <div className="mt-6 border-t border-slate-100 pt-4 text-center text-sm text-slate-500">
           {mode === 'signin' ? (
             <>
               Don't have an account?{' '}
               <a 
                 href="#" 
                 onClick={(e) => { e.preventDefault(); setMode('signup'); setError(''); }} 
-                className="font-bold text-primary hover:underline"
+                className="font-semibold text-primary hover:text-primary-hover"
               >
                 Sign up
               </a>
@@ -278,7 +270,7 @@ export function Login({ onLogin }) {
               <a 
                 href="#" 
                 onClick={(e) => { e.preventDefault(); setMode('signin'); setError(''); }} 
-                className="font-bold text-primary hover:underline"
+                className="font-semibold text-primary hover:text-primary-hover"
               >
                 Sign in
               </a>

@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Card } from './MetricCard';
+import { Card } from './ui/Card';
 import { cn } from '../lib/utils';
+
+const selectClass = "w-full bg-white border border-slate-200 rounded-lg text-xs font-medium p-2.5 outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 cursor-pointer transition-colors";
 
 export function Candidates() {
   const [candidates, setCandidates] = useState(() => {
@@ -34,7 +36,7 @@ export function Candidates() {
   const handleExportCSV = () => {
     const headers = ['Candidate Name', 'Target Role', 'University', 'Match Score', 'Status'];
     const rows = filteredCandidates.map(c => [c.name, c.role, c.university, `${c.match}%`, c.status]);
-    const csvContent = "data:text/csv;charset=utf-8," 
+    const csvContent = "data:text/csv;charset=utf-8,"
       + [headers.join(','), ...rows.map(e => e.map(val => `"${val}"`).join(","))].join("\n");
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
@@ -45,12 +47,11 @@ export function Candidates() {
     document.body.removeChild(link);
   };
 
-  // Filter logic
   const filteredCandidates = candidates.filter(c => {
     const matchesSearch = c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           c.role.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           c.university.toLowerCase().includes(searchQuery.toLowerCase());
-    
+
     if (!matchesSearch) return false;
     if (filterRole !== 'All' && c.role !== filterRole) return false;
     if (filterUni !== 'All' && c.university !== filterUni) return false;
@@ -64,30 +65,30 @@ export function Candidates() {
     <div className="pt-24 px-8 pb-12 max-w-7xl mx-auto space-y-8">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h2 className="text-3xl font-black text-on-surface tracking-tighter">Unified Talent Pool</h2>
-          <p className="text-slate-500 mt-1 font-medium">Access verified student profiles from partner universities.</p>
+          <h2 className="text-2xl md:text-3xl font-headline font-semibold text-slate-900 tracking-tight">Unified talent pool</h2>
+          <p className="text-slate-500 mt-1 text-sm">Access verified student profiles from partner universities.</p>
         </div>
         <div className="flex flex-wrap gap-3 w-full md:w-auto">
           <div className="relative flex-1 md:w-80">
             <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">search</span>
-            <input 
-              type="text" 
+            <input
+              type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search candidate, role, or college..."
-              className="w-full bg-white pl-9 pr-4 py-2 border border-slate-200 rounded-xl text-xs font-medium outline-none focus:border-primary/30 transition-all shadow-sm"
+              className="w-full bg-white pl-9 pr-4 py-2.5 border border-slate-200 rounded-lg text-sm outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-colors"
             />
           </div>
-          <button 
+          <button
             onClick={() => setShowAdvanced(!showAdvanced)}
-            className="flex items-center gap-1.5 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all border border-slate-200"
+            className="flex items-center gap-1.5 px-4 py-2.5 border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-sm rounded-lg transition-colors"
           >
             <span className="material-symbols-outlined text-sm">tune</span>
-            {showAdvanced ? 'Hide Filters' : 'Filters'}
+            {showAdvanced ? 'Hide filters' : 'Filters'}
           </button>
-          <button 
+          <button
             onClick={handleExportCSV}
-            className="flex items-center gap-1.5 px-4 py-2 bg-primary text-white font-bold text-xs rounded-xl shadow-lg shadow-primary/20 hover:scale-[1.02] transition-transform"
+            className="flex items-center gap-1.5 px-4 py-2.5 bg-primary text-on-primary font-semibold text-sm rounded-lg hover:bg-primary-hover transition-colors"
           >
             <span className="material-symbols-outlined text-sm">download</span>
             Export CSV
@@ -95,23 +96,18 @@ export function Candidates() {
         </div>
       </div>
 
-      {/* Advanced Filters Drawer */}
       <AnimatePresence>
         {showAdvanced && (
-          <motion.div 
+          <motion.div
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            className="overflow-hidden bg-white p-6 rounded-2xl border border-slate-100 shadow-sm grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4"
+            className="overflow-hidden bg-white p-6 rounded-xl border border-slate-200 elev-sm grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4"
           >
             <div>
-              <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Target Role</label>
-              <select 
-                value={filterRole} 
-                onChange={(e) => setFilterRole(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium p-2.5 outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer"
-              >
-                <option value="All">All Roles</option>
+              <label className="block text-[11px] font-medium text-slate-500 mb-1">Target role</label>
+              <select value={filterRole} onChange={(e) => setFilterRole(e.target.value)} className={selectClass}>
+                <option value="All">All roles</option>
                 <option value="Full Stack Engineer">Full Stack Engineer</option>
                 <option value="Data Scientist">Data Scientist</option>
                 <option value="DevOps Engineer">DevOps Engineer</option>
@@ -120,13 +116,9 @@ export function Candidates() {
             </div>
 
             <div>
-              <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">University</label>
-              <select 
-                value={filterUni} 
-                onChange={(e) => setFilterUni(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium p-2.5 outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer"
-              >
-                <option value="All">All Colleges</option>
+              <label className="block text-[11px] font-medium text-slate-500 mb-1">University</label>
+              <select value={filterUni} onChange={(e) => setFilterUni(e.target.value)} className={selectClass}>
+                <option value="All">All colleges</option>
                 <option value="Stanford">Stanford</option>
                 <option value="MIT">MIT</option>
                 <option value="UC Berkeley">UC Berkeley</option>
@@ -135,13 +127,9 @@ export function Candidates() {
             </div>
 
             <div>
-              <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Status</label>
-              <select 
-                value={filterStatus} 
-                onChange={(e) => setFilterStatus(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium p-2.5 outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer"
-              >
-                <option value="All">All Statuses</option>
+              <label className="block text-[11px] font-medium text-slate-500 mb-1">Status</label>
+              <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className={selectClass}>
+                <option value="All">All statuses</option>
                 <option value="New Applied">New Applied</option>
                 <option value="Shortlisted">Shortlisted</option>
                 <option value="Interviewing">Interviewing</option>
@@ -150,13 +138,9 @@ export function Candidates() {
             </div>
 
             <div>
-              <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Min Match Score</label>
-              <select 
-                value={minScore} 
-                onChange={(e) => setMinScore(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium p-2.5 outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer"
-              >
-                <option value="All">Any Score</option>
+              <label className="block text-[11px] font-medium text-slate-500 mb-1">Min match score</label>
+              <select value={minScore} onChange={(e) => setMinScore(e.target.value)} className={selectClass}>
+                <option value="All">Any score</option>
                 <option value="95">95%+</option>
                 <option value="90">90%+</option>
                 <option value="85">85%+</option>
@@ -168,67 +152,67 @@ export function Candidates() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {[
-          { label: 'Total Candidates', value: '2,400', icon: 'groups' },
+          { label: 'Total candidates', value: '2,400', icon: 'groups' },
           { label: 'Waitlisted', value: candidates.filter(c => c.status === 'On Hold').length.toString(), icon: 'hourglass_empty' },
-          { label: 'Top 10% Match', value: candidates.filter(c => c.match >= 90).length.toString(), icon: 'stars' },
+          { label: 'Top 10% match', value: candidates.filter(c => c.match >= 90).length.toString(), icon: 'stars' },
           { label: 'Interviewing', value: candidates.filter(c => c.status === 'Interviewing').length.toString(), icon: 'calendar_month' }
         ].map(m => (
-          <Card key={m.label} className="p-4 flex items-center gap-4 border border-outline-variant/5">
-             <div className="w-12 h-12 rounded-xl bg-primary/5 flex items-center justify-center text-primary">
-                <span className="material-symbols-outlined text-2xl">{m.icon}</span>
-             </div>
-             <div>
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">{m.label}</p>
-                <h4 className="text-xl font-black text-on-surface leading-none">{m.value}</h4>
-             </div>
+          <Card key={m.label} className="p-4 flex items-center gap-4">
+            <div className="w-12 h-12 rounded-lg bg-primary-soft flex items-center justify-center text-primary">
+              <span className="material-symbols-outlined text-2xl">{m.icon}</span>
+            </div>
+            <div>
+              <p className="text-xs font-medium text-slate-500 leading-none mb-1">{m.label}</p>
+              <h4 className="text-xl font-headline font-bold text-slate-900 leading-none">{m.value}</h4>
+            </div>
           </Card>
         ))}
       </div>
 
-      <Card className="p-0 overflow-hidden border border-outline-variant/5">
+      <Card className="p-0 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-surface-container-low/50">
-                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Candidate Name</th>
-                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Target Role</th>
-                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">University</th>
-                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Score</th>
-                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Status / Action</th>
+              <tr className="bg-slate-50 border-b border-slate-200">
+                <th className="px-8 py-4 text-[11px] font-semibold text-slate-500">Candidate name</th>
+                <th className="px-8 py-4 text-[11px] font-semibold text-slate-500">Target role</th>
+                <th className="px-8 py-4 text-[11px] font-semibold text-slate-500">University</th>
+                <th className="px-8 py-4 text-[11px] font-semibold text-slate-500 text-center">Score</th>
+                <th className="px-8 py-4 text-[11px] font-semibold text-slate-500">Status / action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-outline-variant/10">
+            <tbody className="divide-y divide-slate-100">
               {filteredCandidates.length === 0 ? (
                 <tr>
-                  <td colSpan="5" className="px-8 py-10 text-center text-slate-400 font-semibold text-sm">No candidates match search/filter requirements.</td>
+                  <td colSpan="5" className="px-8 py-10 text-center text-slate-400 text-sm">No candidates match search/filter requirements.</td>
                 </tr>
               ) : (
                 filteredCandidates.map(can => (
-                  <tr key={can.id} className="hover:bg-slate-50 transition-colors group">
-                    <td className="px-8 py-5">
+                  <tr key={can.id} className="hover:bg-slate-50 transition-colors">
+                    <td className="px-8 py-4">
                       <div className="flex items-center gap-4">
-                        <img src={can.avatar} className="w-10 h-10 rounded-xl object-cover border border-slate-100" alt={can.name} />
-                        <span className="font-bold text-on-surface">{can.name}</span>
+                        <img src={can.avatar} className="w-10 h-10 rounded-lg object-cover border border-slate-200" alt={can.name} />
+                        <span className="font-semibold text-slate-900">{can.name}</span>
                       </div>
                     </td>
-                    <td className="px-8 py-5 text-sm font-semibold text-slate-600">{can.role}</td>
-                    <td className="px-8 py-5 text-sm font-semibold text-slate-600">{can.university}</td>
-                    <td className="px-8 py-5">
+                    <td className="px-8 py-4 text-sm text-slate-600">{can.role}</td>
+                    <td className="px-8 py-4 text-sm text-slate-600">{can.university}</td>
+                    <td className="px-8 py-4">
                       <div className="flex items-center justify-center">
-                        <div className="px-3 py-1 bg-green-50 text-green-600 rounded-full text-xs font-black">
+                        <div className="px-2.5 py-1 bg-success-soft text-success rounded-md text-xs font-semibold">
                           {can.match}%
                         </div>
                       </div>
                     </td>
-                    <td className="px-8 py-5">
-                      <select 
+                    <td className="px-8 py-4">
+                      <select
                         value={can.status}
                         onChange={(e) => handleStatusChange(can.id, e.target.value)}
                         className={cn(
-                          "px-3 py-1.5 text-[10px] font-black uppercase rounded-full border-none focus:ring-1 focus:ring-primary/20 cursor-pointer bg-slate-50",
-                          can.status === 'Interviewing' ? 'bg-purple-50 text-purple-600' :
-                          can.status === 'Shortlisted' ? 'bg-blue-50 text-blue-600' :
-                          can.status === 'On Hold' ? 'bg-orange-50 text-orange-600' : 'bg-slate-100 text-slate-400'
+                          "px-3 py-1.5 text-[11px] font-semibold rounded-md border-none outline-none focus:ring-4 focus:ring-primary/10 cursor-pointer",
+                          can.status === 'Interviewing' ? 'bg-primary-soft text-primary' :
+                          can.status === 'Shortlisted' ? 'bg-primary-soft text-primary' :
+                          can.status === 'On Hold' ? 'bg-warning-soft text-warning' : 'bg-slate-100 text-slate-500'
                         )}
                       >
                         <option value="New Applied">New Applied</option>

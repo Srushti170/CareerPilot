@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Card } from './MetricCard';
 import { JobCard } from './JobCard';
 import { ResumeIntelligence } from './ResumeIntelligence';
 
@@ -254,7 +253,7 @@ export function JobSearch({ searchQuery = '', setSearchQuery, applications = [],
 
   const handleApply = (job) => {
     const isAlreadyApplied = applications.some(
-      app => app.company.toLowerCase() === job.company.toLowerCase() && 
+      app => app.company.toLowerCase() === job.company.toLowerCase() &&
              app.role.toLowerCase() === job.title.toLowerCase()
     );
     if (isAlreadyApplied) return;
@@ -280,65 +279,52 @@ export function JobSearch({ searchQuery = '', setSearchQuery, applications = [],
   };
 
   const filteredJobs = featuredJobs.filter(job => {
-    // Search Query
     const q = localQuery.toLowerCase();
-    const matchesQuery = !q || job.title.toLowerCase().includes(q) || 
-                         job.company.toLowerCase().includes(q) || 
+    const matchesQuery = !q || job.title.toLowerCase().includes(q) ||
+                         job.company.toLowerCase().includes(q) ||
                          job.location.toLowerCase().includes(q) ||
                          job.tags.some(tag => tag.toLowerCase().includes(q));
 
-    // Job Type Filter
     const matchesType = filterJobTypes.length === 0 || filterJobTypes.includes(job.type);
-
-    // Location Type Filter
     const matchesLocType = filterLocationTypes.length === 0 || filterLocationTypes.includes(job.locationType);
-
-    // Location Text Filter
     const matchesLocText = !filterLocationText || job.location.toLowerCase().includes(filterLocationText.toLowerCase());
-
-    // Experience Filter
     const matchesExp = filterExperience === 'Any Experience' || job.experience === filterExperience;
-
-    // Income Range Filter
     const matchesIncome = job.salaryMin >= filterIncome;
 
     return matchesQuery && matchesType && matchesLocType && matchesLocText && matchesExp && matchesIncome;
   });
 
+  const tabClass = (active) =>
+    `px-5 py-2 rounded-lg text-sm font-semibold transition-colors ${active ? 'bg-white elev-sm text-primary' : 'text-slate-500 hover:text-slate-900'}`;
+
   return (
     <div className="pt-24 px-8 pb-12 max-w-7xl mx-auto space-y-8">
       <header className="space-y-6">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <h2 className="text-4xl font-black text-on-surface tracking-tighter">Opportunities</h2>
-          <div className="flex p-1 bg-surface-container-low rounded-xl border border-outline-variant/10">
-            <button 
-              onClick={() => setActiveSearchTab('listings')}
-              className={`px-6 py-2 rounded-lg text-sm font-black uppercase tracking-widest transition-all ${activeSearchTab === 'listings' ? 'bg-white shadow-sm text-primary' : 'text-slate-400 hover:text-on-surface'}`}
-            >
-              All Listings
+          <h2 className="text-2xl md:text-3xl font-headline font-semibold text-slate-900 tracking-tight">Opportunities</h2>
+          <div className="flex p-1 bg-slate-100 rounded-xl">
+            <button onClick={() => setActiveSearchTab('listings')} className={tabClass(activeSearchTab === 'listings')}>
+              All listings
             </button>
-            <button 
-              onClick={() => setActiveSearchTab('intelligence')}
-              className={`px-6 py-2 rounded-lg text-sm font-black uppercase tracking-widest transition-all ${activeSearchTab === 'intelligence' ? 'bg-white shadow-sm text-primary' : 'text-slate-400 hover:text-on-surface'}`}
-            >
-              Resume AI Match
+            <button onClick={() => setActiveSearchTab('intelligence')} className={tabClass(activeSearchTab === 'intelligence')}>
+              Resume AI match
             </button>
           </div>
         </div>
 
         {activeSearchTab === 'listings' && (
-          <div className="flex gap-4">
+          <div className="flex gap-3">
             <div className="flex-1 relative">
               <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">search</span>
-              <input 
-                type="text" 
+              <input
+                type="text"
                 placeholder="Search by role, company, or keywords..."
                 value={localQuery}
                 onChange={handleSearchChange}
-                className="w-full bg-white pl-12 pr-6 py-4 rounded-2xl border-2 border-transparent focus:border-primary/20 focus:ring-0 shadow-sm transition-all text-on-surface font-medium"
+                className="w-full bg-white pl-12 pr-6 py-3 rounded-xl border border-slate-200 focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-colors text-slate-900"
               />
             </div>
-            <button className="px-6 bg-white rounded-2xl border border-outline-variant/10 flex items-center gap-2 font-bold text-slate-600 hover:bg-slate-50 transition-colors shadow-sm">
+            <button className="px-5 bg-white rounded-xl border border-slate-300 flex items-center gap-2 font-semibold text-slate-700 hover:bg-slate-50 transition-colors">
               <span className="material-symbols-outlined">tune</span>
               Filters
             </button>
@@ -348,117 +334,108 @@ export function JobSearch({ searchQuery = '', setSearchQuery, applications = [],
 
       <AnimatePresence mode="wait">
         {activeSearchTab === 'listings' ? (
-          <motion.div 
+          <motion.div
             key="listings"
-            initial={{ opacity: 0, x: -20 }}
+            initial={{ opacity: 0, x: -12 }}
             animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 20 }}
+            exit={{ opacity: 0, x: 12 }}
             className="grid grid-cols-12 gap-8"
           >
             <div className="col-span-12 lg:col-span-8 space-y-6">
               {filteredJobs.length === 0 ? (
-                <div className="bg-white p-12 rounded-2xl border border-outline-variant/10 text-center text-slate-400 font-medium">
+                <div className="bg-white p-12 rounded-xl border border-slate-200 text-center text-slate-400 text-sm">
                   No jobs match your search query. Try another keyword!
                 </div>
               ) : (
                 filteredJobs.map((job, i) => {
                   const isApplied = applications.some(
-                    app => app.company.toLowerCase() === job.company.toLowerCase() && 
+                    app => app.company.toLowerCase() === job.company.toLowerCase() &&
                            app.role.toLowerCase() === job.title.toLowerCase()
                   );
                   return (
-                    <JobCard 
-                      key={i} 
-                      job={job} 
-                      applied={isApplied} 
-                      onApply={() => handleApply(job)} 
-                    />
+                    <JobCard key={i} job={job} applied={isApplied} onApply={() => handleApply(job)} />
                   );
                 })
               )}
-              
-              <div className="flex justify-center pt-8">
-                <button className="px-8 py-3 bg-surface-container-low text-on-surface font-black text-xs uppercase tracking-[0.2em] rounded-full hover:bg-surface-container transition-colors">
-                  Load More Results
+
+              <div className="flex justify-center pt-6">
+                <button className="px-6 py-2.5 border border-slate-300 bg-white text-slate-700 font-semibold text-sm rounded-xl hover:bg-slate-50 transition-colors">
+                  Load more results
                 </button>
               </div>
             </div>
 
             <aside className="col-span-12 lg:col-span-4 space-y-6">
-              <div className="bg-white rounded-2xl border border-outline-variant/20 p-6 shadow-sm sticky top-28">
-                <div className="flex justify-between items-center mb-6 border-b border-outline-variant/10 pb-4">
-                  <h3 className="text-lg font-black text-on-surface flex items-center gap-2">
+              <div className="bg-white rounded-xl border border-slate-200 p-6 elev-sm sticky top-28">
+                <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-4">
+                  <h3 className="text-base font-semibold text-slate-900 flex items-center gap-2">
                     <span className="material-symbols-outlined text-primary">tune</span>
                     Filters
                   </h3>
-                  <button className="text-xs font-bold text-slate-400 hover:text-primary transition-colors">Clear All</button>
+                  <button className="text-xs font-semibold text-slate-400 hover:text-primary transition-colors">Clear all</button>
                 </div>
 
                 <div className="space-y-6">
-                  {/* Job Type */}
                   <div>
-                    <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-3">Job Type</h4>
+                    <h4 className="text-xs font-semibold text-slate-700 mb-3">Job type</h4>
                     <div className="space-y-2.5">
                       {['Full-time', 'Part-time', 'Internship', 'Contract'].map(type => (
                         <label key={type} className="flex items-center gap-3 cursor-pointer group">
-                          <input 
-                            type="checkbox" 
+                          <input
+                            type="checkbox"
                             checked={filterJobTypes.includes(type)}
                             onChange={(e) => {
                               if (e.target.checked) setFilterJobTypes([...filterJobTypes, type]);
                               else setFilterJobTypes(filterJobTypes.filter(t => t !== type));
                             }}
-                            className="w-4 h-4 rounded border-outline-variant text-primary focus:ring-primary accent-primary cursor-pointer" 
+                            className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary accent-primary cursor-pointer"
                           />
-                          <span className="text-sm text-slate-600 font-medium group-hover:text-slate-900 transition-colors">{type}</span>
+                          <span className="text-sm text-slate-600 group-hover:text-slate-900 transition-colors">{type}</span>
                         </label>
                       ))}
                     </div>
                   </div>
 
-                  {/* Work Style */}
                   <div>
-                    <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-3">Location Type</h4>
+                    <h4 className="text-xs font-semibold text-slate-700 mb-3">Location type</h4>
                     <div className="space-y-2.5">
                       {['Remote', 'Hybrid', 'On-site'].map(type => (
                         <label key={type} className="flex items-center gap-3 cursor-pointer group">
-                          <input 
-                            type="checkbox" 
+                          <input
+                            type="checkbox"
                             checked={filterLocationTypes.includes(type)}
                             onChange={(e) => {
                               if (e.target.checked) setFilterLocationTypes([...filterLocationTypes, type]);
                               else setFilterLocationTypes(filterLocationTypes.filter(t => t !== type));
                             }}
-                            className="w-4 h-4 rounded border-outline-variant text-primary focus:ring-primary accent-primary cursor-pointer" 
+                            className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary accent-primary cursor-pointer"
                           />
-                          <span className="text-sm text-slate-600 font-medium group-hover:text-slate-900 transition-colors">{type}</span>
+                          <span className="text-sm text-slate-600 group-hover:text-slate-900 transition-colors">{type}</span>
                         </label>
                       ))}
                     </div>
                   </div>
 
-                  {/* Location String */}
                   <div>
-                    <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-3">Location</h4>
+                    <h4 className="text-xs font-semibold text-slate-700 mb-3">Location</h4>
                     <div className="relative">
                       <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[18px]">location_on</span>
-                      <input 
-                        type="text" 
-                        placeholder="e.g. San Francisco, CA" 
+                      <input
+                        type="text"
+                        placeholder="e.g. San Francisco, CA"
                         value={filterLocationText}
                         onChange={(e) => setFilterLocationText(e.target.value)}
-                        className="w-full pl-10 pr-3 py-2.5 bg-surface-container-lowest border border-outline-variant/30 rounded-xl text-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all text-slate-700 placeholder:text-slate-400" 
+                        className="w-full pl-10 pr-3 py-2.5 bg-white border border-slate-200 rounded-lg text-sm focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-colors text-slate-700 placeholder:text-slate-400"
                       />
                     </div>
                   </div>
 
-                  {/* Experience */}
                   <div>
-                    <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-3">Experience Level</h4>
-                    <select 
+                    <h4 className="text-xs font-semibold text-slate-700 mb-3">Experience level</h4>
+                    <select
                       value={filterExperience}
                       onChange={(e) => setFilterExperience(e.target.value)}
-                      className="w-full px-3 py-2.5 bg-surface-container-lowest border border-outline-variant/30 rounded-xl text-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all text-slate-700 cursor-pointer"
+                      className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-sm focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-colors text-slate-700 cursor-pointer"
                     >
                       <option>Any Experience</option>
                       <option>Entry Level (0-2 years)</option>
@@ -467,29 +444,28 @@ export function JobSearch({ searchQuery = '', setSearchQuery, applications = [],
                     </select>
                   </div>
 
-                  {/* Income Range */}
                   <div>
                     <div className="flex justify-between items-center mb-3">
-                      <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Min Income Range</h4>
-                      <span className="text-xs font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-md">${Math.round(filterIncome / 1000)}k+</span>
+                      <h4 className="text-xs font-semibold text-slate-700">Min income range</h4>
+                      <span className="text-xs font-semibold text-primary bg-primary-soft px-2 py-0.5 rounded-md">${Math.round(filterIncome / 1000)}k+</span>
                     </div>
-                    <input 
-                      type="range" 
-                      min="0" 
-                      max="250000" 
-                      step="10000" 
+                    <input
+                      type="range"
+                      min="0"
+                      max="250000"
+                      step="10000"
                       value={filterIncome}
                       onChange={(e) => setFilterIncome(Number(e.target.value))}
-                      className="w-full accent-primary cursor-pointer" 
+                      className="w-full accent-primary cursor-pointer"
                     />
-                    <div className="flex justify-between mt-2 text-xs text-slate-400 font-bold">
+                    <div className="flex justify-between mt-2 text-xs text-slate-400 font-medium">
                       <span>$0</span>
                       <span>$250k+</span>
                     </div>
                   </div>
                 </div>
 
-                <button 
+                <button
                   onClick={() => {
                     setFilterJobTypes([]);
                     setFilterLocationTypes([]);
@@ -497,9 +473,9 @@ export function JobSearch({ searchQuery = '', setSearchQuery, applications = [],
                     setFilterExperience('Any Experience');
                     setFilterIncome(0);
                   }}
-                  className="w-full mt-8 py-3.5 bg-primary text-white font-bold rounded-xl shadow-lg shadow-primary/20 hover:shadow-primary/40 hover:bg-primary/90 transition-all active:scale-[0.98]"
+                  className="w-full mt-8 py-3 bg-primary text-on-primary font-semibold rounded-xl hover:bg-primary-hover transition-colors"
                 >
-                  Clear Filters
+                  Clear filters
                 </button>
               </div>
             </aside>
@@ -507,9 +483,9 @@ export function JobSearch({ searchQuery = '', setSearchQuery, applications = [],
         ) : (
           <motion.div
             key="intelligence"
-            initial={{ opacity: 0, x: 20 }}
+            initial={{ opacity: 0, x: 12 }}
             animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
+            exit={{ opacity: 0, x: -12 }}
           >
             <ResumeIntelligence />
           </motion.div>

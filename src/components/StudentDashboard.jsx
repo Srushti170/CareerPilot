@@ -1,7 +1,10 @@
 import { useState } from 'react';
 import { MetricCard } from './MetricCard';
 import { JobCard } from './JobCard';
-import { motion, AnimatePresence } from 'motion/react';
+import { SectionHeader } from './ui/SectionHeader';
+import { Button } from './ui/Button';
+import { Badge } from './ui/Badge';
+import { motion } from 'motion/react';
 
 export function StudentDashboard({ applications = [], setApplications, setActiveTab }) {
   const savedProfile = JSON.parse(localStorage.getItem('careerpilot_student_profile') || '{}');
@@ -104,18 +107,19 @@ export function StudentDashboard({ applications = [], setApplications, setActive
   };
 
   return (
-    <div className="pt-24 px-8 pb-12 max-w-7xl mx-auto space-y-10">
+    <div className="mx-auto max-w-7xl space-y-10 px-8 pb-12 pt-24">
       <section>
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          className="rounded-3xl border border-slate-200 bg-[linear-gradient(130deg,#0f172a_0%,#1e3a8a_45%,#2563eb_100%)] p-8 text-white shadow-2xl shadow-primary/10"
+          transition={{ duration: 0.25, ease: 'easeOut' }}
+          className="rounded-2xl border border-slate-200 bg-[linear-gradient(135deg,#ffffff_0%,#f8faf9_55%,#eef7f5_100%)] p-8 elev-sm"
         >
-          <p className="text-xs font-black uppercase tracking-[0.35em] text-blue-100">Student dashboard</p>
-          <h2 className="mt-3 text-3xl font-black tracking-tight">Welcome back, {studentName}.</h2>
-          <p className="mt-2 max-w-2xl text-sm text-blue-100/90">Track applications, polish your profile, and keep your opportunities pipeline moving with a cleaner, recruiter-ready view.</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-primary">Student dashboard</p>
+          <h2 className="mt-3 text-3xl font-headline font-bold tracking-tight text-slate-900">Welcome back, {studentName}</h2>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">Track applications, improve your profile, and keep your search moving with a clean view of what needs attention next.</p>
+          <p className="mt-3 text-sm text-slate-500">You have <span className="font-semibold text-slate-900">{applications.filter(a => a.status === 'Interview').length}</span> upcoming interviews this week.</p>
         </motion.div>
-        <p className="text-slate-500 mt-1">You have {applications.filter(a => a.status === 'Interview').length} upcoming interviews this week. Let's get prepared.</p>
       </section>
 
       <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -126,10 +130,10 @@ export function StudentDashboard({ applications = [], setApplications, setActive
 
       <div className="grid grid-cols-1 gap-8 items-start">
         <section className="space-y-6">
-          <div className="flex justify-between items-center">
-            <h3 className="text-xl font-bold tracking-tight">Recommended for You</h3>
-            <button onClick={() => setActiveTab('search')} className="text-primary text-sm font-semibold hover:underline">View All</button>
-          </div>
+          <SectionHeader
+            title="Recommended for you"
+            action={<Button variant="ghost" size="sm" onClick={() => setActiveTab('search')}>View all</Button>}
+          />
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {jobs.map(job => {
               const isApplied = applications.some(
@@ -150,82 +154,77 @@ export function StudentDashboard({ applications = [], setApplications, setActive
       </div>
 
       <section className="space-y-6">
-        <div className="flex justify-between items-center">
-          <h3 className="text-xl font-bold tracking-tight">Active Trackers</h3>
-          {activeApps.length > 1 && (
+        <SectionHeader
+          title="Active trackers"
+          action={activeApps.length > 1 && (
             <div className="flex gap-2">
-              <button 
-                onClick={handlePrevTracker} 
-                className="p-2 bg-white rounded-lg shadow-sm border border-outline-variant/10 hover:bg-slate-50 transition-colors"
+              <button
+                onClick={handlePrevTracker}
+                className="rounded-lg border border-slate-200 bg-white p-2 text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-900"
               >
-                <span className="material-symbols-outlined text-slate-500">chevron_left</span>
+                <span className="material-symbols-outlined text-[20px]">chevron_left</span>
               </button>
-              <button 
-                onClick={handleNextTracker} 
-                className="p-2 bg-white rounded-lg shadow-sm border border-outline-variant/10 hover:bg-slate-50 transition-colors"
+              <button
+                onClick={handleNextTracker}
+                className="rounded-lg border border-slate-200 bg-white p-2 text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-900"
               >
-                <span className="material-symbols-outlined text-slate-500">chevron_right</span>
+                <span className="material-symbols-outlined text-[20px]">chevron_right</span>
               </button>
             </div>
           )}
-        </div>
-        
+        />
+
         {activeApps.length === 0 ? (
-          <div className="bg-surface-container-lowest rounded-xl p-8 shadow-sm border border-outline-variant/5 text-center flex flex-col items-center justify-center gap-4">
-            <span className="material-symbols-outlined text-4xl text-slate-300">work_outline</span>
-            <p className="text-slate-500 font-medium">No active applications currently tracking.</p>
-            <button 
-              onClick={() => setActiveTab('search')} 
-              className="px-6 py-2.5 bg-primary text-white text-xs font-bold rounded-xl shadow-lg shadow-primary/10 hover:shadow-primary/25 transition-all uppercase tracking-wider"
-            >
-              Find and Apply for Jobs
-            </button>
+          <div className="flex flex-col items-center justify-center gap-4 rounded-xl border border-slate-200 bg-white p-8 text-center elev-sm">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-400">
+              <span className="material-symbols-outlined text-2xl">work_outline</span>
+            </div>
+            <p className="text-sm text-slate-500">No active applications currently tracking.</p>
+            <Button onClick={() => setActiveTab('search')}>Find and apply for jobs</Button>
           </div>
         ) : (
-          <div className="bg-surface-container-lowest rounded-xl p-8 shadow-sm border border-outline-variant/5">
-            <div className="flex flex-col md:flex-row items-center justify-between mb-10 gap-4">
+          <div className="rounded-xl border border-slate-200 bg-white p-8 elev-sm">
+            <div className="mb-10 flex flex-col items-center justify-between gap-4 md:flex-row">
               <div className="flex items-center gap-4">
-                <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center overflow-hidden border border-slate-200 p-2">
-                  <img 
-                    src={currentTracker.logo || `https://ui-avatars.com/api/?name=${encodeURIComponent(currentTracker.company)}&background=random`} 
-                    className="w-7 h-7 object-contain" 
-                    alt={currentTracker.company} 
+                <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-slate-50 p-2">
+                  <img
+                    src={currentTracker.logo || `https://ui-avatars.com/api/?name=${encodeURIComponent(currentTracker.company)}&background=random`}
+                    className="h-7 w-7 object-contain"
+                    alt={currentTracker.company}
                   />
                 </div>
                 <div>
-                  <h4 className="font-bold">{currentTracker.role}</h4>
-                  <p className="text-xs text-slate-500">{currentTracker.company}</p>
+                  <h4 className="text-base font-semibold text-slate-900">{currentTracker.role}</h4>
+                  <p className="mt-0.5 text-sm text-slate-500">{currentTracker.company}</p>
                 </div>
               </div>
-              <div className="text-center md:text-right">
-                <p className="text-xs text-slate-400 font-bold uppercase mb-1">Status</p>
-                <span className="px-3 py-1 bg-primary/10 text-primary text-[10px] font-black rounded-full uppercase tracking-widest">
-                  {currentTracker.status}
-                </span>
+              <div className="flex flex-col items-center gap-1.5 md:items-end">
+                <p className="text-[11px] font-medium uppercase tracking-[0.04em] text-slate-400">Status</p>
+                <Badge tone="brand">{currentTracker.status}</Badge>
               </div>
             </div>
 
-            <div className="pt-4 overflow-x-auto">
+            <div className="overflow-x-auto pt-4">
               <div className="relative min-w-[600px]">
                 {/* Background Line */}
-                <div className="absolute top-[20px] left-[12.5%] right-[12.5%] h-1 bg-slate-200 z-0"></div>
-                
+                <div className="absolute top-[20px] left-[12.5%] right-[12.5%] z-0 h-0.5 bg-slate-200"></div>
+
                 {/* Progress Line */}
-                <div className="absolute top-[20px] left-[12.5%] h-1 bg-primary z-0 transition-all duration-500" 
+                <div className="absolute top-[20px] left-[12.5%] z-0 h-0.5 bg-primary transition-all duration-500"
                      style={{ width: `${(getStepsForStatus(currentTracker.status, currentTracker.appliedDate).filter(s => s.done).length - 1) * 25}%` }}></div>
-                
+
                 <div className="relative z-10 grid grid-cols-4">
                   {getStepsForStatus(currentTracker.status, currentTracker.appliedDate).map((step, i) => (
-                    <div key={i} className={`flex flex-col items-center gap-2 ${!step.active ? 'opacity-30' : ''}`}>
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center shadow-lg transition-all ${
-                        step.done ? 'bg-primary text-white shadow-primary/20' : 
-                        step.current ? 'bg-white border-2 border-primary text-primary animate-pulse' : 'bg-white border-2 border-slate-200 text-slate-400'
+                    <div key={i} className={`flex flex-col items-center gap-2 ${!step.active ? 'opacity-40' : ''}`}>
+                      <div className={`flex h-10 w-10 items-center justify-center rounded-full transition-all ${
+                        step.done ? 'bg-primary text-white' :
+                        step.current ? 'border-2 border-primary bg-white text-primary' : 'border-2 border-slate-200 bg-white text-slate-400'
                       }`}>
-                        <span className="material-symbols-outlined" style={step.done ? { fontVariationSettings: "'FILL' 1" } : {}}>{step.icon}</span>
+                        <span className="material-symbols-outlined text-[20px]" style={step.done ? { fontVariationSettings: "'FILL' 1" } : {}}>{step.icon}</span>
                       </div>
                       <div className="text-center">
-                        <p className={`text-xs font-bold ${step.current ? 'text-primary' : 'text-on-surface'}`}>{step.label}</p>
-                        <p className={`text-[10px] ${step.current ? 'text-primary-container font-semibold' : 'text-slate-400'}`}>{step.date}</p>
+                        <p className={`text-sm font-medium ${step.current ? 'text-primary' : 'text-slate-700'}`}>{step.label}</p>
+                        <p className={`text-xs ${step.current ? 'font-medium text-primary' : 'text-slate-400'}`}>{step.date}</p>
                       </div>
                     </div>
                   ))}
