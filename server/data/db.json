@@ -1,0 +1,13 @@
+{
+  "storage": {
+    "careerpilot_users": "[{\"id\":\"user-student-1\",\"name\":\"Alex Rivera\",\"email\":\"student@university.edu\",\"password\":\"password\",\"role\":\"student\"},{\"id\":\"user-recruiter-1\",\"name\":\"Sarah Jenkins\",\"email\":\"hr@company.com\",\"password\":\"password\",\"role\":\"recruiter\"},{\"id\":\"user-admin-1\",\"name\":\"Dr. Elena Rodriguez\",\"email\":\"admin@university.edu\",\"password\":\"password\",\"role\":\"admin\"}]"
+  },
+  "sessions": [],
+  "payments": [],
+  "emails": [],
+  "calendarEvents": [],
+  "reports": [],
+  "oauth": {
+    "googleConfigured": false
+  }
+}

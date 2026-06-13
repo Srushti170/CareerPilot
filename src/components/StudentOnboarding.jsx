@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { motion } from 'motion/react';
+import { getStudentProfile, saveStudentProfile } from '../lib/studentProfile';
 
 const DEFAULT_PROFILE = {
   name: '',
@@ -7,8 +8,9 @@ const DEFAULT_PROFILE = {
   phone: '',
   university: '',
   degree: '',
+  branch: '',
   graduation: '',
-  cgpa: '',
+  gpa: '',
   summary: '',
   skills: [],
   projects: '',
@@ -27,10 +29,14 @@ const DEFAULT_PROFILE = {
 };
 
 export function StudentOnboarding({ currentUser, onComplete }) {
+  const storedProfile = getStudentProfile(currentUser);
   const [form, setForm] = useState(() => ({
     ...DEFAULT_PROFILE,
-    name: currentUser?.name || '',
-    email: currentUser?.email || '',
+    ...storedProfile,
+    degree: storedProfile.degree || storedProfile.branch || '',
+    gpa: storedProfile.gpa || storedProfile.cgpa || '',
+    name: currentUser?.name || storedProfile.name || '',
+    email: currentUser?.email || storedProfile.email || '',
   }));
   const [skillInput, setSkillInput] = useState('');
   const [message, setMessage] = useState('');
@@ -73,7 +79,11 @@ export function StudentOnboarding({ currentUser, onComplete }) {
 
     const profile = {
       ...form,
-      role: 'student',
+      role: 'CS Senior Student',
+      branch: form.branch || form.degree,
+      degree: form.degree || form.branch,
+      gpa: form.gpa,
+      cgpa: form.gpa,
       socials: {
         LinkedIn: { connected: !!form.codingProfiles.LinkedIn, handle: form.codingProfiles.LinkedIn },
         GitHub: { connected: !!form.codingProfiles.GitHub, handle: form.codingProfiles.GitHub },
@@ -82,8 +92,7 @@ export function StudentOnboarding({ currentUser, onComplete }) {
       onboardingComplete: true,
     };
 
-    localStorage.setItem('careerpilot_student_profile', JSON.stringify(profile));
-    localStorage.setItem('careerpilot_student_onboarding_complete', 'true');
+    saveStudentProfile(profile, currentUser);
 
     if (currentUser) {
       const updatedUser = { ...currentUser, profileCompleted: true };
@@ -128,7 +137,7 @@ export function StudentOnboarding({ currentUser, onComplete }) {
               <label className="text-sm font-semibold text-slate-700">University<span className="text-rose-500"> *</span><input value={form.university} onChange={(e) => handleChange('university', e.target.value)} required className="mt-1 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-primary focus:bg-white" /></label>
               <label className="text-sm font-semibold text-slate-700">Degree / Major<span className="text-rose-500"> *</span><input value={form.degree} onChange={(e) => handleChange('degree', e.target.value)} required className="mt-1 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-primary focus:bg-white" /></label>
               <label className="text-sm font-semibold text-slate-700">Graduation year<input value={form.graduation} onChange={(e) => handleChange('graduation', e.target.value)} className="mt-1 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-primary focus:bg-white" /></label>
-              <label className="text-sm font-semibold text-slate-700">CGPA / GPA<input value={form.cgpa} onChange={(e) => handleChange('cgpa', e.target.value)} className="mt-1 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-primary focus:bg-white" /></label>
+              <label className="text-sm font-semibold text-slate-700">CGPA / GPA<input value={form.gpa} onChange={(e) => handleChange('gpa', e.target.value)} className="mt-1 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-primary focus:bg-white" /></label>
               <label className="md:col-span-2 text-sm font-semibold text-slate-700">Professional summary<textarea rows="3" value={form.summary} onChange={(e) => handleChange('summary', e.target.value)} className="mt-1 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-primary focus:bg-white" /></label>
             </div>
 

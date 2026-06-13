@@ -1,123 +1,192 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Card, MetricCard } from './MetricCard';
+import { getDepartmentBreakdown, getPlacementStats, getStoredAnnouncements, getStoredCompanies, getStoredStudents, mergeStudentRecords, normalizeCompany, saveStoredAnnouncements, saveStoredCompanies } from '../lib/adminData';
+import { getStoredJobs } from '../lib/recruiterData';
+import { getInterviewFeedbackHistory } from '../lib/interviewInsights';
 
 export function PlacementDashboard() {
   const [showModal, setShowModal] = useState(false);
-  const [placements] = useState([
-    { name: "Arjun Sharma", company: "Microsoft", package: "44.0", dept: "Computer Science", status: "Accepted", initial: "AS" },
-    { name: "Priya Das", company: "Goldman Sachs", package: "28.5", dept: "Electronics", status: "Accepted", initial: "PD" },
-    { name: "Rohan Kapoor", company: "Adobe", package: "32.0", dept: "Information Tech", status: "Pending Signature", initial: "RK" },
-  ]);
+  const [companies, setCompanies] = useState(() => getStoredCompanies());
+  const [students, setStudents] = useState(() => getStoredStudents());
+  const [jobs, setJobs] = useState(() => getStoredJobs());
+  const [announcements, setAnnouncements] = useState(() => getStoredAnnouncements());
+  const [applications, setApplications] = useState(() => {
+    const stored = localStorage.getItem('careerpilot_applications');
+    return stored ? JSON.parse(stored) : [];
+  });
+  const [showAnnouncementModal, setShowAnnouncementModal] = useState(false);
+  const [draft, setDraft] = useState({
+    companyName: '',
+    tier: 'Platinum',
+    visits: 1,
+    documents: '',
+  });
+  const [announcementDraft, setAnnouncementDraft] = useState({
+    title: '',
+    message: '',
+    audience: 'All Students',
+  });
 
-  const visits = [
-    { name: "TechNexus Solutions", date: "Oct 24, 2026", roles: "CS, IT, ECE", status: "Confirmed", logo: "https://ui-avatars.com/api/?name=TechNexus&background=random" },
-    { name: "FinBridge Global", date: "Oct 28, 2026", roles: "All Streams", status: "Interviewing", logo: "https://ui-avatars.com/api/?name=FinBridge&background=random" },
-  ];
+  useEffect(() => {
+    const syncCompanies = () => setCompanies(getStoredCompanies());
+    const syncStudents = () => setStudents(getStoredStudents());
+    const syncJobs = () => setJobs(getStoredJobs());
+    const syncAnnouncements = () => setAnnouncements(getStoredAnnouncements());
+    const syncApplications = () => {
+      const stored = localStorage.getItem('careerpilot_applications');
+      setApplications(stored ? JSON.parse(stored) : []);
+    };
 
-  // Company registration form states
-  const [companyName, setCompanyName] = useState('');
-  const [tier, setTier] = useState('Platinum');
-  const [hiring, setHiring] = useState(1);
-  const [visitsCount, setVisitsCount] = useState(1);
+    window.addEventListener('careerpilot:companies-updated', syncCompanies);
+    window.addEventListener('careerpilot:students-updated', syncStudents);
+    window.addEventListener('careerpilot:jobs-updated', syncJobs);
+    window.addEventListener('careerpilot:announcements-updated', syncAnnouncements);
+    window.addEventListener('storage', syncApplications);
+
+    return () => {
+      window.removeEventListener('careerpilot:companies-updated', syncCompanies);
+      window.removeEventListener('careerpilot:students-updated', syncStudents);
+      window.removeEventListener('careerpilot:jobs-updated', syncJobs);
+      window.removeEventListener('careerpilot:announcements-updated', syncAnnouncements);
+      window.removeEventListener('storage', syncApplications);
+    };
+  }, []);
+
+  const mergedStudents = useMemo(() => mergeStudentRecords(students, applications), [applications, students]);
+  const placementStats = useMemo(() => getPlacementStats(mergedStudents), [mergedStudents]);
+  const departmentBreakdown = useMemo(() => getDepartmentBreakdown(mergedStudents), [mergedStudents]);
+
+  const placements = useMemo(
+    () => mergedStudents.filter((student) => student.placement.startsWith('Placed')).slice(0, 6),
+    [mergedStudents]
+  );
+  const focusAreas = useMemo(() => {
+    const feedback = getInterviewFeedbackHistory();
+    const weakAreas = feedback.flatMap((entry) => entry.weakAreas || []);
+    const counts = weakAreas.reduce((acc, item) => {
+      acc[item] = (acc[item] || 0) + 1;
+      return acc;
+    }, {});
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3);
+  }, []);
+
+  const visits = useMemo(
+    () =>
+      companies
+        .filter((company) => company.status !== 'Rejected')
+        .map((company) => ({
+          name: company.name,
+          date: `${company.visits} campus visit${company.visits === 1 ? '' : 's'} planned`,
+          roles: jobs.filter((job) => job.company.toLowerCase() === company.name.toLowerCase()).map((job) => job.title).slice(0, 2).join(', ') || 'General intake',
+          status: company.status === 'Approved' ? 'Confirmed' : 'Pending',
+          logo: company.logo,
+        }))
+        .slice(0, 4),
+    [companies, jobs]
+  );
 
   const handleExportCSV = () => {
-    const headers = ['Student Name', 'Company', 'Package (LPA)', 'Department', 'Status'];
-    const rows = placements.map(p => [p.name, p.company, p.package, p.dept, p.status]);
-    const csvContent = "data:text/csv;charset=utf-8,"
-      + [headers.join(','), ...rows.map(e => e.map(val => `"${val}"`).join(","))].join("\n");
+    const headers = ['Student Name', 'Role', 'Branch', 'CGPA', 'Status'];
+    const rows = mergedStudents.map((student) => [student.name, student.role, student.branch, student.cgpa, student.placement]);
+    const csvContent = `data:text/csv;charset=utf-8,${[headers.join(','), ...rows.map((entry) => entry.map((value) => `"${value}"`).join(','))].join('\n')}`;
     const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", "careerpilot_placement_report.csv");
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', 'careerpilot_placement_report.csv');
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
-  const handleRegisterCompany = (e) => {
-    e.preventDefault();
-    if (!companyName) return;
+  const handleRegisterCompany = (event) => {
+    event.preventDefault();
+    if (!draft.companyName) return;
 
-    // Load existing corporate partners
-    const existing = JSON.parse(localStorage.getItem('careerpilot_companies') || '[]');
-    const newPartner = {
-      name: companyName,
-      tier,
-      hiring: Number(hiring),
-      visits: Number(visitsCount),
-      logo: `https://ui-avatars.com/api/?name=${encodeURIComponent(companyName)}&background=random`
-    };
+    const newPartner = normalizeCompany({
+      id: `${Date.now()}`,
+      name: draft.companyName,
+      tier: draft.tier,
+      visits: Number(draft.visits),
+      status: 'Pending',
+      documents: draft.documents || 'Awaiting verification documents',
+      note: 'Added from admin placement dashboard',
+    });
 
-    const updated = [newPartner, ...existing];
-    localStorage.setItem('careerpilot_companies', JSON.stringify(updated));
-
-    // Reset forms & close
-    setCompanyName('');
-    setTier('Platinum');
-    setHiring(1);
-    setVisitsCount(1);
+    setCompanies(saveStoredCompanies([newPartner, ...companies]));
+    setDraft({ companyName: '', tier: 'Platinum', visits: 1, documents: '' });
     setShowModal(false);
+  };
 
-    alert(`Successfully registered ${companyName}! You can view it under the Partner Companies tab.`);
+  const handleCreateAnnouncement = (event) => {
+    event.preventDefault();
+    if (!announcementDraft.title || !announcementDraft.message) return;
+
+    setAnnouncements(saveStoredAnnouncements([
+      {
+        id: `${Date.now()}`,
+        title: announcementDraft.title,
+        message: announcementDraft.message,
+        audience: announcementDraft.audience,
+        createdAt: new Date().toISOString(),
+      },
+      ...announcements,
+    ]));
+    setAnnouncementDraft({ title: '', message: '', audience: 'All Students' });
+    setShowAnnouncementModal(false);
   };
 
   return (
-    <div className="pt-24 px-8 pb-12 max-w-7xl mx-auto space-y-10">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-10 gap-4">
+    <div className="mx-auto max-w-7xl space-y-10 px-8 pb-12 pt-24">
+      <div className="mb-10 flex flex-col items-start justify-between gap-4 md:flex-row md:items-end">
         <div>
-          <h3 className="text-3xl font-extrabold font-headline text-on-surface tracking-tight mb-2">Performance Analytics</h3>
-          <p className="text-on-surface-variant opacity-80 font-medium">Overview for 2026-2026 Academic Year</p>
+          <h3 className="mb-2 text-3xl font-headline font-extrabold tracking-tight text-on-surface">Performance Analytics</h3>
+          <p className="font-medium text-on-surface-variant opacity-80">Live overview of students, recruiter approvals, and placement conversion.</p>
         </div>
         <div className="flex gap-4">
-          <button
-            onClick={handleExportCSV}
-            className="flex items-center gap-2 px-6 py-3 bg-surface-container-highest text-primary font-bold rounded-xl hover:bg-surface-container-high transition-colors text-xs"
-          >
+          <button onClick={handleExportCSV} className="flex items-center gap-2 rounded-xl bg-surface-container-highest px-6 py-3 text-xs font-bold text-primary transition-colors hover:bg-surface-container-high">
             <span className="material-symbols-outlined text-sm">ios_share</span>
             Export Placement Report
           </button>
-          <button
-            onClick={() => setShowModal(true)}
-            className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-primary to-primary-container text-white font-bold rounded-xl shadow-lg shadow-primary/20 hover:scale-[0.98] transition-transform text-xs"
-          >
+          <button onClick={() => setShowModal(true)} className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-primary to-primary-container px-6 py-3 text-xs font-bold text-white shadow-lg shadow-primary/20 transition-transform hover:scale-[0.98]">
             <span className="material-symbols-outlined text-sm">add</span>
             Register New Company
           </button>
         </div>
       </div>
 
-      <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <MetricCard label="Companies Registered" value="142" subtext="+12%" color="primary" icon="domain" />
-        <MetricCard label="Students Placed" value="842" subtext="Active" color="secondary" icon="person_check" />
-        <MetricCard label="Placement Percentage" value="85%" progress={85} color="tertiary" icon="analytics" />
-        <MetricCard label="Average Package" value="₹12.4 LPA" subtext="Top package: ₹44.0 LPA" color="primary" icon="payments" />
+      <section className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <MetricCard label="Companies Registered" value={companies.length.toString()} subtext={`${companies.filter((company) => company.status === 'Pending').length} pending approval`} color="primary" icon="domain" />
+        <MetricCard label="Students Placed" value={placementStats.placed.toString()} subtext={`${placementStats.inProcess} in-process`} color="secondary" icon="person_check" />
+        <MetricCard label="Placement Percentage" value={`${placementStats.placementRate}%`} progress={placementStats.placementRate} color="tertiary" icon="analytics" />
+        <MetricCard label="Average CGPA" value={placementStats.averageCgpa} subtext={`${jobs.filter((job) => ['Active', 'Closing Soon'].includes(job.status)).length} active jobs`} color="primary" icon="payments" />
       </section>
 
       <div className="grid grid-cols-12 gap-6">
-        <div className="col-span-12 lg:col-span-7 bg-surface-container-lowest p-8 rounded-xl border border-outline-variant/10">
-          <div className="flex justify-between items-center mb-8">
-            <h5 className="text-xl font-bold font-headline">Upcoming Company Visits</h5>
-            <button className="text-primary font-bold text-sm hover:underline">View Calendar</button>
+        <div className="col-span-12 rounded-xl border border-outline-variant/10 bg-surface-container-lowest p-8 lg:col-span-7">
+          <div className="mb-8 flex items-center justify-between">
+            <h5 className="text-xl font-headline font-bold">Upcoming Company Visits</h5>
+            <button className="text-sm font-bold text-primary hover:underline">View Calendar</button>
           </div>
           <div className="space-y-6">
-            {visits.map((visit, i) => (
-              <div key={i} className="flex items-center gap-6 group hover:translate-x-1 transition-transform">
-                <div className="h-14 w-14 rounded-xl bg-surface-container flex items-center justify-center p-2">
-                  <img src={visit.logo} className="w-full h-full object-contain" alt={visit.name} />
+            {visits.map((visit, index) => (
+              <div key={`${visit.name}-${index}`} className="group flex items-center gap-6 transition-transform hover:translate-x-1">
+                <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-surface-container p-2">
+                  <img src={visit.logo} className="h-full w-full object-contain" alt={visit.name} />
                 </div>
                 <div className="flex-1">
-                  <div className="flex justify-between items-start mb-1">
+                  <div className="mb-1 flex items-start justify-between">
                     <h6 className="font-bold text-on-surface">{visit.name}</h6>
-                    <span className={`text-xs font-bold py-1 px-3 rounded-full ${visit.status === 'Confirmed' ? 'bg-primary-container/10 text-primary' : 'bg-tertiary-container/10 text-tertiary'
-                      }`}>{visit.status}</span>
+                    <span className={`rounded-full px-3 py-1 text-xs font-bold ${visit.status === 'Confirmed' ? 'bg-primary-container/10 text-primary' : 'bg-tertiary-container/10 text-tertiary'}`}>{visit.status}</span>
                   </div>
                   <div className="flex gap-4 text-xs font-medium text-on-surface-variant">
                     <span className="flex items-center gap-1"><span className="material-symbols-outlined text-[16px]">calendar_today</span> {visit.date}</span>
                     <span className="flex items-center gap-1"><span className="material-symbols-outlined text-[16px]">school</span> {visit.roles}</span>
                   </div>
                 </div>
-                <button className="p-2 hover:bg-surface-container-low rounded-lg transition-colors">
+                <button className="rounded-lg p-2 transition-colors hover:bg-surface-container-low">
                   <span className="material-symbols-outlined text-on-surface-variant">chevron_right</span>
                 </button>
               </div>
@@ -125,111 +194,110 @@ export function PlacementDashboard() {
           </div>
         </div>
 
-        <div className="col-span-12 lg:col-span-5 bg-surface-container-lowest p-8 rounded-xl border border-outline-variant/10">
-          <div className="flex justify-between items-center mb-8">
-            <h5 className="text-xl font-bold font-headline">Placement Trends</h5>
-            <div className="flex gap-2">
-              <div className="flex items-center gap-1 text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">
-                <span className="h-2 w-2 rounded-full bg-primary"></span> 2026
-              </div>
-              <div className="flex items-center gap-1 text-[10px] font-bold text-on-surface-variant opacity-40 uppercase tracking-wider">
-                <span className="h-2 w-2 rounded-full bg-outline-variant"></span> 2025
-              </div>
-            </div>
+        <div className="col-span-12 rounded-xl border border-outline-variant/10 bg-surface-container-lowest p-8 lg:col-span-5">
+          <div className="mb-8 flex items-center justify-between">
+            <h5 className="text-xl font-headline font-bold">Branch Placement Health</h5>
+            <div className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">Live by registry</div>
           </div>
-          <div className="relative h-64 w-full px-2 mt-4">
-            <svg viewBox="0 -10 500 220" className="w-full h-full overflow-visible" preserveAspectRatio="none">
-              <defs>
-                <linearGradient id="gradient2026" x1="0%" y1="0%" x2="0%" y2="100%">
-                  <stop offset="0%" stopColor="currentColor" stopOpacity="0.3" className="text-primary" />
-                  <stop offset="100%" stopColor="currentColor" stopOpacity="0" className="text-primary" />
-                </linearGradient>
-              </defs>
-              
-              {/* Grid lines */}
-              {[0, 50, 100, 150, 200].map(y => (
-                <line key={y} x1="0" y1={y} x2="500" y2={y} stroke="currentColor" strokeWidth="1" className="text-outline-variant/20" strokeDasharray="4 4" />
-              ))}
-              
-              {/* 2025 Line */}
-              <path 
-                d="M 0 140 L 125 100 L 250 80 L 375 40 L 500 90" 
-                fill="none" 
-                stroke="currentColor" 
-                strokeWidth="3" 
-                className="text-slate-300 drop-shadow-sm" 
-              />
-              
-              {/* 2026 Area */}
-              <path 
-                d="M 0 120 L 125 70 L 250 30 L 375 0 L 500 60 L 500 200 L 0 200 Z" 
-                fill="url(#gradient2026)" 
-              />
-
-              {/* 2026 Line */}
-              <path 
-                d="M 0 120 L 125 70 L 250 30 L 375 0 L 500 60" 
-                fill="none" 
-                stroke="currentColor" 
-                strokeWidth="4" 
-                className="text-primary drop-shadow-md" 
-              />
-              
-              {/* Points for 2025 */}
-              {[
-                {x: 0, y: 140}, {x: 125, y: 100}, {x: 250, y: 80}, {x: 375, y: 40}, {x: 500, y: 90}
-              ].map((p, i) => (
-                <circle key={i} cx={p.x} cy={p.y} r="4" fill="currentColor" className="text-slate-300" />
-              ))}
-
-              {/* Points for 2026 */}
-              {[
-                {x: 0, y: 120}, {x: 125, y: 70}, {x: 250, y: 30}, {x: 375, y: 0}, {x: 500, y: 60}
-              ].map((p, i) => (
-                <circle key={i} cx={p.x} cy={p.y} r="6" fill="white" stroke="currentColor" strokeWidth="3" className="text-primary" />
-              ))}
-            </svg>
-          </div>
-          <div className="flex justify-between px-2 mt-4 text-[10px] font-bold text-on-surface-variant/60 uppercase tracking-tighter relative z-10">
-            {['Jul', 'Aug', 'Sep', 'Oct', 'Nov'].map(m => <span key={m}>{m}</span>)}
+          <div className="space-y-5">
+            {departmentBreakdown.slice(0, 5).map((dept) => (
+              <div key={dept.name}>
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-sm font-semibold text-slate-900">{dept.name}</span>
+                  <span className="text-xs font-semibold text-primary">{dept.rate}% placed</span>
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
+                  <div className="h-full rounded-full bg-primary" style={{ width: `${dept.rate}%` }}></div>
+                </div>
+                <p className="mt-2 text-xs text-slate-500">{dept.placed}/{dept.total} students placed · Avg CGPA {dept.avgCgpa}</p>
+              </div>
+            ))}
           </div>
         </div>
       </div>
 
-      <section className="bg-surface-container-lowest rounded-xl overflow-hidden mb-12 border border-outline-variant/10">
-        <div className="p-8 flex justify-between items-center">
-          <h5 className="text-xl font-bold font-headline">Recent Placements</h5>
-          <button className="p-2 rounded-lg hover:bg-surface-container transition-colors">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.15fr_0.85fr]">
+        <Card className="p-6">
+          <div className="mb-6 flex items-center justify-between">
+            <div>
+              <h4 className="text-lg font-headline font-semibold text-slate-900">Placement announcements</h4>
+              <p className="mt-1 text-sm text-slate-500">Push updates to students by audience and keep campus communication centralized.</p>
+            </div>
+            <button onClick={() => setShowAnnouncementModal(true)} className="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-on-primary transition-colors hover:bg-primary-hover">
+              New announcement
+            </button>
+          </div>
+          <div className="space-y-4">
+            {announcements.slice(0, 4).map((announcement) => (
+              <div key={announcement.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <h5 className="font-semibold text-slate-900">{announcement.title}</h5>
+                  <span className="rounded-full bg-primary-soft px-3 py-1 text-[11px] font-semibold text-primary">{announcement.audience}</span>
+                </div>
+                <p className="mt-2 text-sm leading-6 text-slate-600">{announcement.message}</p>
+                <p className="mt-3 text-xs text-slate-400">{new Date(announcement.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</p>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        <Card className="p-6">
+          <h4 className="text-lg font-headline font-semibold text-slate-900">Optimization insights</h4>
+          <p className="mt-1 text-sm text-slate-500">Spot the weak areas showing up most often in mock interviews and prep loops.</p>
+          <div className="mt-6 space-y-4">
+            {focusAreas.length === 0 ? (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+                Complete a few mock interviews to unlock branch and topic-level coaching insights.
+              </div>
+            ) : (
+              focusAreas.map(([topic, count]) => (
+                <div key={topic} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex items-center justify-between">
+                    <p className="font-semibold text-slate-900">{topic}</p>
+                    <span className="rounded-full bg-warning-soft px-3 py-1 text-[11px] font-semibold text-warning">{count} mentions</span>
+                  </div>
+                  <p className="mt-2 text-sm text-slate-500">Recommended next step: share prep material and nudge students to complete one focused mock round on this topic.</p>
+                </div>
+              ))
+            )}
+          </div>
+        </Card>
+      </div>
+
+      <section className="mb-12 overflow-hidden rounded-xl border border-outline-variant/10 bg-surface-container-lowest">
+        <div className="flex items-center justify-between p-8">
+          <h5 className="text-xl font-headline font-bold">Recent Placements</h5>
+          <button className="rounded-lg p-2 transition-colors hover:bg-surface-container">
             <span className="material-symbols-outlined text-on-surface-variant">filter_list</span>
           </button>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
-              <tr className="bg-surface-container-low text-on-surface-variant text-[12px] font-bold uppercase tracking-widest">
+              <tr className="bg-surface-container-low text-[12px] font-bold uppercase tracking-widest text-on-surface-variant">
                 <th className="px-8 py-4">Student Name</th>
-                <th className="px-8 py-4">Company</th>
-                <th className="px-8 py-4 text-right">Package (LPA)</th>
-                <th className="px-8 py-4">Department</th>
+                <th className="px-8 py-4">Role</th>
+                <th className="px-8 py-4">Branch</th>
+                <th className="px-8 py-4 text-right">CGPA</th>
                 <th className="px-8 py-4">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-surface-container-low">
-              {placements.map((p, i) => (
-                <tr key={i} className="hover:bg-surface-container-low/30 transition-colors">
+              {placements.map((student) => (
+                <tr key={student.id} className="transition-colors hover:bg-surface-container-low/30">
                   <td className="px-8 py-5">
                     <div className="flex items-center gap-3">
-                      <div className="h-8 w-8 rounded-full bg-surface-container text-xs font-bold flex items-center justify-center">{p.initial}</div>
-                      <span className="font-bold text-on-surface">{p.name}</span>
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-container text-xs font-bold">{student.initial}</div>
+                      <span className="font-bold text-on-surface">{student.name}</span>
                     </div>
                   </td>
-                  <td className="px-8 py-5"><span className="font-medium text-on-surface-variant">{p.company}</span></td>
-                  <td className="px-8 py-5 text-right font-bold text-primary">₹{p.package}</td>
-                  <td className="px-8 py-5 text-on-surface-variant text-sm">{p.dept}</td>
+                  <td className="px-8 py-5"><span className="font-medium text-on-surface-variant">{student.role}</span></td>
+                  <td className="px-8 py-5 text-sm text-on-surface-variant">{student.branch}</td>
+                  <td className="px-8 py-5 text-right font-bold text-primary">{student.cgpa}</td>
                   <td className="px-8 py-5">
                     <span className="flex items-center gap-2">
-                      <span className={`h-2 w-2 rounded-full ${p.status === 'Accepted' ? 'bg-primary' : 'bg-slate-400'}`}></span>
-                      <span className={`text-sm font-bold ${p.status === 'Accepted' ? 'text-primary' : 'text-slate-500'}`}>{p.status}</span>
+                      <span className="h-2 w-2 rounded-full bg-primary"></span>
+                      <span className="text-sm font-bold text-primary">{student.placement}</span>
                     </span>
                   </td>
                 </tr>
@@ -239,88 +307,53 @@ export function PlacementDashboard() {
         </div>
       </section>
 
-      {/* Register Company Modal */}
       <AnimatePresence>
         {showModal && (
-          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white w-full max-w-md rounded-[2.5rem] border border-slate-100 shadow-2xl p-8 space-y-6"
+              className="w-full max-w-md space-y-6 rounded-[2.5rem] border border-slate-100 bg-white p-8 shadow-2xl"
             >
-              <div className="flex justify-between items-center border-b border-slate-100 pb-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-4">
                 <h3 className="text-xl font-black text-slate-800">Register New Company</h3>
-                <button
-                  onClick={() => setShowModal(false)}
-                  className="p-1.5 hover:bg-slate-50 rounded-lg text-slate-400 hover:text-slate-600 transition-colors"
-                >
+                <button onClick={() => setShowModal(false)} className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-50 hover:text-slate-600">
                   <span className="material-symbols-outlined text-xl">close</span>
                 </button>
               </div>
 
               <form onSubmit={handleRegisterCompany} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">Company Name</label>
-                  <input
-                    type="text"
-                    value={companyName}
-                    onChange={(e) => setCompanyName(e.target.value)}
-                    required
-                    placeholder="e.g. Google India"
-                    className="w-full px-4 py-2.5 rounded-xl bg-surface-container-lowest border border-outline-variant/30 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all text-sm font-medium"
-                  />
+                  <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-700">Company Name</label>
+                  <input type="text" value={draft.companyName} onChange={(e) => setDraft((current) => ({ ...current, companyName: e.target.value }))} required placeholder="e.g. Google India" className="w-full rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-4 py-2.5 text-sm font-medium outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20" />
                 </div>
 
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="col-span-1">
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">Tier</label>
-                    <select
-                      value={tier}
-                      onChange={(e) => setTier(e.target.value)}
-                      className="w-full px-4 py-2.5 rounded-xl bg-surface-container-lowest border border-outline-variant/30 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all text-sm font-medium"
-                    >
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-700">Tier</label>
+                    <select value={draft.tier} onChange={(e) => setDraft((current) => ({ ...current, tier: e.target.value }))} className="w-full rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-4 py-2.5 text-sm font-medium outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20">
                       <option>Platinum</option>
                       <option>Gold</option>
                       <option>Silver</option>
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">Open Roles</label>
-                    <input
-                      type="number"
-                      value={hiring}
-                      onChange={(e) => setHiring(e.target.value)}
-                      required
-                      min="1"
-                      className="w-full px-4 py-2.5 rounded-xl bg-surface-container-lowest border border-outline-variant/30 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all text-sm font-medium"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">Visits</label>
-                    <input
-                      type="number"
-                      value={visitsCount}
-                      onChange={(e) => setVisitsCount(e.target.value)}
-                      required
-                      min="1"
-                      className="w-full px-4 py-2.5 rounded-xl bg-surface-container-lowest border border-outline-variant/30 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all text-sm font-medium"
-                    />
+                    <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-700">Visits</label>
+                    <input type="number" value={draft.visits} onChange={(e) => setDraft((current) => ({ ...current, visits: e.target.value }))} required min="1" className="w-full rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-4 py-2.5 text-sm font-medium outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20" />
                   </div>
                 </div>
 
-                <div className="pt-4 flex justify-end gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setShowModal(false)}
-                    className="px-5 py-2.5 bg-slate-50 text-slate-600 text-xs font-bold rounded-xl hover:bg-slate-100 transition-colors"
-                  >
+                <div>
+                  <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-700">Verification notes</label>
+                  <textarea value={draft.documents} onChange={(e) => setDraft((current) => ({ ...current, documents: e.target.value }))} rows="3" className="w-full resize-none rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-4 py-2.5 text-sm font-medium outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="GST, PAN, SPOC verification status..." />
+                </div>
+
+                <div className="flex justify-end gap-3 pt-4">
+                  <button type="button" onClick={() => setShowModal(false)} className="rounded-xl bg-slate-50 px-5 py-2.5 text-xs font-bold text-slate-600 transition-colors hover:bg-slate-100">
                     Cancel
                   </button>
-                  <button
-                    type="submit"
-                    className="px-5 py-2.5 bg-primary text-white text-xs font-bold rounded-xl shadow-lg shadow-primary/20 hover:scale-[1.01] active:scale-[0.99] transition-all"
-                  >
+                  <button type="submit" className="rounded-xl bg-primary px-5 py-2.5 text-xs font-bold text-white shadow-lg shadow-primary/20 transition-all hover:scale-[1.01] active:scale-[0.99]">
                     Register Company
                   </button>
                 </div>
@@ -329,12 +362,61 @@ export function PlacementDashboard() {
           </div>
         )}
       </AnimatePresence>
-      {/* Floating Action Button */}
+
+      <AnimatePresence>
+        {showAnnouncementModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="w-full max-w-lg space-y-6 rounded-3xl border border-slate-100 bg-white p-8 shadow-2xl"
+            >
+              <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+                <h3 className="text-xl font-black text-slate-800">Post Announcement</h3>
+                <button onClick={() => setShowAnnouncementModal(false)} className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-50 hover:text-slate-600">
+                  <span className="material-symbols-outlined text-xl">close</span>
+                </button>
+              </div>
+
+              <form onSubmit={handleCreateAnnouncement} className="space-y-4">
+                <div>
+                  <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-700">Title</label>
+                  <input type="text" value={announcementDraft.title} onChange={(e) => setAnnouncementDraft((current) => ({ ...current, title: e.target.value }))} required className="w-full rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-4 py-2.5 text-sm font-medium outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Drive update, prep week, deadline reminder..." />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-700">Audience</label>
+                  <select value={announcementDraft.audience} onChange={(e) => setAnnouncementDraft((current) => ({ ...current, audience: e.target.value }))} className="w-full rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-4 py-2.5 text-sm font-medium outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20">
+                    <option>All Students</option>
+                    <option>Computer Science</option>
+                    <option>Information Technology</option>
+                    <option>Electronics</option>
+                    <option>2026 Batch</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-700">Message</label>
+                  <textarea value={announcementDraft.message} onChange={(e) => setAnnouncementDraft((current) => ({ ...current, message: e.target.value }))} rows="5" required className="w-full resize-none rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-4 py-2.5 text-sm font-medium outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Share eligibility, deadlines, or prep instructions..." />
+                </div>
+                <div className="flex justify-end gap-3 pt-4">
+                  <button type="button" onClick={() => setShowAnnouncementModal(false)} className="rounded-xl bg-slate-50 px-5 py-2.5 text-xs font-bold text-slate-600 transition-colors hover:bg-slate-100">
+                    Cancel
+                  </button>
+                  <button type="submit" className="rounded-xl bg-primary px-5 py-2.5 text-xs font-bold text-white shadow-lg shadow-primary/20 transition-all hover:scale-[1.01] active:scale-[0.99]">
+                    Publish Announcement
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       <motion.button
         whileHover={{ scale: 1.1 }}
         whileTap={{ scale: 0.9 }}
         onClick={() => setShowModal(true)}
-        className="fixed bottom-8 right-8 w-14 h-14 rounded-full bg-gradient-to-br from-primary to-primary-container text-white shadow-2xl flex items-center justify-center hover:shadow-primary/30 transition-transform z-40"
+        className="fixed bottom-8 right-8 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-container text-white shadow-2xl transition-transform hover:shadow-primary/30"
       >
         <span className="material-symbols-outlined text-3xl">add</span>
       </motion.button>

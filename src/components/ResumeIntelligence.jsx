@@ -1,12 +1,147 @@
+import { useMemo, useState } from 'react';
 import { motion } from 'motion/react';
+import { getStudentProfile } from '../lib/studentProfile';
+import { analyzeResumeWithAI, isCareerAiAvailable } from '../lib/aiCareerTools';
 
 export function ResumeIntelligence() {
-  const missingKeywords = ["Python", "Agile", "System Design", "AWS", "CI/CD"];
-  const strengths = [
-    { title: "Clear Formatting", desc: "ATS parsers can read your structural hierarchy easily." },
-    { title: "Relevant Experience", desc: "Past 3 years of work align with the JD intent." },
-    { title: "Header Clarity", desc: "Contact info and title are properly indexed." },
-  ];
+  const studentProfile = getStudentProfile();
+  const aiAvailable = isCareerAiAvailable();
+  const defaultResumeText = useMemo(() => {
+    const sections = [
+      studentProfile.name,
+      studentProfile.email,
+      studentProfile.university,
+      studentProfile.degree || studentProfile.branch,
+      studentProfile.gpa ? `GPA: ${studentProfile.gpa}` : '',
+      studentProfile.skills.length ? `Skills: ${studentProfile.skills.join(', ')}` : '',
+      studentProfile.projects ? `Projects: ${studentProfile.projects}` : '',
+      studentProfile.experience ? `Experience: ${studentProfile.experience}` : '',
+      studentProfile.summary ? `Summary: ${studentProfile.summary}` : '',
+    ].filter(Boolean);
+
+    return sections.join('\n');
+  }, [studentProfile]);
+
+  const [jobDescription, setJobDescription] = useState('');
+  const [resumeText, setResumeText] = useState(defaultResumeText);
+  const [analysis, setAnalysis] = useState(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+  const extractKeywords = (text) => {
+    const cleaned = text.toLowerCase().replace(/[^a-z0-9+#./\s-]/g, ' ');
+    const tokens = cleaned
+      .split(/\s+/)
+      .map((token) => token.trim())
+      .filter((token) => token.length > 2);
+
+    const phrases = [];
+    for (let i = 0; i < tokens.length - 1; i += 1) {
+      phrases.push(`${tokens[i]} ${tokens[i + 1]}`);
+    }
+
+    return Array.from(new Set([...tokens, ...phrases]));
+  };
+
+  const buildFallbackAnalysis = () => {
+    const jdKeywords = extractKeywords(jobDescription);
+    const resumeKeywords = new Set(extractKeywords(resumeText));
+
+    const curatedKeywords = Array.from(new Set(
+      jdKeywords.filter((keyword) => (
+        /react|node|python|java|sql|aws|docker|kubernetes|system design|machine learning|data|analytics|api|testing|ci\/cd|agile|typescript|javascript|frontend|backend|cloud|git|leadership/.test(keyword)
+      ))
+    )).slice(0, 12);
+
+    const sourceKeywords = curatedKeywords.length > 0 ? curatedKeywords : jdKeywords.slice(0, 12);
+    const matchedKeywords = sourceKeywords.filter((keyword) => resumeKeywords.has(keyword));
+    const missingKeywords = sourceKeywords.filter((keyword) => !resumeKeywords.has(keyword));
+
+    const matchScore = sourceKeywords.length === 0
+      ? 50
+      : Math.round((matchedKeywords.length / sourceKeywords.length) * 100);
+
+    const structureSignals = [
+      /skills/i.test(resumeText),
+      /project/i.test(resumeText),
+      /experience/i.test(resumeText),
+      /education|university|college/i.test(resumeText),
+      /\d+%|\d+\+|\d+\s*(users|projects|features|internships|months|years)/i.test(resumeText),
+    ].filter(Boolean).length;
+
+    const atsScore = Math.max(35, Math.min(98, Math.round(matchScore * 0.65 + structureSignals * 7)));
+
+    const strengths = [
+      structureSignals >= 4 ? { title: 'Strong section coverage', desc: 'Your resume includes most of the sections ATS systems expect.' } : null,
+      matchedKeywords.length >= 4 ? { title: 'Relevant keyword alignment', desc: 'Your resume already reflects several terms from the target job description.' } : null,
+      /\d+%|\d+\+|\d+\s*(users|projects|features|internships|months|years)/i.test(resumeText) ? { title: 'Quantified evidence', desc: 'You are using measurable outcomes, which improves recruiter confidence.' } : null,
+    ].filter(Boolean);
+
+    const improvementTips = [
+      missingKeywords.length > 0 ? `Add these missing keywords naturally where truthful: ${missingKeywords.slice(0, 5).join(', ')}.` : 'Keyword alignment is already strong for this job description.',
+      !/experience/i.test(resumeText) ? 'Create a dedicated Experience section so ATS parsers can classify work history more reliably.' : 'Keep your Experience section focused on impact, ownership, and outcomes.',
+      !/project/i.test(resumeText) ? 'Add 1-2 relevant projects to show hands-on evidence for the target role.' : 'Tighten project bullets to highlight tools, scope, and measurable outcomes.',
+      !/\d+%|\d+\+|\d+\s*(users|projects|features|internships|months|years)/i.test(resumeText) ? 'Add numbers to your bullets: percentages, user counts, delivery time, or scale.' : 'You already use metrics well; keep them close to the strongest achievements.',
+      studentProfile.socials?.LinkedIn?.connected ? 'LinkedIn is connected, so keep job titles and dates consistent between resume and profile.' : 'Connect LinkedIn and mirror your headline with the resume for a cleaner recruiter experience.',
+    ];
+
+    const suggestedBullets = missingKeywords.slice(0, 2).map((keyword, index) => (
+      `Built ${index === 0 ? 'production-ready' : 'scalable'} features using ${keyword}, improving delivery speed and strengthening alignment with role expectations.`
+    ));
+
+    const nextAnalysis = {
+      atsScore,
+      matchScore,
+      missingKeywords,
+      strengths: strengths.length > 0 ? strengths : [
+        { title: 'Readable baseline', desc: 'Your resume has enough content to produce an ATS-style analysis.' },
+      ],
+      improvementTips,
+      suggestedBullets: suggestedBullets.length > 0 ? suggestedBullets : [
+        'Improved feature delivery by collaborating closely with cross-functional teams and documenting implementation decisions clearly.',
+      ],
+    };
+
+    return nextAnalysis;
+  };
+
+  const handleAnalyze = async () => {
+    setIsAnalyzing(true);
+
+    if (aiAvailable) {
+      try {
+        const aiAnalysis = await analyzeResumeWithAI({
+          jobDescription,
+          resumeText,
+          studentProfile,
+        });
+
+        const normalizedAnalysis = {
+          ...aiAnalysis,
+          strengths: aiAnalysis.strengths.length > 0 ? aiAnalysis.strengths : [
+            { title: 'Readable baseline', desc: 'Your resume has enough content to produce an ATS-style analysis.' },
+          ],
+          improvementTips: aiAnalysis.improvementTips.length > 0 ? aiAnalysis.improvementTips : [
+            'Tighten your strongest bullets around impact, ownership, and measurable outcomes.',
+          ],
+          suggestedBullets: aiAnalysis.suggestedBullets.length > 0 ? aiAnalysis.suggestedBullets : [
+            'Improved delivery quality by documenting implementation decisions clearly and collaborating closely with teammates.',
+          ],
+        };
+
+        localStorage.setItem('careerpilot_latest_resume_analysis', JSON.stringify(normalizedAnalysis));
+        setAnalysis(normalizedAnalysis);
+        setIsAnalyzing(false);
+        return;
+      } catch (error) {
+        console.error('Gemini ATS analysis error, using fallback:', error);
+      }
+    }
+
+    const fallbackAnalysis = buildFallbackAnalysis();
+    localStorage.setItem('careerpilot_latest_resume_analysis', JSON.stringify(fallbackAnalysis));
+    setAnalysis(fallbackAnalysis);
+    setIsAnalyzing(false);
+  };
 
   return (
     <div className="pt-24 px-8 pb-12 max-w-6xl mx-auto space-y-10">
@@ -15,6 +150,8 @@ export function ResumeIntelligence() {
           <label className="block text-sm font-medium text-slate-700 ml-1">Paste job description</label>
           <div className="relative">
             <textarea
+              value={jobDescription}
+              onChange={(e) => setJobDescription(e.target.value)}
               className="w-full h-64 p-6 rounded-xl border border-slate-200 bg-white text-slate-600 font-sans text-sm resize-none outline-none transition-colors focus:border-primary focus:ring-4 focus:ring-primary/10"
               placeholder="Enter the role requirements, responsibilities, and qualifications..."
             />
@@ -27,6 +164,8 @@ export function ResumeIntelligence() {
           <label className="block text-sm font-medium text-slate-700 ml-1">Paste resume text</label>
           <div className="relative">
             <textarea
+              value={resumeText}
+              onChange={(e) => setResumeText(e.target.value)}
               className="w-full h-64 p-6 rounded-xl border border-slate-200 bg-white text-slate-600 font-sans text-sm resize-none outline-none transition-colors focus:border-primary focus:ring-4 focus:ring-primary/10"
               placeholder="Paste your resume content or career history here..."
             />
@@ -36,8 +175,13 @@ export function ResumeIntelligence() {
           </div>
         </div>
         <div className="lg:col-span-2 flex justify-center pt-2">
-          <button className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-on-primary text-sm font-semibold rounded-xl transition-colors hover:bg-primary-hover focus:outline-none focus:ring-4 focus:ring-primary/10">
-            Analyze match
+          <button
+            onClick={handleAnalyze}
+            type="button"
+            disabled={isAnalyzing}
+            className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-on-primary text-sm font-semibold rounded-xl transition-colors hover:bg-primary-hover focus:outline-none focus:ring-4 focus:ring-primary/10"
+          >
+            {isAnalyzing ? 'Analyzing...' : 'Analyze match'}
             <span className="material-symbols-outlined text-base">bolt</span>
           </button>
         </div>
@@ -48,15 +192,28 @@ export function ResumeIntelligence() {
           <div className="relative w-44 h-44 flex items-center justify-center">
             <svg className="w-full h-full transform -rotate-90">
               <circle className="text-slate-100" cx="88" cy="88" fill="transparent" r="76" stroke="currentColor" strokeWidth="12"></circle>
-              <circle className="text-primary" cx="88" cy="88" fill="transparent" r="76" stroke="currentColor" strokeDasharray="477.5" strokeDashoffset="105" strokeWidth="12" strokeLinecap="round"></circle>
+              <circle
+                className="text-primary"
+                cx="88"
+                cy="88"
+                fill="transparent"
+                r="76"
+                stroke="currentColor"
+                strokeDasharray="477.5"
+                strokeDashoffset={477.5 - ((analysis?.atsScore ?? 0) / 100) * 477.5}
+                strokeWidth="12"
+                strokeLinecap="round"
+              ></circle>
             </svg>
             <div className="absolute flex flex-col items-center">
-              <span className="text-5xl font-headline font-bold text-slate-900 tracking-tight">78</span>
-              <span className="text-[11px] font-medium text-slate-400">Match score</span>
+              <span className="text-5xl font-headline font-bold text-slate-900 tracking-tight">{analysis?.atsScore ?? 0}</span>
+              <span className="text-[11px] font-medium text-slate-400">ATS score</span>
             </div>
           </div>
-          <h3 className="mt-6 text-lg font-semibold text-slate-900">Strong candidate</h3>
-          <p className="text-sm text-slate-500 mt-1">Your profile significantly aligns with the core requirements.</p>
+          <h3 className="mt-6 text-lg font-semibold text-slate-900">{analysis ? `${analysis.matchScore}% JD match` : 'Run analysis'}</h3>
+          <p className="text-sm text-slate-500 mt-1">
+            {analysis ? 'This score reflects AI-assisted ATS and recruiter-style review.' : 'Paste a job description and your resume to generate a real score.'}
+          </p>
         </div>
 
         <div className="rounded-xl border border-slate-200 bg-white p-8 elev-sm flex flex-col">
@@ -65,13 +222,14 @@ export function ResumeIntelligence() {
             <span className="material-symbols-outlined text-warning">warning</span>
           </div>
           <div className="flex flex-wrap gap-2">
-            {missingKeywords.map(kw => (
+            {(analysis?.missingKeywords || []).map(kw => (
               <span key={kw} className="inline-flex items-center gap-1 px-2.5 py-1 bg-warning-soft text-warning rounded-md text-xs font-semibold">
                 {kw} <span className="material-symbols-outlined text-[14px]">add</span>
               </span>
             ))}
           </div>
-          <p className="mt-auto pt-6 text-xs text-slate-400">Adding these naturally increases score by 15%</p>
+          {!analysis && <p className="mt-auto pt-6 text-xs text-slate-400">The analyzer will list job-specific missing keywords here.</p>}
+          {analysis && <p className="mt-auto pt-6 text-xs text-slate-400">Add only skills and terms you can genuinely support in interviews.</p>}
         </div>
 
         <div className="rounded-xl border border-slate-200 bg-white p-8 elev-sm flex flex-col">
@@ -80,7 +238,9 @@ export function ResumeIntelligence() {
             <span className="material-symbols-outlined text-primary">verified</span>
           </div>
           <ul className="space-y-4">
-            {strengths.map((s, i) => (
+            {(analysis?.strengths || [
+              { title: 'Waiting for analysis', desc: 'Once you run the ATS analyzer, we will surface strengths from your actual resume text.' },
+            ]).map((s, i) => (
               <li key={i} className="flex items-start gap-3">
                 <span className="material-symbols-outlined text-primary" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
                 <div>
@@ -102,11 +262,9 @@ export function ResumeIntelligence() {
             <h3 className="text-base font-semibold text-slate-900">Critical improvements</h3>
           </div>
           <div className="space-y-2">
-            {[
-              "Add quantitative metrics to your results",
-              "Expand on 'Agile' methodologies used",
-              "Simplify job title for better ATS mapping"
-            ].map((item, i) => (
+            {(analysis?.improvementTips || [
+              'Paste a real job description and resume to generate prioritized improvement tips.',
+            ]).map((item, i) => (
               <div key={i} className="p-4 bg-slate-50 rounded-lg flex justify-between items-center group hover:bg-slate-100 transition-colors cursor-pointer">
                 <span className="text-sm font-medium text-slate-700">{item}</span>
                 <span className="material-symbols-outlined text-slate-400 group-hover:text-primary transition-colors">chevron_right</span>
@@ -123,25 +281,23 @@ export function ResumeIntelligence() {
             <h3 className="text-base font-semibold text-slate-900">AI suggested bullets</h3>
           </div>
           <div className="space-y-4">
-            <div className="relative bg-slate-900 text-slate-100 p-6 rounded-xl font-mono text-xs leading-relaxed group">
-              <p>"Optimized system performance using <span className="text-primary-soft font-semibold">Python</span>-based automation scripts, resulting in a <span className="text-primary-soft font-semibold">25% reduction</span> in server latency."</p>
-              <button className="absolute top-4 right-4 p-2 bg-white/10 rounded-md hover:bg-white/20 transition-colors opacity-0 group-hover:opacity-100">
-                <span className="material-symbols-outlined text-xs">content_copy</span>
-              </button>
-            </div>
-            <div className="relative bg-slate-900 text-slate-100 p-6 rounded-xl font-mono text-xs leading-relaxed group">
-              <p>"Collaborated within an <span className="text-primary-soft font-semibold">Agile</span> environment to deliver 12+ product features in bi-weekly sprints, ensuring 100% on-time deployment."</p>
-              <button className="absolute top-4 right-4 p-2 bg-white/10 rounded-md hover:bg-white/20 transition-colors opacity-0 group-hover:opacity-100">
-                <span className="material-symbols-outlined text-xs">content_copy</span>
-              </button>
-            </div>
+            {(analysis?.suggestedBullets || [
+              'Your suggested rewrite bullets will appear here after analysis.',
+            ]).map((bullet, index) => (
+              <div key={index} className="relative bg-slate-900 text-slate-100 p-6 rounded-xl font-mono text-xs leading-relaxed group">
+                <p>"{bullet}"</p>
+                <button className="absolute top-4 right-4 p-2 bg-white/10 rounded-md hover:bg-white/20 transition-colors opacity-0 group-hover:opacity-100">
+                  <span className="material-symbols-outlined text-xs">content_copy</span>
+                </button>
+              </div>
+            ))}
           </div>
         </div>
       </section>
 
       <div className="fixed bottom-8 right-8 bg-white rounded-full py-2.5 px-5 elev-md flex items-center gap-2.5 border border-slate-200 z-50">
         <div className="w-2 h-2 bg-primary rounded-full animate-pulse"></div>
-        <span className="text-sm font-semibold text-primary">AI engine active</span>
+        <span className="text-sm font-semibold text-primary">{aiAvailable ? 'Gemini ATS active' : 'Fallback analyzer active'}</span>
       </div>
     </div>
   );

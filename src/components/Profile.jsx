@@ -1,33 +1,37 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Card } from './ui/Card';
+import { getStudentProfile, saveStudentProfile } from '../lib/studentProfile';
 
 const inputClass = "w-full px-4 py-2.5 rounded-lg bg-white border border-slate-200 focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-colors text-sm";
 
 export function Profile({ currentUser, setCurrentUser }) {
   const [profile, setProfile] = useState(() => {
-    const stored = localStorage.getItem('careerpilot_student_profile');
-    if (stored) return JSON.parse(stored);
+    const existingProfile = getStudentProfile(currentUser);
 
-    const defaultProfile = {
-      name: currentUser?.name || "Alex Rivera",
+    if (existingProfile.onboardingComplete) {
+      return existingProfile;
+    }
+
+    const seededProfile = saveStudentProfile({
+      ...existingProfile,
       role: "CS Senior Student",
-      email: currentUser?.email || "alex.r@stanford.edu",
       university: "Stanford University",
       location: "Palo Alto, CA",
       summary: "Passionate Computer Science student with a strong foundation in full-stack development and artificial intelligence. Experienced in building scalable web applications using React and Node.js. Actively seeking opportunities to contribute to innovative projects and grow as a software engineer. Currently focused on LLM integrations and distributed systems.",
       skills: ['React', 'TypeScript', 'Node.js', 'Python', 'AWS', 'Docker', 'System Design'],
       gpa: "3.92/4.00",
       coursework: "Algorithms, Operating Systems, Database Systems, Machine Learning",
-      graduation: "2026 - 2026",
+      graduation: "2026",
       socials: {
         LinkedIn: { connected: true, handle: "linkedin.com/in/alexrivera" },
         GitHub: { connected: true, handle: "github.com/alexrivera" },
         Portfolio: { connected: false, handle: "" }
-      }
-    };
-    localStorage.setItem('careerpilot_student_profile', JSON.stringify(defaultProfile));
-    return defaultProfile;
+      },
+      onboardingComplete: true,
+    }, currentUser);
+
+    return seededProfile;
   });
 
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -44,18 +48,19 @@ export function Profile({ currentUser, setCurrentUser }) {
   const [newSkillText, setNewSkillText] = useState('');
 
   const saveProfile = (updated) => {
-    setProfile(updated);
-    localStorage.setItem('careerpilot_student_profile', JSON.stringify(updated));
+    const normalized = saveStudentProfile(updated, currentUser);
+    setProfile(normalized);
 
-    if (currentUser && updated.name !== currentUser.name) {
-      const updatedUser = { ...currentUser, name: updated.name };
+    if (currentUser && (normalized.name !== currentUser.name || normalized.email !== currentUser.email)) {
+      const updatedUser = { ...currentUser, name: normalized.name, email: normalized.email };
       setCurrentUser(updatedUser);
       localStorage.setItem('careerpilot_current_user', JSON.stringify(updatedUser));
 
       const users = JSON.parse(localStorage.getItem('careerpilot_users') || '[]');
       const userIndex = users.findIndex(u => u.email.toLowerCase() === currentUser.email.toLowerCase());
       if (userIndex !== -1) {
-        users[userIndex].name = updated.name;
+        users[userIndex].name = normalized.name;
+        users[userIndex].email = normalized.email;
         localStorage.setItem('careerpilot_users', JSON.stringify(users));
       }
     }

@@ -1,572 +1,1138 @@
-import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { Card } from './MetricCard';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import { GoogleGenAI } from '@google/genai';
+import { Card } from './MetricCard';
+import {
+  getInterviewDashboardStats,
+  getInterviewFeedbackHistory,
+  saveInterviewFeedbackHistory,
+} from '../lib/interviewInsights';
+import { getPublishedJobs } from '../lib/recruiterData';
 
-// Initialize Gemini Client safely
-const apiKey = process.env.GEMINI_API_KEY || '';
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.GEMINI_API_KEY || '';
 const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
+const MAX_CONTEXT_ANSWERS = 3;
 
-const STATIC_FALLBACK_QUESTIONS = {
-  algorithms: [
-    { id: 1, type: 'text', question: "Explain the difference between a Hash Map and a Tree Map. What are their search time complexities?" },
-    { id: 2, type: 'code', question: "Write a function in JavaScript to check if a binary tree is a valid Binary Search Tree (BST).", template: "function isValidBST(root) {\n  // Write your code here\n  \n}" },
-    { id: 3, type: 'text', question: "How would you detect a cycle in a directed graph? Explain the algorithm briefly." }
-  ],
-  'system-design': [
-    { id: 1, type: 'text', question: "How would you design a URL shortening service like Bit.ly? Focus on database choice and hashing approach." },
-    { id: 2, type: 'text', question: "Explain how database sharding works. What are the main challenges when implementing it?" },
-    { id: 3, type: 'text', question: "Design a rate limiter for a public API. What algorithm and cache storage would you use?" }
-  ],
-  behave: [
-    { id: 1, type: 'text', question: "Tell me about a time you had a technical disagreement with a team member. How did you resolve it?" },
-    { id: 2, type: 'text', question: "Describe a project that failed or fell behind schedule. What did you learn from the experience?" },
-    { id: 3, type: 'text', question: "How do you handle prioritization when you have multiple urgent tasks with competing deadlines?" }
-  ],
-  frontend: [
-    { id: 1, type: 'text', question: "What is the Virtual DOM in React and how does the reconciliation process work?" },
-    { id: 2, type: 'code', question: "Implement a throttle function in JavaScript that limits a callback to executing once per delay interval.", template: "function throttle(func, limit) {\n  // Write your code here\n  \n}" },
-    { id: 3, type: 'text', question: "Explain the JavaScript Event Loop. How do microtasks (Promises) differ from macrotasks (setTimeout)?" }
-  ]
-};
+function cleanJsonString(str) {
+  return String(str || '').replace(/```json/i, '').replace(/```/g, '').trim();
+}
 
-export function MockInterviews() {
-  const [selectedTopic, setSelectedTopic] = useState(null);
-  const [loadingQuestions, setLoadingQuestions] = useState(false);
-  const [customQuestions, setCustomQuestions] = useState([]);
-  
-  const [activeSession, setActiveSession] = useState(null); // { topicId, currentQuestionIndex, answers: [], codeAnswers: [] }
-  const [evaluating, setEvaluating] = useState(false);
-  const [sessionCompleted, setSessionCompleted] = useState(null); // feedback details
-  const [textAnswer, setTextAnswer] = useState('');
-  const [codeAnswer, setCodeAnswer] = useState('');
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const [speechTimer, setSpeechTimer] = useState(0);
+function normalizeText(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim();
+}
 
-  const [feedbackHistory, setFeedbackHistory] = useState(() => {
-    const stored = localStorage.getItem('careerpilot_interview_feedback');
-    if (stored) return JSON.parse(stored);
-    
-    const defaults = [
-      { id: 'fb1', title: 'Data Structures & Algorithms', score: 85, date: 'Oct 28', summary: 'Good complexity analysis. Code structure was clear but can optimize the space complexity.' },
-      { id: 'fb2', title: 'Frontend Core (React/JS)', score: 92, date: 'Oct 22', summary: 'Excellent understanding of Virtual DOM and React reconciliation mechanics.' },
-      { id: 'fb3', title: 'Behavioral & Leadership', score: 78, date: 'Oct 15', summary: 'Detailed conflict resolution example. Make sure to structure responses using the STAR method.' }
-    ];
-    localStorage.setItem('careerpilot_interview_feedback', JSON.stringify(defaults));
-    return defaults;
+function slugify(value) {
+  return normalizeText(value).toLowerCase();
+}
+
+function sentenceList(values = []) {
+  return values.map((item) => `- ${item}`).join('\n');
+}
+
+function getSpeechRecognitionCtor() {
+  if (typeof window === 'undefined') return null;
+  return window.SpeechRecognition || window.webkitSpeechRecognition || null;
+}
+
+function getRoleTrack(job = {}) {
+  const raw = `${job.title || ''} ${job.tags?.join(' ') || ''} ${job.requirements?.join(' ') || ''}`.toLowerCase();
+  if (/frontend|react|ui|javascript|typescript/.test(raw)) return 'Frontend Engineer';
+  if (/data|machine learning|analytics|python|sql/.test(raw)) return 'Data Scientist';
+  if (/product|analyst|insight|metric/.test(raw)) return 'Product Analyst';
+  return 'Software Engineer';
+}
+
+function matchJobFromApplication(application, jobs) {
+  return jobs.find((job) => (
+    slugify(job.company) === slugify(application.company) &&
+    slugify(job.title) === slugify(application.role)
+  ));
+}
+
+function buildCandidateSummary(application = {}) {
+  const resume = application.resumeSnapshot || {};
+  const education = resume.education || {};
+  const skills = (resume.skills || application.studentSkills || []).filter(Boolean).slice(0, 8);
+
+  return {
+    name: application.studentName || resume.candidateName || 'Candidate',
+    targetRole: resume.targetRole || application.role || 'Target role',
+    targetCompany: resume.targetCompany || application.company || 'Company',
+    summary: resume.tailoredSummary || resume.summary || '',
+    skills,
+    projects: resume.projectBullets || [],
+    experience: resume.experienceBullets || [],
+    achievements: resume.achievements || [],
+    education: {
+      university: education.university || application.studentUniversity || '',
+      degree: education.degree || application.studentBranch || '',
+      graduation: education.graduation || '',
+      gpa: education.gpa || application.studentGpa || '',
+    },
+    matchScore: Number(application.matchScore || resume.matchScore || 0),
+    missingSkills: application.missingSkills || resume.missingSkills || [],
+  };
+}
+
+function buildInterviewTargets(applications = [], publishedJobs = []) {
+  const applicationTargets = applications.map((application) => {
+    const matchedJob = matchJobFromApplication(application, publishedJobs);
+    const fallbackJob = {
+      id: `app-job-${application.id}`,
+      company: application.company || 'Hiring Company',
+      title: application.role || 'Open Role',
+      location: application.location || 'Location not shared',
+      type: 'Applied role',
+      locationType: 'Interview prep',
+      experience: 'Entry Level',
+      requirements: application.resumeSnapshot?.jobKeywords || application.studentSkills || [],
+      tags: application.resumeSnapshot?.jobKeywords || [],
+      shortDescription: application.coverLetter || 'Prepare for the role you already applied to.',
+      description: [
+        application.coverLetter || 'Review your application story and connect it back to the role.',
+      ],
+      missingSkills: application.missingSkills || [],
+      logo: application.logo || '',
+    };
+
+    const job = matchedJob || fallbackJob;
+
+    return {
+      id: `application-${application.id}`,
+      type: 'application',
+      badge: application.status || 'Applied',
+      sourceLabel: 'Applied role',
+      roleTrack: getRoleTrack(job),
+      company: job.company,
+      title: job.title,
+      subtitle: `${job.location || 'Location not shared'} - ${job.type || 'Role'}`,
+      matchScore: Number(application.matchScore || job.match || 0),
+      job,
+      application,
+      candidate: buildCandidateSummary(application),
+    };
   });
 
-  const topics = [
-    { id: 'algorithms', title: 'Data Structures & Algorithms', icon: 'account_tree', sessions: 12, difficulty: 'Advanced' },
-    { id: 'system-design', title: 'System Design', icon: 'hub', sessions: 8, difficulty: 'Intermediate' },
-    { id: 'behave', title: 'Behavioral & Leadership', icon: 'psychology', sessions: 5, difficulty: 'Beginner' },
-    { id: 'frontend', title: 'Frontend Core (React/JS)', icon: 'terminal', sessions: 15, difficulty: 'Advanced' },
+  const existingJobKeys = new Set(applicationTargets.map((target) => `${slugify(target.company)}::${slugify(target.title)}`));
+
+  const practiceTargets = publishedJobs
+    .filter((job) => !existingJobKeys.has(`${slugify(job.company)}::${slugify(job.title)}`))
+    .slice(0, 6)
+    .map((job) => ({
+      id: `job-${job.id}`,
+      type: 'practice',
+      badge: job.status || 'Active',
+      sourceLabel: 'Practice job',
+      roleTrack: getRoleTrack(job),
+      company: job.company,
+      title: job.title,
+      subtitle: `${job.location} - ${job.type}`,
+      matchScore: Number(job.match || 0),
+      job,
+      application: null,
+      candidate: null,
+    }));
+
+  return [...applicationTargets, ...practiceTargets];
+}
+
+function buildJobContext(target) {
+  if (!target) return '';
+
+  const { job, candidate } = target;
+  const parts = [
+    `Company: ${job.company}`,
+    `Role: ${job.title}`,
+    `Location: ${job.location || 'Not shared'}`,
+    `Role type: ${job.type || 'Not shared'}`,
+    `Experience level: ${job.experience || 'Not shared'}`,
+    `Short description: ${job.shortDescription || 'Not shared'}`,
+    `Requirements:\n${sentenceList(job.requirements || []) || '- Not shared'}`,
+    `Responsibilities:\n${sentenceList(job.description || []) || '- Not shared'}`,
+    `Tags:\n${sentenceList(job.tags || []) || '- Not shared'}`,
   ];
 
-  // Speech simulator timer
-  useEffect(() => {
-    let interval;
-    if (isSpeaking) {
-      interval = setInterval(() => {
-        setSpeechTimer(prev => prev + 1);
-      }, 1000);
-    } else {
-      setSpeechTimer(0);
-    }
-    return () => clearInterval(interval);
-  }, [isSpeaking]);
+  if (candidate) {
+    parts.push(
+      `Candidate summary: ${candidate.summary || 'Not shared'}`,
+      `Candidate skills:\n${sentenceList(candidate.skills || []) || '- Not shared'}`,
+      `Candidate projects:\n${sentenceList(candidate.projects || []) || '- Not shared'}`,
+      `Candidate experience:\n${sentenceList(candidate.experience || []) || '- Not shared'}`,
+      `Potential skill gaps:\n${sentenceList(candidate.missingSkills || []) || '- None identified'}`
+    );
+  }
 
-  const cleanJsonString = (str) => {
-    return str.replace(/```json/i, '').replace(/```/g, '').trim();
+  return parts.join('\n\n');
+}
+
+function getFallbackOpeningQuestion(target) {
+  const job = target.job;
+  const requirement = job.requirements?.[0] || job.tags?.[0] || 'the core responsibilities of this role';
+  return `Thanks for joining. To start, tell me why you are interested in the ${job.title} role at ${job.company}, and how your background prepares you for ${requirement}.`;
+}
+
+function getFallbackFollowUpQuestion(target, history) {
+  const asked = history.map((entry) => entry.question.toLowerCase());
+  const pool = [
+    `Tell me about a project where you used ${target.job.requirements?.[0] || target.job.tags?.[0] || 'the key skills required for this role'} in a practical way.`,
+    `Which requirement in this job description feels strongest for you today, and what proof would you share with the hiring team?`,
+    `What part of this role at ${target.job.company} would stretch you the most, and how would you close that gap quickly?`,
+    `Imagine you join this team next month. What would your first 30 days look like?`,
+    `How would you explain one technical decision from a recent project to a non-technical stakeholder?`,
+    `Walk me through a challenge, trade-off, or failure from a project that is relevant to this job.`,
+  ];
+
+  return pool.find((question) => !asked.includes(question.toLowerCase())) || pool[pool.length - 1];
+}
+
+function buildFallbackFeedback({ target, answers }) {
+  const wordCounts = answers.map((answer) => normalizeText(answer).split(/\s+/).filter(Boolean).length);
+  const averageWords = wordCounts.length
+    ? Math.round(wordCounts.reduce((sum, count) => sum + count, 0) / wordCounts.length)
+    : 0;
+  const coverage = Math.min(15, answers.filter(Boolean).length * 3);
+  const score = Math.max(58, Math.min(96, 62 + coverage + Math.round(averageWords / 8)));
+
+  return {
+    id: Date.now().toString(),
+    title: `${target.company} - ${target.title}`,
+    topicId: target.job.id || 'job-interview',
+    roleTrack: target.roleTrack,
+    score,
+    date: new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit' }),
+    summary: `You completed a live job-based mock interview for ${target.title} at ${target.company}. Your next gains will come from sharper examples, stronger metrics, and tighter alignment to the job description.`,
+    strengths: [
+      averageWords >= 45 ? 'You gave detailed answers with enough context to sound interview-ready.' : 'You stayed concise and easy to follow.',
+      'You completed a realistic spoken interview flow with role-specific prompts.',
+      target.candidate?.matchScore ? `Your answers can build on an existing ${target.candidate.matchScore}% resume match.` : 'You have a strong base to tailor answers more tightly to the role.',
+    ].filter(Boolean).slice(0, 3),
+    weakAreas: [
+      averageWords < 30 ? 'Add more depth, examples, and outcomes to each answer.' : 'Add clearer metrics, business impact, and trade-offs to each answer.',
+      target.job.missingSkills?.[0] ? `Prepare a stronger story for ${target.job.missingSkills[0]} or explain your learning plan.` : 'Tie each answer back to the company and role more explicitly.',
+      'Use a consistent answer structure like situation, action, result, and reflection.',
+    ].slice(0, 3),
+    questionCount: answers.length,
   };
+}
 
-  const handleStartRandom = () => {
-    const randomTopic = topics[Math.floor(Math.random() * topics.length)].id;
-    setSelectedTopic(randomTopic);
-  };
+async function generateOpeningQuestion(target) {
+  if (!ai) return getFallbackOpeningQuestion(target);
 
-  const handleInitializeSession = async (topicId) => {
-    const topicObj = topics.find(t => t.id === topicId);
-    setLoadingQuestions(true);
-    setSessionCompleted(null);
-    setCustomQuestions([]);
-    
-    if (ai) {
-      try {
-        const prompt = `Generate 3 distinct, high-quality interview questions for a candidate interviewing for a ${topicObj.title} position. 
-        Format the output strictly as a JSON array of objects, with no extra markdown backticks or formatting.
-        Each object in the array must contain:
-        - "id" (number, starting from 1)
-        - "type" (string, either "text" or "code")
-        - "question" (string, the question text)
-        - "template" (string, only if type is "code" containing standard starting JS function code, otherwise empty string)
-        
-        Example JSON:
-        [{"id": 1, "type": "text", "question": "What is...", "template": ""}]`;
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: `You are conducting a live mock interview.
 
-        const response = await ai.models.generateContent({
-          model: 'gemini-2.5-flash',
-          contents: prompt,
-        });
+Use the full role context below to ask exactly one opening interview question.
+- The question must sound like a real interviewer speaking live.
+- It must be specific to the company, role, and job description.
+- It should invite the candidate to answer verbally in 60-120 seconds.
+- Do not ask multiple questions at once.
+- Return ONLY the question as plain text.
 
-        const rawText = response.text || '';
-        const cleanedJson = cleanJsonString(rawText);
-        const parsed = JSON.parse(cleanedJson);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setCustomQuestions(parsed);
-          startSession(topicId, parsed);
-          setLoadingQuestions(false);
-          return;
-        }
-      } catch (err) {
-        console.error("Gemini question generation error, falling back to static questions:", err);
-      }
-    }
-    
-    // Fallback if API key missing or request fails
-    const fallback = STATIC_FALLBACK_QUESTIONS[topicId];
-    setCustomQuestions(fallback);
-    startSession(topicId, fallback);
-    setLoadingQuestions(false);
-  };
-
-  const startSession = (topicId, questionsList) => {
-    setActiveSession({
-      topicId,
-      currentQuestionIndex: 0,
-      answers: [],
-      codeAnswers: []
+${buildJobContext(target)}`,
     });
-    setTextAnswer('');
-    const firstQ = questionsList[0];
-    setCodeAnswer(firstQ.type === 'code' ? firstQ.template : '');
-  };
 
-  const handleSimulateSpeech = async () => {
-    setIsSpeaking(true);
-    
-    // If AI is available, generate a highly contextual spoken answer simulation, else fallback static answer
-    if (ai && activeQuestion) {
-      try {
-        const prompt = `Write a short, professional spoken-style answer (2-3 sentences) responding to the interview question: "${activeQuestion.question}". 
-        Make it sound like a candidate answering out loud. Do not include quotes or intro text.`;
-        const response = await ai.models.generateContent({
-          model: 'gemini-2.5-flash',
-          contents: prompt
-        });
-        setIsSpeaking(false);
-        setTextAnswer(prev => prev + (prev ? " " : "") + (response.text || '').trim());
-        return;
-      } catch (err) {
-        console.error(err);
-      }
+    return normalizeText(response.text) || getFallbackOpeningQuestion(target);
+  } catch (error) {
+    console.error('Opening question generation error:', error);
+    return getFallbackOpeningQuestion(target);
+  }
+}
+
+async function generateFollowUpQuestion(target, qaHistory) {
+  if (!ai) return getFallbackFollowUpQuestion(target, qaHistory);
+
+  const recentHistory = qaHistory.slice(-MAX_CONTEXT_ANSWERS).map((entry, index) => (
+    `Round ${index + 1}\nQuestion: ${entry.question}\nAnswer: ${entry.answer || ''}`
+  )).join('\n\n');
+
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: `You are conducting a live mock interview and need the next follow-up question.
+
+Rules:
+- Ask exactly one question.
+- The question must adapt to the candidate's last answer.
+- Keep it relevant to the job description and the candidate's background.
+- Vary across motivation, technical depth, project evidence, communication, trade-offs, and behavioral judgment.
+- Avoid repeating earlier questions.
+- Return ONLY the next question as plain text.
+
+Role context:
+${buildJobContext(target)}
+
+Conversation so far:
+${recentHistory}`,
+    });
+
+    return normalizeText(response.text) || getFallbackFollowUpQuestion(target, qaHistory);
+  } catch (error) {
+    console.error('Follow-up question generation error:', error);
+    return getFallbackFollowUpQuestion(target, qaHistory);
+  }
+}
+
+async function evaluateInterview(target, qaHistory) {
+  const answers = qaHistory.map((entry) => entry.answer || '');
+  if (!ai) return buildFallbackFeedback({ target, answers });
+
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: `You are evaluating a completed mock interview.
+
+Assess the candidate on:
+- communication and clarity
+- job-specific relevance
+- technical or functional depth
+- confidence and structure
+- awareness of trade-offs and impact
+
+Role context:
+${buildJobContext(target)}
+
+Interview transcript:
+${qaHistory.map((entry, index) => `Question ${index + 1}: ${entry.question}\nAnswer ${index + 1}: ${entry.answer || ''}`).join('\n\n')}
+
+Return ONLY JSON:
+{
+  "score": 84,
+  "summary": "2-3 sentence summary",
+  "strengths": ["strength 1", "strength 2", "strength 3"],
+  "weakAreas": ["weak area 1", "weak area 2", "weak area 3"]
+}`,
+    });
+
+    const parsed = JSON.parse(cleanJsonString(response.text || '{}'));
+    if (typeof parsed.score === 'number' && parsed.summary) {
+      return {
+        id: Date.now().toString(),
+        title: `${target.company} - ${target.title}`,
+        topicId: target.job.id || 'job-interview',
+        roleTrack: target.roleTrack,
+        score: Math.max(0, Math.min(100, Math.round(parsed.score))),
+        date: new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit' }),
+        summary: normalizeText(parsed.summary),
+        strengths: Array.isArray(parsed.strengths) ? parsed.strengths.map(normalizeText).filter(Boolean).slice(0, 3) : [],
+        weakAreas: Array.isArray(parsed.weakAreas) ? parsed.weakAreas.map(normalizeText).filter(Boolean).slice(0, 3) : [],
+        questionCount: qaHistory.length,
+      };
     }
+  } catch (error) {
+    console.error('Interview evaluation error:', error);
+  }
 
-    setTimeout(() => {
-      setIsSpeaking(false);
-      setTextAnswer(prev => prev + (prev ? " " : "") + "To answer this, I would consider using an optimized approach where we maintain a state variable or use binary search strategies to minimize lookup overhead.");
-    }, 3000);
-  };
+  return buildFallbackFeedback({ target, answers });
+}
 
-  const handleSubmitAnswer = async () => {
-    const questions = customQuestions.length > 0 ? customQuestions : STATIC_FALLBACK_QUESTIONS[activeSession.topicId];
-    const currentQ = questions[activeSession.currentQuestionIndex];
+export function MockInterviews({ applications = [] }) {
+  const videoRef = useRef(null);
+  const recognitionRef = useRef(null);
+  const shouldKeepListeningRef = useRef(false);
+  const manualStopRef = useRef(false);
+  const restartListeningTimeoutRef = useRef(null);
+  const mediaStreamRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const recordedChunksRef = useRef([]);
 
-    const updatedAnswers = [...activeSession.answers, textAnswer];
-    const updatedCodeAnswers = [...activeSession.codeAnswers, currentQ.type === 'code' ? codeAnswer : ''];
+  const [selectedTargetId, setSelectedTargetId] = useState('');
+  const [questionCount, setQuestionCount] = useState(4);
+  const [preparingSession, setPreparingSession] = useState(false);
+  const [loadingNextQuestion, setLoadingNextQuestion] = useState(false);
+  const [evaluating, setEvaluating] = useState(false);
+  const [activeSession, setActiveSession] = useState(null);
+  const [sessionCompleted, setSessionCompleted] = useState(null);
+  const [feedbackHistory, setFeedbackHistory] = useState(() => getInterviewFeedbackHistory());
 
-    const nextIndex = activeSession.currentQuestionIndex + 1;
+  const [mediaEnabled, setMediaEnabled] = useState(false);
+  const [recordingActive, setRecordingActive] = useState(false);
+  const [recordingUrl, setRecordingUrl] = useState('');
+  const [permissionError, setPermissionError] = useState('');
+  const [isAiSpeaking, setIsAiSpeaking] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [answerDraft, setAnswerDraft] = useState('');
+  const [answerSeconds, setAnswerSeconds] = useState(0);
+  const [interimTranscript, setInterimTranscript] = useState('');
 
-    if (nextIndex < questions.length) {
-      setActiveSession({
-        ...activeSession,
-        currentQuestionIndex: nextIndex,
-        answers: updatedAnswers,
-        codeAnswers: updatedCodeAnswers
-      });
-      setTextAnswer('');
-      const nextQ = questions[nextIndex];
-      setCodeAnswer(nextQ.type === 'code' ? nextQ.template : '');
+  const publishedJobs = useMemo(() => getPublishedJobs(), []);
+  const interviewTargets = useMemo(
+    () => buildInterviewTargets(applications, publishedJobs),
+    [applications, publishedJobs]
+  );
+  const selectedTarget = useMemo(
+    () => interviewTargets.find((target) => target.id === selectedTargetId) || interviewTargets[0] || null,
+    [interviewTargets, selectedTargetId]
+  );
+  const dashboardStats = useMemo(() => getInterviewDashboardStats(feedbackHistory), [feedbackHistory]);
+  const recognitionSupported = typeof window !== 'undefined' && Boolean(getSpeechRecognitionCtor());
+  const activeQuestion = activeSession?.questions?.[activeSession.currentQuestionIndex] || '';
+
+  useEffect(() => {
+    if (!selectedTargetId && interviewTargets[0]) {
+      setSelectedTargetId(interviewTargets[0].id);
+    }
+  }, [interviewTargets, selectedTargetId]);
+
+  useEffect(() => {
+    if (videoRef.current && mediaStreamRef.current) {
+      videoRef.current.srcObject = mediaStreamRef.current;
+    }
+  }, [mediaEnabled, activeSession]);
+
+  useEffect(() => {
+    let timer;
+    if (isListening) {
+      timer = window.setInterval(() => setAnswerSeconds((prev) => prev + 1), 1000);
     } else {
-      // Complete Session & Perform Real AI Evaluation
-      setEvaluating(true);
-      const topicObj = topics.find(t => t.id === activeSession.topicId);
-      
-      let finalFeedback = null;
+      setAnswerSeconds(0);
+    }
+    return () => {
+      if (timer) window.clearInterval(timer);
+    };
+  }, [isListening]);
 
-      if (ai) {
-        try {
-          const evalPrompt = `You are a professional technical recruiter conducting a mock interview for the topic: "${topicObj.title}".
-          Below are the questions asked, and the answers/code provided by the candidate:
-          
-          ${questions.map((q, idx) => `
-            Question ${idx + 1}: ${q.question}
-            Candidate Answer: ${updatedAnswers[idx]}
-            ${q.type === 'code' ? `Candidate Code:\n${updatedCodeAnswers[idx]}` : ''}
-          `).join('\n')}
-          
-          Evaluate the responses constructively. Keep it professional. Provide a performance score (0 to 100) and a brief feedback summary (2-3 sentences).
-          Return ONLY a JSON object with this format:
-          {
-            "score": 85,
-            "summary": "Your explanation of... was..."
-          }
-          Return no markdown syntax or code wraps, just raw JSON.`;
+  useEffect(() => {
+    if (!activeQuestion || !activeSession) return;
+    speakQuestion(activeQuestion);
+  }, [activeQuestion, activeSession?.currentQuestionIndex]);
 
-          const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: evalPrompt
+  useEffect(() => () => {
+    stopListening();
+    stopMedia();
+    window.speechSynthesis?.cancel();
+    if (restartListeningTimeoutRef.current) {
+      window.clearTimeout(restartListeningTimeoutRef.current);
+    }
+  }, []);
+
+  function stopMedia() {
+    stopRecording();
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
+    }
+    setMediaEnabled(false);
+  }
+
+  function startRecording(stream) {
+    if (typeof MediaRecorder === 'undefined') return;
+    if (mediaRecorderRef.current?.state === 'recording') return;
+
+    try {
+      recordedChunksRef.current = [];
+      const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+      recorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          recordedChunksRef.current.push(event.data);
+        }
+      };
+      recorder.onstart = () => setRecordingActive(true);
+      recorder.onstop = () => {
+        setRecordingActive(false);
+        if (recordedChunksRef.current.length > 0) {
+          const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
+          const nextUrl = URL.createObjectURL(blob);
+          setRecordingUrl((previous) => {
+            if (previous) URL.revokeObjectURL(previous);
+            return nextUrl;
           });
+        }
+      };
+      recorder.start();
+      mediaRecorderRef.current = recorder;
+    } catch (error) {
+      console.error('Media recording error:', error);
+      setRecordingActive(false);
+    }
+  }
 
-          const rawText = response.text || '';
-          const cleanedJson = cleanJsonString(rawText);
-          const parsed = JSON.parse(cleanedJson);
-          if (parsed && typeof parsed.score === 'number' && parsed.summary) {
-            finalFeedback = {
-              id: Date.now().toString(),
-              title: topicObj.title,
-              score: parsed.score,
-              date: new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit' }),
-              summary: parsed.summary
-            };
-          }
-        } catch (err) {
-          console.error("Gemini evaluation error, using fallback scorecard:", err);
+  function stopRecording() {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+    mediaRecorderRef.current = null;
+  }
+
+  async function requestMediaAccess() {
+    setPermissionError('');
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      mediaStreamRef.current = stream;
+      setMediaEnabled(true);
+      return true;
+    } catch (error) {
+      console.error('Media permission error:', error);
+      setPermissionError('Camera and microphone access are required for the live mock interview experience.');
+      return false;
+    }
+  }
+
+  function speakQuestion(question) {
+    if (!question || !window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(question);
+    utterance.rate = 1;
+    utterance.pitch = 1;
+    utterance.onstart = () => setIsAiSpeaking(true);
+    utterance.onend = () => setIsAiSpeaking(false);
+    utterance.onerror = () => setIsAiSpeaking(false);
+    window.speechSynthesis.speak(utterance);
+  }
+
+  function startListening() {
+    if (!recognitionSupported || isListening) return;
+
+    const RecognitionCtor = getSpeechRecognitionCtor();
+    const recognition = new RecognitionCtor();
+    manualStopRef.current = false;
+    shouldKeepListeningRef.current = true;
+    setPermissionError('');
+    recognition.lang = 'en-US';
+    recognition.continuous = true;
+    recognition.interimResults = true;
+
+    recognition.onstart = () => {
+      setIsListening(true);
+      setInterimTranscript('');
+    };
+
+    recognition.onresult = (event) => {
+      let finalText = '';
+      let interimText = '';
+
+      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+        const transcript = event.results[index][0].transcript;
+        if (event.results[index].isFinal) {
+          finalText += `${transcript} `;
+        } else {
+          interimText += transcript;
         }
       }
 
-      if (!finalFeedback) {
-        // Fallback simulated feedback
-        const randomScore = Math.floor(Math.random() * 15) + 80;
-        finalFeedback = {
-          id: Date.now().toString(),
-          title: topicObj.title,
-          score: randomScore,
-          date: new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit' }),
-          summary: `Mock Session Evaluated. Demonstrated decent theoretical understanding, score: ${randomScore}%. Recommendation: Review standard practice problems.`
-        };
+      if (finalText) {
+        setAnswerDraft((prev) => `${prev} ${finalText}`.trim());
       }
+      setInterimTranscript(interimText.trim());
+    };
 
-      const updatedHistory = [finalFeedback, ...feedbackHistory];
-      setFeedbackHistory(updatedHistory);
-      localStorage.setItem('careerpilot_interview_feedback', JSON.stringify(updatedHistory));
+    recognition.onerror = (event) => {
+      console.error('Speech recognition error:', event.error);
+      setIsListening(false);
+      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+        shouldKeepListeningRef.current = false;
+        setPermissionError('Microphone transcription permission was blocked by the browser. Please allow mic access and try again.');
+      } else if (event.error === 'audio-capture') {
+        shouldKeepListeningRef.current = false;
+        setPermissionError('No microphone input was detected. Please check your mic and browser device settings.');
+      } else if (event.error === 'no-speech') {
+        setPermissionError('No speech was detected yet. Keep the mic open and start speaking clearly.');
+      }
+    };
 
+    recognition.onend = () => {
+      setIsListening(false);
+      recognitionRef.current = null;
+      const shouldRestart = shouldKeepListeningRef.current && !manualStopRef.current;
+      if (shouldRestart) {
+        restartListeningTimeoutRef.current = window.setTimeout(() => {
+          if (shouldKeepListeningRef.current && !recognitionRef.current) {
+            startListening();
+          }
+        }, 200);
+        return;
+      }
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
+  }
+
+  function stopListening() {
+    shouldKeepListeningRef.current = false;
+    manualStopRef.current = true;
+    if (restartListeningTimeoutRef.current) {
+      window.clearTimeout(restartListeningTimeoutRef.current);
+      restartListeningTimeoutRef.current = null;
+    }
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+      recognitionRef.current = null;
+    }
+    setIsListening(false);
+  }
+
+  async function handleInitializeSession() {
+    if (!selectedTarget) return;
+
+    const accessGranted = mediaEnabled || await requestMediaAccess();
+    if (!accessGranted) return;
+
+    setPreparingSession(true);
+    setSessionCompleted(null);
+    setAnswerDraft('');
+    setInterimTranscript('');
+    setPermissionError('');
+    if (recordingUrl) {
+      URL.revokeObjectURL(recordingUrl);
+      setRecordingUrl('');
+    }
+
+    const openingQuestion = await generateOpeningQuestion(selectedTarget);
+    if (mediaStreamRef.current) {
+      startRecording(mediaStreamRef.current);
+    }
+
+    setActiveSession({
+      target: selectedTarget,
+      currentQuestionIndex: 0,
+      questionCount,
+      questions: [openingQuestion],
+      qaHistory: [],
+      startedAt: new Date().toISOString(),
+    });
+    setPreparingSession(false);
+  }
+
+  async function handleSubmitAnswer() {
+    if (!activeSession) return;
+
+    stopListening();
+    const normalizedAnswer = normalizeText(`${answerDraft} ${interimTranscript}`);
+    if (!normalizedAnswer) return;
+
+    const currentQuestion = activeSession.questions[activeSession.currentQuestionIndex];
+    const nextQaHistory = [
+      ...activeSession.qaHistory,
+      {
+        question: currentQuestion,
+        answer: normalizedAnswer,
+      },
+    ];
+
+    const answeredCount = nextQaHistory.length;
+    if (answeredCount >= activeSession.questionCount) {
+      setEvaluating(true);
+      const finalFeedback = await evaluateInterview(activeSession.target, nextQaHistory);
+      const persistedHistory = saveInterviewFeedbackHistory([finalFeedback, ...feedbackHistory]);
+      setFeedbackHistory(persistedHistory);
       setSessionCompleted(finalFeedback);
       setEvaluating(false);
       setActiveSession(null);
+      setAnswerDraft('');
+      setInterimTranscript('');
+      stopRecording();
+      return;
     }
-  };
 
-  const currentQuestions = customQuestions.length > 0 ? customQuestions : (selectedTopic ? STATIC_FALLBACK_QUESTIONS[selectedTopic] : []);
-  const activeQuestion = activeSession ? currentQuestions[activeSession.currentQuestionIndex] : null;
+    setLoadingNextQuestion(true);
+    const nextQuestion = await generateFollowUpQuestion(activeSession.target, nextQaHistory);
+    setActiveSession({
+      ...activeSession,
+      currentQuestionIndex: activeSession.currentQuestionIndex + 1,
+      questions: [...activeSession.questions, nextQuestion],
+      qaHistory: nextQaHistory,
+    });
+    setAnswerDraft('');
+    setInterimTranscript('');
+    setLoadingNextQuestion(false);
+  }
+
+  function quitSession() {
+    stopListening();
+    window.speechSynthesis?.cancel();
+    setActiveSession(null);
+    setAnswerDraft('');
+    setInterimTranscript('');
+    setPreparingSession(false);
+    setLoadingNextQuestion(false);
+    stopRecording();
+  }
 
   return (
-    <div className="pt-24 px-8 pb-12 max-w-6xl mx-auto space-y-10">
-      <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-12">
+    <div className="mx-auto max-w-6xl space-y-10 px-8 pb-12 pt-24">
+      <header className="mb-12 flex flex-col items-start justify-between gap-6 md:flex-row md:items-end">
         <div>
-          <div className="flex items-center gap-2 mb-2 p-1 px-3 bg-primary/10 rounded-full w-fit">
-            <span className="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
-            <span className="text-[10px] font-black text-primary uppercase tracking-widest">
-              {ai ? 'Gemini AI Engine Active' : 'AI Agent Ready'}
+          <div className="mb-2 flex w-fit items-center gap-2 rounded-full bg-primary/10 px-3 py-1">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-primary"></span>
+            <span className="text-[10px] font-black uppercase tracking-widest text-primary">
+              {ai ? 'JD-Aware AI Interviewer' : 'Live Browser Interview Mode'}
             </span>
           </div>
-          <h2 className="text-4xl font-black text-on-surface tracking-tighter">Mock Interview Hub</h2>
-          <p className="text-slate-500 mt-2 text-lg font-medium">Practice with our AI interviewer and get real-time feedback on your performance.</p>
+          <h2 className="text-4xl font-black tracking-tighter text-on-surface">AI Mock Interview</h2>
+          <p className="mt-2 max-w-3xl text-lg font-medium text-slate-500">
+            Pick a real job, turn on your camera and mic, and practice a live interview that adapts to the role,
+            the company, and your answers.
+          </p>
         </div>
-        {!activeSession && !loadingQuestions && !evaluating && (
-          <button 
-            onClick={handleStartRandom}
-            className="px-8 py-4 bg-gradient-to-br from-slate-900 to-black text-white rounded-2xl font-bold flex items-center gap-3 shadow-2xl hover:scale-[1.03] transition-all text-sm uppercase tracking-wider"
-          >
-            <span className="material-symbols-outlined">auto_awesome</span>
-            Start Random Prep
-          </button>
-        )}
       </header>
 
-      {/* Loading States */}
-      {loadingQuestions && (
-        <div className="flex flex-col items-center justify-center p-20 bg-white rounded-3xl border border-slate-100 text-center gap-4 min-h-[400px]">
-          <div className="w-12 h-12 rounded-full border-4 border-slate-200 border-t-primary animate-spin"></div>
-          <h4 className="text-xl font-bold text-slate-700">Connecting to Gemini AI Engine...</h4>
-          <p className="text-slate-500 text-sm">Generating custom, highly-relevant questions for your topic.</p>
+      {!activeSession && !preparingSession && !evaluating && (
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_0.9fr_0.9fr]">
+          <Card className="p-5">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400">Interview target</p>
+            <p className="mt-2 text-sm text-slate-600">
+              {interviewTargets.filter((item) => item.type === 'application').length} applied roles and{' '}
+              {interviewTargets.filter((item) => item.type === 'practice').length} practice jobs ready.
+            </p>
+          </Card>
+
+          <Card className="p-5">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400">Question count</p>
+            <div className="mt-3 flex gap-2">
+              {[4, 6].map((count) => (
+                <button
+                  key={count}
+                  onClick={() => setQuestionCount(count)}
+                  className={`flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors ${
+                    questionCount === count ? 'bg-primary text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  {count} questions
+                </button>
+              ))}
+            </div>
+          </Card>
+
+          <Card className="p-5">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400">Readiness</p>
+            <div className="mt-3 space-y-2 text-sm text-slate-600">
+              <p><span className="font-semibold text-slate-900">{dashboardStats.sessions}</span> completed sessions</p>
+              <p><span className="font-semibold text-slate-900">{dashboardStats.averageScore}%</span> average score</p>
+              <p>{recognitionSupported ? 'Voice transcription supported in this browser.' : 'Voice transcription is not supported in this browser.'}</p>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {permissionError && (
+        <div className="rounded-2xl border border-danger/20 bg-danger-soft px-4 py-3 text-sm font-medium text-danger">
+          {permissionError}
+        </div>
+      )}
+
+      {preparingSession && (
+        <div className="flex min-h-[400px] flex-col items-center justify-center gap-4 rounded-3xl border border-slate-100 bg-white p-20 text-center">
+          <div className="h-12 w-12 animate-spin rounded-full border-4 border-slate-200 border-t-primary"></div>
+          <h4 className="text-xl font-bold text-slate-700">Preparing your interview session...</h4>
+          <p className="text-sm text-slate-500">Analyzing the job description and generating the opening question.</p>
         </div>
       )}
 
       {evaluating && (
-        <div className="flex flex-col items-center justify-center p-20 bg-white rounded-3xl border border-slate-100 text-center gap-4 min-h-[400px]">
-          <div className="w-12 h-12 rounded-full border-4 border-slate-200 border-t-primary animate-spin"></div>
-          <h4 className="text-xl font-bold text-slate-700">Gemini AI is analyzing your performance...</h4>
-          <p className="text-slate-500 text-sm">Grading your explanations, logic, and code design patterns.</p>
+        <div className="flex min-h-[400px] flex-col items-center justify-center gap-4 rounded-3xl border border-slate-100 bg-white p-20 text-center">
+          <div className="h-12 w-12 animate-spin rounded-full border-4 border-slate-200 border-t-primary"></div>
+          <h4 className="text-xl font-bold text-slate-700">Analyzing your interview...</h4>
+          <p className="text-sm text-slate-500">Scoring delivery, role fit, technical depth, and communication quality.</p>
         </div>
       )}
 
-      {/* Topic selection list */}
-      {!activeSession && !sessionCompleted && !loadingQuestions && !evaluating && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {topics.map(topic => (
-            <Card 
-              key={topic.id}
-              className={`p-6 cursor-pointer transition-all border-2 ${selectedTopic === topic.id ? 'border-primary shadow-xl shadow-primary/5' : 'border-transparent hover:border-slate-200'}`}
-              onClick={() => setSelectedTopic(topic.id)}
-            >
-              <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-6 ${selectedTopic === topic.id ? 'bg-primary text-white' : 'bg-surface-container-low text-slate-400'}`}>
-                <span className="material-symbols-outlined text-3xl">{topic.icon}</span>
-              </div>
-              <h3 className="text-sm font-black text-on-surface mb-2 tracking-tight leading-tight h-10">{topic.title}</h3>
-              <div className="flex justify-between items-center mt-6">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{topic.sessions} Sessions</span>
-                <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
-                  topic.difficulty === 'Advanced' ? 'bg-red-50 text-red-500' : 
-                  topic.difficulty === 'Intermediate' ? 'bg-orange-50 text-orange-500' : 'bg-green-50 text-green-500'
-                }`}>{topic.difficulty}</span>
-              </div>
-            </Card>
-          ))}
-        </div>
-      )}
-
-      {/* Main session board */}
       <AnimatePresence mode="wait">
-        {activeSession && activeQuestion && !loadingQuestions && !evaluating ? (
+        {activeSession && !preparingSession && !evaluating ? (
           <motion.div
-            key="active-session"
+            key="live-session"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
             className="grid grid-cols-12 gap-8"
           >
-            <div className={activeQuestion.type === 'code' ? 'col-span-12 lg:col-span-6 space-y-6' : 'col-span-12 lg:col-span-8 space-y-6'}>
-              {/* Question card */}
-              <Card className="p-6 md:p-8 space-y-6">
-                <div className="flex justify-between items-center border-b border-slate-100 pb-4">
-                  <span className="px-3 py-1 bg-primary/10 text-primary text-[10px] font-black rounded-full uppercase tracking-widest">
-                    Question {activeSession.currentQuestionIndex + 1} of {currentQuestions.length}
+            <div className="col-span-12 space-y-6 lg:col-span-7">
+              <Card className="space-y-6 p-6 md:p-8">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+                  <span className="rounded-full bg-primary/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-primary">
+                    Question {activeSession.currentQuestionIndex + 1} of {activeSession.questionCount}
                   </span>
-                  <span className="text-xs font-bold text-slate-400">Topic: {topics.find(t => t.id === activeSession.topicId)?.title}</span>
+                  <span className="text-xs font-bold text-slate-400">
+                    {activeSession.target.company} - {activeSession.target.title}
+                  </span>
                 </div>
-                
-                <h4 className="text-xl font-bold text-slate-800 leading-snug">{activeQuestion.question}</h4>
-                
-                <div className="relative">
-                  <textarea 
-                    rows="5"
-                    placeholder="Type your explanation answer here..."
-                    value={textAnswer}
-                    onChange={(e) => setTextAnswer(e.target.value)}
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-semibold outline-none focus:ring-2 focus:ring-primary/20 resize-none"
-                  />
-                  
-                  {/* Microphone speech simulation bar */}
-                  <div className="absolute right-3 bottom-3 flex items-center gap-2">
-                    {isSpeaking && (
-                      <span className="text-[10px] font-black text-primary uppercase animate-pulse">
-                        Listening ({speechTimer}s)
-                      </span>
-                    )}
-                    <button 
-                      onClick={handleSimulateSpeech}
-                      disabled={isSpeaking}
-                      className={`p-2.5 rounded-full flex items-center justify-center shadow-lg transition-transform active:scale-95 ${
-                        isSpeaking ? 'bg-primary text-white animate-bounce' : 'bg-white text-slate-500 border border-slate-100 hover:text-primary'
-                      }`}
-                      title={ai ? "Simulate real AI candidate voice answer" : "Simulate speech answer"}
+
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                  <div className="mb-3 flex items-center justify-between">
+                    <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">AI interviewer prompt</p>
+                    <span className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest ${isAiSpeaking ? 'bg-primary text-white' : 'bg-slate-200 text-slate-600'}`}>
+                      {isAiSpeaking ? 'Speaking' : 'Ready'}
+                    </span>
+                  </div>
+                  <h4 className="text-xl font-bold leading-snug text-slate-800">{activeQuestion}</h4>
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    <button
+                      onClick={() => speakQuestion(activeQuestion)}
+                      className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-slate-700 transition-colors hover:bg-slate-50"
                     >
-                      <span className="material-symbols-outlined text-lg">mic</span>
+                      Repeat question
+                    </button>
+                    <button
+                      onClick={stopListening}
+                      className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-slate-700 transition-colors hover:bg-slate-50"
+                    >
+                      Pause listening
                     </button>
                   </div>
                 </div>
 
-                <div className="flex justify-between items-center pt-2">
-                  <button 
-                    onClick={() => setActiveSession(null)}
-                    className="px-5 py-2.5 text-xs font-bold text-slate-500 hover:bg-slate-50 rounded-xl uppercase tracking-wider"
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">Your spoken answer</p>
+                    <div className="flex items-center gap-2">
+                      {isListening && (
+                        <span className="text-[10px] font-black uppercase tracking-widest text-primary">
+                          Listening - {answerSeconds}s
+                        </span>
+                      )}
+                      <button
+                        onClick={isListening ? stopListening : startListening}
+                        disabled={!recognitionSupported || loadingNextQuestion}
+                        className={`rounded-xl px-4 py-2.5 text-xs font-bold uppercase tracking-wider transition-colors ${
+                          isListening ? 'bg-danger text-white' : 'bg-primary text-white'
+                        } disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500`}
+                      >
+                        {isListening ? 'Stop answer' : 'Start answer'}
+                      </button>
+                    </div>
+                  </div>
+
+                  <textarea
+                    rows="10"
+                    value={answerDraft}
+                    onChange={(event) => setAnswerDraft(event.target.value)}
+                    placeholder="Your spoken answer will appear here. You can refine the transcript before moving on."
+                    className="w-full resize-none rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-primary/20"
+                  />
+
+                  <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3">
+                    <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">Live transcript</p>
+                    <p className="mt-2 text-sm text-slate-600">
+                      {interimTranscript || 'Interim speech transcription will appear here while you are answering.'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-2">
+                  <button
+                    onClick={quitSession}
+                    className="rounded-xl px-5 py-2.5 text-xs font-bold uppercase tracking-wider text-slate-500 transition-colors hover:bg-slate-50"
                   >
-                    Quit Session
+                    Quit session
                   </button>
-                  <button 
+                  <button
                     onClick={handleSubmitAnswer}
-                    className="px-6 py-2.5 bg-primary text-white text-xs font-black rounded-xl shadow-lg shadow-primary/15 hover:shadow-primary/25 transition-all uppercase tracking-widest"
+                    disabled={loadingNextQuestion || !normalizeText(`${answerDraft} ${interimTranscript}`)}
+                    className="rounded-xl bg-primary px-6 py-2.5 text-xs font-black uppercase tracking-widest text-white shadow-lg shadow-primary/15 transition-all hover:shadow-primary/25 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
                   >
-                    {activeSession.currentQuestionIndex === currentQuestions.length - 1 ? 'Finish & Analyze' : 'Next Question'}
+                    {loadingNextQuestion
+                      ? 'Generating follow-up...'
+                      : activeSession.currentQuestionIndex === activeSession.questionCount - 1
+                        ? 'Finish and analyze'
+                        : 'Next question'}
                   </button>
                 </div>
               </Card>
             </div>
 
-            {/* Split pane code editor */}
-            {activeQuestion.type === 'code' && (
-              <div className="col-span-12 lg:col-span-6">
-                <Card className="p-0 overflow-hidden flex flex-col h-full min-h-[400px]">
-                  <div className="bg-slate-900 px-6 py-3 flex justify-between items-center text-white border-b border-slate-800">
-                    <span className="text-xs font-bold font-mono">index.js</span>
-                    <span className="text-[9px] font-black bg-slate-800 text-slate-400 px-2 py-0.5 rounded uppercase">JavaScript</span>
+            <div className="col-span-12 space-y-6 lg:col-span-5">
+              <Card className="overflow-hidden p-0">
+                <div className="border-b border-slate-100 bg-slate-900 px-5 py-4 text-white">
+                  <p className="text-sm font-bold">Live camera preview</p>
+                  <p className="mt-1 text-xs text-slate-300">Practice with the same camera presence and speaking rhythm you would use in a real interview.</p>
+                </div>
+                <div className="relative aspect-[4/3] bg-black">
+                  {mediaEnabled ? (
+                    <video ref={videoRef} autoPlay muted playsInline className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="flex h-full items-center justify-center text-slate-400">Camera preview unavailable</div>
+                  )}
+                  <div className="absolute right-4 top-4 rounded-full bg-white/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-white backdrop-blur">
+                    {recordingActive ? 'Recording live' : mediaEnabled ? 'Camera on' : 'Camera off'}
                   </div>
-                  <textarea 
-                    value={codeAnswer}
-                    onChange={(e) => setCodeAnswer(e.target.value)}
-                    className="flex-1 bg-slate-950 text-slate-100 font-mono p-6 outline-none resize-none text-xs leading-relaxed"
-                    spellCheck="false"
-                  />
-                </Card>
-              </div>
-            )}
+                </div>
+              </Card>
 
-            {/* Simulated camera stream avatar */}
-            {activeQuestion.type !== 'code' && (
-              <div className="col-span-12 lg:col-span-4 space-y-6">
-                <Card className="p-6 flex flex-col items-center justify-center text-center gap-6 bg-slate-900 text-white min-h-[350px]">
-                  <div className="relative">
-                    <div className="w-24 h-24 rounded-full bg-slate-800 flex items-center justify-center p-3 border-2 border-primary/50 shadow-2xl">
-                      <span className="material-symbols-outlined text-5xl text-primary animate-pulse-slow">smart_toy</span>
-                    </div>
-                    <span className="absolute top-1.5 right-1.5 w-3 h-3 bg-green-500 rounded-full border-2 border-slate-900"></span>
+              <Card className="p-6">
+                <h4 className="font-bold text-on-surface">Target role context</h4>
+                <div className="mt-4 space-y-3 text-sm text-slate-600">
+                  <div className="rounded-xl bg-slate-50 p-3">
+                    <p className="font-semibold text-slate-900">{activeSession.target.company} - {activeSession.target.title}</p>
+                    <p className="mt-1">{activeSession.target.subtitle}</p>
                   </div>
-                  <div>
-                    <h5 className="font-bold text-sm tracking-wide">AI Panel Interviewer</h5>
-                    <p className="text-slate-400 text-xs mt-1">Analyzing your speech pitch, key terminology matches, and response flow in real-time.</p>
+                  <div className="rounded-xl bg-slate-50 p-3">
+                    <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">Core skills</p>
+                    <p className="mt-2">
+                      {(activeSession.target.job.requirements || activeSession.target.job.tags || []).slice(0, 6).join(', ') || 'Skills not provided'}
+                    </p>
                   </div>
-                  <div className="flex gap-4">
-                    <div className="p-3 bg-white/5 rounded-xl flex items-center gap-2 text-xs">
-                      <span className="material-symbols-outlined text-primary text-sm">mic</span>
-                      <span>Active</span>
+                  {activeSession.target.candidate && (
+                    <div className="rounded-xl bg-slate-50 p-3">
+                      <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">Resume fit</p>
+                      <p className="mt-2">
+                        {activeSession.target.candidate.matchScore || activeSession.target.matchScore}% match with candidate profile
+                      </p>
                     </div>
-                    <div className="p-3 bg-white/5 rounded-xl flex items-center gap-2 text-xs">
-                      <span className="material-symbols-outlined text-purple-400 text-sm">videocam</span>
-                      <span>Enabled</span>
-                    </div>
-                  </div>
-                </Card>
-              </div>
-            )}
+                  )}
+                </div>
+              </Card>
+
+              <Card className="overflow-hidden border-0 bg-primary p-6 text-white shadow-xl">
+                <h4 className="font-bold">Interview signals</h4>
+                <div className="mt-4 space-y-3 text-sm">
+                  <div className="rounded-xl bg-white/10 p-3">Mic: {recognitionSupported ? 'Speech recognition ready' : 'Browser speech recognition unavailable'}</div>
+                  <div className="rounded-xl bg-white/10 p-3">Delivery: {isListening ? 'Capturing live answer' : 'Waiting for your response'}</div>
+                  <div className="rounded-xl bg-white/10 p-3">AI: {ai ? 'Job-aware questioning and evaluation enabled' : 'Fallback interview logic enabled'}</div>
+                  <div className="rounded-xl bg-white/10 p-3">Recording: {recordingActive ? 'Session is being recorded' : 'Recording idle'}</div>
+                </div>
+              </Card>
+            </div>
           </motion.div>
         ) : null}
 
-        {/* Feedback results screen */}
-        {sessionCompleted && !loadingQuestions && !evaluating && (
+        {sessionCompleted && !preparingSession && !evaluating && (
           <motion.div
             key="session-completed"
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
-            className="max-w-2xl mx-auto"
+            className="mx-auto max-w-4xl"
           >
-            <Card className="p-8 text-center space-y-6">
-              <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto text-green-600">
+            <Card className="space-y-6 p-8 text-center">
+              <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-green-100 text-green-600">
                 <span className="material-symbols-outlined text-4xl">check_circle</span>
               </div>
-              
-              <h3 className="text-3xl font-black text-slate-800">Session Completed!</h3>
-              <p className="text-slate-500 max-w-md mx-auto text-sm">We've completed the analysis of your performance. Here is your feedback scorecard:</p>
 
-              <div className="p-6 bg-slate-50 rounded-2xl border border-slate-100 max-w-sm mx-auto">
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{sessionCompleted.title}</span>
-                <div className="text-5xl font-black text-primary mt-2">{sessionCompleted.score}%</div>
-                <p className="text-xs font-semibold text-slate-600 mt-4 leading-relaxed">{sessionCompleted.summary}</p>
+              <h3 className="text-3xl font-black text-slate-800">Interview complete</h3>
+              <p className="mx-auto max-w-md text-sm text-slate-500">
+                Your live interview was evaluated and saved to your feedback history.
+              </p>
+
+              <div className="mx-auto max-w-sm rounded-2xl border border-slate-100 bg-slate-50 p-6">
+                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{sessionCompleted.title}</span>
+                <div className="mt-2 text-5xl font-black text-primary">{sessionCompleted.score}%</div>
+                <p className="mt-4 text-xs font-semibold leading-relaxed text-slate-600">{sessionCompleted.summary}</p>
+                <p className="mt-3 text-[11px] font-semibold text-slate-500">
+                  {sessionCompleted.roleTrack} - {sessionCompleted.questionCount} questions
+                </p>
               </div>
 
-              <div className="pt-4 flex justify-center gap-3">
-                <button 
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="rounded-2xl border border-slate-100 bg-white p-5 text-left">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Strengths</p>
+                  <ul className="mt-3 space-y-2 text-sm text-slate-700">
+                    {(sessionCompleted.strengths || []).map((item) => <li key={item}>- {item}</li>)}
+                  </ul>
+                </div>
+                <div className="rounded-2xl border border-slate-100 bg-white p-5 text-left">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Weak areas</p>
+                  <ul className="mt-3 space-y-2 text-sm text-slate-700">
+                    {(sessionCompleted.weakAreas || []).map((item) => <li key={item}>- {item}</li>)}
+                  </ul>
+                </div>
+              </div>
+
+              {recordingUrl && (
+                <div className="rounded-2xl border border-slate-100 bg-white p-5 text-left">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Recorded session</p>
+                  <video controls className="mt-3 w-full rounded-2xl bg-black" src={recordingUrl} />
+                </div>
+              )}
+
+              <div className="flex justify-center gap-3 pt-4">
+                <button
                   onClick={() => setSessionCompleted(null)}
-                  className="px-6 py-2.5 bg-slate-100 text-slate-700 font-bold rounded-xl text-xs uppercase tracking-wider hover:bg-slate-200"
+                  className="rounded-xl bg-slate-100 px-6 py-2.5 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-200"
                 >
-                  Back to Hub
+                  Back to hub
                 </button>
-                <button 
-                  onClick={() => handleInitializeSession(selectedTopic)}
-                  className="px-6 py-2.5 bg-primary text-white font-bold rounded-xl text-xs uppercase tracking-wider shadow-lg shadow-primary/10 hover:shadow-primary/25"
+                <button
+                  onClick={handleInitializeSession}
+                  className="rounded-xl bg-primary px-6 py-2.5 text-xs font-bold uppercase tracking-wider text-white shadow-lg shadow-primary/10 hover:shadow-primary/25"
                 >
-                  Start New Session
+                  Start new session
                 </button>
               </div>
             </Card>
           </motion.div>
         )}
 
-        {/* Landing selection guide */}
-        {!activeSession && !sessionCompleted && !loadingQuestions && !evaluating && (
+        {!activeSession && !sessionCompleted && !preparingSession && !evaluating && (
           <motion.div
-            key={selectedTopic || 'none'}
+            key={selectedTarget?.id || 'none'}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="grid grid-cols-12 gap-8 mt-12"
+            className="mt-12 grid grid-cols-12 gap-8"
           >
-            <div className="col-span-12 lg:col-span-8">
-              {selectedTopic ? (
-                <Card className="p-0 overflow-hidden relative min-h-[400px] flex flex-col justify-center items-center bg-slate-50 border-dashed border-2 border-slate-200">
-                  <div className="flex flex-col items-center gap-6 text-center max-w-sm p-8">
-                     <div className="w-24 h-24 rounded-full bg-white shadow-xl flex items-center justify-center p-4">
-                        <span className="material-symbols-outlined text-6xl text-primary animate-pulse-slow">smart_toy</span>
-                     </div>
-                     <h4 className="text-2xl font-black text-on-surface leading-tight">Ready to begin your {topics.find(t => t.id === selectedTopic)?.title} session?</h4>
-                     <p className="text-slate-500 text-sm font-medium">The session will include 3 key technical questions tailored to your level with code execution analysis (if applicable).</p>
-                     <button 
-                       onClick={() => handleInitializeSession(selectedTopic)}
-                       className="px-10 py-4 bg-primary text-white font-black rounded-2xl shadow-xl shadow-primary/20 hover:scale-105 active:scale-95 transition-all text-xs uppercase tracking-widest"
-                     >
-                       Initialize Session
-                     </button>
+            <div className="col-span-12 space-y-6 lg:col-span-8">
+              <Card className="p-6">
+                <div className="mb-6 flex items-center justify-between">
+                  <div>
+                    <h4 className="text-xl font-black text-on-surface">Choose a job for your interview</h4>
+                    <p className="mt-1 text-sm text-slate-500">Applied roles appear first so you can practice for real opportunities in your pipeline.</p>
                   </div>
-                  
-                  {/* Floating tooltips */}
-                  <div className="absolute top-10 left-10 p-4 bg-white rounded-2xl shadow-sm border border-slate-100 flex items-center gap-3">
-                     <span className="material-symbols-outlined text-primary text-sm">mic</span>
-                     <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">Mic Ready</span>
+                  <button
+                    onClick={requestMediaAccess}
+                    className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50"
+                  >
+                    Allow camera and mic
+                  </button>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  {interviewTargets.map((target) => {
+                    const isSelected = selectedTarget?.id === target.id;
+                    return (
+                      <button
+                        key={target.id}
+                        onClick={() => setSelectedTargetId(target.id)}
+                        className={`rounded-3xl border p-5 text-left transition-all ${
+                          isSelected
+                            ? 'border-primary bg-primary/5 shadow-lg shadow-primary/10'
+                            : 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-md'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <span className={`inline-flex rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest ${
+                              target.type === 'application' ? 'bg-success-soft text-success' : 'bg-slate-100 text-slate-600'
+                            }`}>
+                              {target.sourceLabel}
+                            </span>
+                            <h5 className="mt-3 text-lg font-black leading-tight text-slate-900">{target.title}</h5>
+                            <p className="mt-1 text-sm font-semibold text-slate-600">{target.company}</p>
+                          </div>
+                          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
+                            {target.matchScore}%
+                          </span>
+                        </div>
+                        <p className="mt-3 text-sm text-slate-500">{target.subtitle}</p>
+                        <p className="mt-3 line-clamp-3 text-sm leading-6 text-slate-600">
+                          {target.job.shortDescription || target.job.description?.[0] || 'Role details available after selection.'}
+                        </p>
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          {(target.job.requirements || target.job.tags || []).slice(0, 4).map((item) => (
+                            <span key={`${target.id}-${item}`} className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold text-slate-600">
+                              {item}
+                            </span>
+                          ))}
+                        </div>
+                        <div className="mt-4 flex items-center justify-between text-xs font-semibold text-slate-500">
+                          <span>{target.roleTrack}</span>
+                          <span>{target.badge}</span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </Card>
+
+              {selectedTarget ? (
+                <Card className="relative flex min-h-[420px] flex-col justify-between border-2 border-dashed border-slate-200 bg-slate-50 p-8">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span className="rounded-full bg-primary/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-primary">
+                        {selectedTarget.company} - {selectedTarget.title}
+                      </span>
+                      <span className="rounded-full bg-slate-200 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-slate-600">
+                        {selectedTarget.roleTrack}
+                      </span>
+                    </div>
+
+                    <h4 className="mt-6 text-3xl font-black leading-tight text-on-surface">
+                      Ready to start a live interview for this job?
+                    </h4>
+                    <p className="mt-4 max-w-2xl text-sm font-medium leading-6 text-slate-500">
+                      The system will analyze the job description, generate an opening question, ask adaptive follow-ups,
+                      capture your voice, and record the full camera-plus-mic session for review.
+                    </p>
+
+                    <div className="mt-6 grid gap-4 md:grid-cols-2">
+                      <div className="rounded-2xl border border-slate-100 bg-white p-4">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Job requirements</p>
+                        <p className="mt-2 text-sm leading-6 text-slate-700">
+                          {(selectedTarget.job.requirements || []).slice(0, 6).join(', ') || 'No structured requirements available'}
+                        </p>
+                      </div>
+                      <div className="rounded-2xl border border-slate-100 bg-white p-4">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Candidate context</p>
+                        <p className="mt-2 text-sm leading-6 text-slate-700">
+                          {selectedTarget.candidate
+                            ? `${selectedTarget.candidate.name} with ${selectedTarget.candidate.skills.slice(0, 5).join(', ') || 'profile data'}`
+                            : 'This is practice mode using the job description only.'}
+                        </p>
+                      </div>
+                    </div>
                   </div>
-                  <div className="absolute bottom-10 right-10 p-4 bg-white rounded-2xl shadow-sm border border-slate-100 flex items-center gap-3">
-                     <span className="material-symbols-outlined text-purple-500 text-sm">videocam</span>
-                     <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">Camera Enabled</span>
+
+                  <div className="mt-8 flex flex-wrap gap-3">
+                    <button
+                      onClick={handleInitializeSession}
+                      className="rounded-2xl bg-primary px-10 py-4 text-xs font-black uppercase tracking-widest text-white shadow-xl shadow-primary/20 transition-all hover:scale-105 active:scale-95"
+                    >
+                      Start live interview
+                    </button>
+                    <button
+                      onClick={requestMediaAccess}
+                      className="rounded-2xl border border-slate-300 bg-white px-6 py-3 text-xs font-black uppercase tracking-widest text-slate-700 hover:bg-slate-50"
+                    >
+                      Test camera and mic
+                    </button>
+                  </div>
+
+                  <div className="absolute left-10 top-10 flex items-center gap-3 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+                    <span className="material-symbols-outlined text-sm text-primary">mic</span>
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-600">
+                      {recognitionSupported ? 'Voice input ready' : 'Voice input unsupported'}
+                    </span>
+                  </div>
+                  <div className="absolute bottom-10 right-10 flex items-center gap-3 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+                    <span className="material-symbols-outlined text-sm text-primary">smart_toy</span>
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-600">
+                      {ai ? 'AI adaptive interviewer' : 'Fallback interviewer'}
+                    </span>
                   </div>
                 </Card>
               ) : (
-                <div className="flex flex-col items-center justify-center p-20 bg-surface-container-low/30 rounded-3xl border-2 border-dashed border-slate-200 text-center gap-4 min-h-[400px]">
-                   <span className="material-symbols-outlined text-6xl text-slate-200 animate-bounce">arrow_upward</span>
-                   <h4 className="text-xl font-bold text-slate-400">Select a topic above to begin your preparation</h4>
+                <div className="flex min-h-[400px] flex-col items-center justify-center gap-4 rounded-3xl border-2 border-dashed border-slate-200 bg-surface-container-low/30 p-20 text-center">
+                  <span className="material-symbols-outlined animate-bounce text-6xl text-slate-200">work_history</span>
+                  <h4 className="text-xl font-bold text-slate-400">Add or publish a job to unlock live interview practice</h4>
                 </div>
               )}
             </div>
-            
-            <div className="col-span-12 lg:col-span-4 space-y-6">
-               <Card className="p-6">
-                 <h4 className="font-bold text-on-surface mb-6 flex items-center justify-between">
-                   Recent Feedback
-                   <span className="text-[10px] font-black text-slate-400 uppercase">Archive</span>
-                 </h4>
-                 <div className="space-y-4 max-h-64 overflow-y-auto">
-                   {feedbackHistory.map((fb) => (
-                     <div key={fb.id} className="p-4 rounded-xl bg-surface-container-low hover:bg-slate-100 transition-colors group border border-transparent hover:border-slate-200">
-                        <div className="flex justify-between items-start mb-1">
-                          <h5 className="text-xs font-black text-on-surface group-hover:text-primary transition-colors leading-tight">{fb.title}</h5>
-                          <span className="text-sm font-bold text-primary shrink-0 ml-2">{fb.score}%</span>
-                        </div>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase">{fb.date} • Feedback</p>
-                        <p className="text-[11px] text-slate-500 mt-2 font-medium line-clamp-2 leading-relaxed">{fb.summary}</p>
-                     </div>
-                   ))}
-                 </div>
-               </Card>
-               
-               <Card className="p-6 bg-primary text-white border-0 shadow-xl overflow-hidden relative">
-                 <div className="relative z-10">
-                   <h4 className="font-bold mb-2">Weekly Leaderboard</h4>
-                   <p className="text-xs opacity-70 mb-6">Top performers in Prep sessions.</p>
-                   <div className="flex items-end justify-around h-32">
-                      <div className="flex flex-col items-center gap-2">
-                        <div className="w-8 h-8 rounded-full bg-white/20 border border-white/30 overflow-hidden shadow-lg"><img src="https://i.pravatar.cc/100?img=3" alt="" /></div>
-                        <div className="w-10 bg-white/20 rounded-t-lg h-16"></div>
+
+            <div className="col-span-12 space-y-6 lg:col-span-4">
+              <Card className="p-6">
+                <h4 className="mb-6 flex items-center justify-between font-bold text-on-surface">
+                  Recent Feedback
+                  <span className="text-[10px] font-black uppercase text-slate-400">Archive</span>
+                </h4>
+                <div className="max-h-80 space-y-4 overflow-y-auto">
+                  {feedbackHistory.map((feedback) => (
+                    <div key={feedback.id} className="group rounded-xl border border-transparent bg-surface-container-low p-4 transition-colors hover:border-slate-200 hover:bg-slate-100">
+                      <div className="mb-1 flex items-start justify-between">
+                        <h5 className="leading-tight text-xs font-black text-on-surface transition-colors group-hover:text-primary">{feedback.title}</h5>
+                        <span className="ml-2 shrink-0 text-sm font-bold text-primary">{feedback.score}%</span>
                       </div>
-                      <div className="flex flex-col items-center gap-2">
-                        <div className="w-10 h-10 rounded-full bg-white border-2 border-primary overflow-hidden shadow-2xl scale-110"><img src="https://i.pravatar.cc/100?img=1" alt="" /></div>
-                        <div className="w-12 bg-white rounded-t-lg h-24"></div>
+                      <p className="text-[10px] font-bold uppercase text-slate-400">{feedback.date} - {feedback.roleTrack}</p>
+                      <p className="mt-2 line-clamp-3 text-[11px] font-medium leading-relaxed text-slate-500">{feedback.summary}</p>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+
+              <Card className="relative overflow-hidden border-0 bg-primary p-6 text-white shadow-xl">
+                <div className="relative z-10">
+                  <h4 className="mb-2 font-bold">Focus Areas</h4>
+                  <p className="mb-6 text-xs opacity-70">Weak areas detected from your recent mock interviews.</p>
+                  <div className="space-y-3">
+                    {(dashboardStats.topWeakAreas.length > 0
+                      ? dashboardStats.topWeakAreas
+                      : ['Complete a few sessions to uncover patterns']).map((area, index) => (
+                      <div key={area} className="rounded-xl bg-white/10 p-3">
+                        <p className="text-sm font-semibold">{index + 1}. {area}</p>
                       </div>
-                      <div className="flex flex-col items-center gap-2">
-                        <div className="w-8 h-8 rounded-full bg-white/20 border border-white/30 overflow-hidden shadow-lg"><img src="https://i.pravatar.cc/100?img=5" alt="" /></div>
-                        <div className="w-10 bg-white/20 rounded-t-lg h-20"></div>
-                      </div>
-                   </div>
-                 </div>
-                 <span className="absolute -bottom-10 -right-10 material-symbols-outlined text-[160px] opacity-10 rotate-12">emoji_events</span>
-               </Card>
+                    ))}
+                  </div>
+                </div>
+                <span className="material-symbols-outlined absolute -bottom-10 -right-10 rotate-12 text-[160px] opacity-10">emoji_events</span>
+              </Card>
             </div>
           </motion.div>
         )}

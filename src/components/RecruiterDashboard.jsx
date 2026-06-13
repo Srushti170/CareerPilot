@@ -1,116 +1,117 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Card, MetricCard } from './MetricCard';
 import { cn } from '../lib/utils';
+import {
+  buildCandidateFromApplication,
+  getApplicationStatsForJob,
+  getStoredJobs,
+} from '../lib/recruiterData';
 
-export function RecruiterDashboard({ setActiveTab }) {
-  const [candidates, setCandidates] = useState(() => {
-    const stored = localStorage.getItem('careerpilot_candidates_recruiter');
-    if (stored) return JSON.parse(stored);
+function getStatusPill(status) {
+  if (status === 'Accepted') return 'bg-success-soft text-success';
+  if (status === 'Offered') return 'bg-primary-soft text-primary';
+  if (status === 'Interview') return 'bg-primary-soft text-primary';
+  if (status === 'Reviewing') return 'bg-secondary-container text-on-secondary-container';
+  if (status === 'Rejected' || status === 'Declined') return 'bg-danger-soft text-danger';
+  return 'bg-surface-container-high text-slate-600';
+}
 
-    const defaults = [
-      {
-        id: '1',
-        name: 'Ethan Wright',
-        ref: 'HL-8821',
-        university: 'Stanford University',
-        branch: 'Computer Science',
-        cgpa: 3.92,
-        skills: ['Python', 'AWS'],
-        match: 95,
-        status: 'Shortlisted',
-        avatar: 'https://i.pravatar.cc/100?img=12'
-      },
-      {
-        id: '2',
-        name: 'Sarah Chen',
-        ref: 'HL-8822',
-        university: 'MIT',
-        branch: 'Math & Computing',
-        cgpa: 3.85,
-        skills: ['C++', 'Rust'],
-        match: 88,
-        status: 'Interview',
-        avatar: 'https://i.pravatar.cc/100?img=25'
-      },
-      {
-        id: '3',
-        name: 'Marcus Lee',
-        ref: 'HL-8823',
-        university: 'Georgia Tech',
-        branch: 'Backend Systems',
-        cgpa: 3.78,
-        skills: ['Go', 'Kubernetes'],
-        match: 82,
-        status: 'Applied',
-        avatar: 'https://i.pravatar.cc/100?img=33'
-      }
-    ];
-    localStorage.setItem('careerpilot_candidates_recruiter', JSON.stringify(defaults));
-    return defaults;
-  });
-
+export function RecruiterDashboard({ setActiveTab, applications = [] }) {
+  const [jobs, setJobs] = useState(() => getStoredJobs());
   const [minCgpa, setMinCgpa] = useState('All');
   const [branch, setBranch] = useState('All');
   const [matchPercent, setMatchPercent] = useState('All');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [advancedRole, setAdvancedRole] = useState('All');
 
-  const handleStatusChange = (id, newStatus) => {
-    const updated = candidates.map(c => c.id === id ? { ...c, status: newStatus } : c);
-    setCandidates(updated);
-    localStorage.setItem('careerpilot_candidates_recruiter', JSON.stringify(updated));
-  };
+  useEffect(() => {
+    const syncJobs = () => setJobs(getStoredJobs());
+    window.addEventListener('careerpilot:jobs-updated', syncJobs);
+    return () => window.removeEventListener('careerpilot:jobs-updated', syncJobs);
+  }, []);
+
+  const candidates = useMemo(
+    () => applications.map((app) => buildCandidateFromApplication(app)),
+    [applications]
+  );
+
+  const jobStats = useMemo(
+    () =>
+      jobs.map((job) => ({
+        ...job,
+        analytics: getApplicationStatsForJob(job, applications),
+      })),
+    [applications, jobs]
+  );
+
+  const filteredCandidates = candidates.filter((candidate) => {
+    if (minCgpa !== 'All' && candidate.cgpa < parseFloat(minCgpa)) return false;
+    if (branch !== 'All' && candidate.branch !== branch) return false;
+    if (matchPercent !== 'All' && candidate.match < parseInt(matchPercent, 10)) return false;
+    if (advancedRole !== 'All' && !candidate.skills.some((skill) => skill.toLowerCase().includes(advancedRole.toLowerCase()))) return false;
+    return true;
+  });
+
+  const branches = Array.from(new Set(candidates.map((candidate) => candidate.branch).filter(Boolean)));
+  const skills = Array.from(new Set(candidates.flatMap((candidate) => candidate.skills))).slice(0, 8);
+  const recentJobs = [...jobStats]
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    .slice(0, 4);
+
+  const totalApplicants = applications.length;
+  const shortlisted = applications.filter((app) => ['Reviewing', 'Interview', 'Offered', 'Accepted', 'Declined'].includes(app.status)).length;
+  const interviews = applications.filter((app) => ['Interview', 'Offered', 'Accepted', 'Declined'].includes(app.status)).length;
+  const activeJobs = jobs.filter((job) => ['Active', 'Closing Soon'].includes(job.status)).length;
 
   const handleExportCSV = () => {
-    const headers = ['Candidate', 'Ref', 'University', 'Branch', 'CGPA', 'Match Score', 'Status'];
-    const rows = candidates.map(c => [c.name, c.ref, c.university, c.branch, c.cgpa, `${c.match}%`, c.status]);
-    const csvContent = "data:text/csv;charset=utf-8,"
-      + [headers.join(','), ...rows.map(e => e.map(val => `"${val}"`).join(","))].join("\n");
+    const headers = ['Candidate', 'Ref', 'University', 'Branch', 'CGPA', 'Match Score', 'Status', 'Role'];
+    const rows = filteredCandidates.map((candidate) => [
+      candidate.name,
+      candidate.ref,
+      candidate.university,
+      candidate.branch,
+      candidate.cgpa,
+      `${candidate.match}%`,
+      candidate.status,
+      candidate.role,
+    ]);
+    const csvContent = `data:text/csv;charset=utf-8,${[headers.join(','), ...rows.map((entry) => entry.map((value) => `"${value}"`).join(','))].join('\n')}`;
     const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", "careerpilot_recruiter_pipeline.csv");
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', 'careerpilot_recruiter_pipeline.csv');
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
-  // Filter candidates
-  const filteredCandidates = candidates.filter(c => {
-    if (minCgpa !== 'All' && c.cgpa < parseFloat(minCgpa)) return false;
-    if (branch !== 'All' && c.branch !== branch) return false;
-    if (matchPercent !== 'All' && c.match < parseInt(matchPercent)) return false;
-    if (advancedRole !== 'All' && !c.skills.some(s => s.toLowerCase().includes(advancedRole.toLowerCase()))) return false;
-    return true;
-  });
-
   return (
-    <div className="pt-24 px-8 pb-12 max-w-7xl mx-auto space-y-10">
-      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        <MetricCard label="Total Applicants" value="1,240" subtext="+12% vs last mo" color="primary" icon="person_add" />
-        <MetricCard label="Shortlisted" value={candidates.filter(c => c.status === 'Shortlisted').length.toString()} subtext="High Quality" color="secondary" icon="verified" />
-        <MetricCard label="Active Jobs" value="12" icon="work" />
-        <MetricCard label="Interviews" value={candidates.filter(c => c.status === 'Interview').length.toString()} icon="event_note" />
+    <div className="mx-auto max-w-7xl space-y-10 px-8 pb-12 pt-24">
+      <section className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <MetricCard label="Total Applicants" value={totalApplicants.toString()} subtext="Shared from one-click apply" color="primary" icon="person_add" />
+        <MetricCard label="Shortlisted" value={shortlisted.toString()} subtext="Passed resume screen" color="secondary" icon="verified" />
+        <MetricCard label="Active Jobs" value={activeJobs.toString()} icon="work" />
+        <MetricCard label="Interviews" value={interviews.toString()} icon="event_note" />
       </section>
 
-      <div className="flex flex-col lg:flex-row gap-8">
-        <div className="flex-1 min-w-0">
-          <Card className="p-0 overflow-hidden">
-            <div className="p-6 border-b border-outline-variant/10">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+      <div className="flex flex-col gap-8 lg:flex-row">
+        <div className="min-w-0 flex-1">
+          <Card className="overflow-hidden p-0">
+            <div className="border-b border-outline-variant/10 p-6">
+              <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <h2 className="text-xl font-black text-on-surface">Talent Pipeline</h2>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setShowAdvanced(!showAdvanced)}
-                    className="flex items-center gap-2 px-3 py-1.5 text-sm font-semibold text-slate-600 bg-surface-container-low rounded-lg hover:bg-surface-container-high transition-colors"
+                    className="flex items-center gap-2 rounded-lg bg-surface-container-low px-3 py-1.5 text-sm font-semibold text-slate-600 transition-colors hover:bg-surface-container-high"
                   >
                     <span className="material-symbols-outlined text-sm">filter_list</span>
                     {showAdvanced ? 'Hide Filters' : 'Advanced Filters'}
                   </button>
                   <button
                     onClick={handleExportCSV}
-                    className="flex items-center gap-2 px-3 py-1.5 text-sm font-semibold text-slate-600 bg-surface-container-low rounded-lg hover:bg-surface-container-high transition-colors"
+                    className="flex items-center gap-2 rounded-lg bg-surface-container-low px-3 py-1.5 text-sm font-semibold text-slate-600 transition-colors hover:bg-surface-container-high"
                   >
                     <span className="material-symbols-outlined text-sm">download</span>
                     Export CSV
@@ -118,35 +119,31 @@ export function RecruiterDashboard({ setActiveTab }) {
                 </div>
               </div>
 
-              {/* Advanced Filter Drawer */}
               <AnimatePresence>
                 {showAdvanced && (
                   <motion.div
                     initial={{ height: 0, opacity: 0 }}
                     animate={{ height: 'auto', opacity: 1 }}
                     exit={{ height: 0, opacity: 0 }}
-                    className="overflow-hidden mb-6 p-4 bg-slate-50 rounded-xl border border-slate-100 grid grid-cols-1 sm:grid-cols-2 gap-4"
+                    className="mb-6 grid grid-cols-1 gap-4 overflow-hidden rounded-xl border border-slate-100 bg-slate-50 p-4 sm:grid-cols-2"
                   >
                     <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Required Skill Keywords</label>
+                      <label className="mb-1 block text-[10px] font-bold uppercase text-slate-400">Required Skill Keywords</label>
                       <select
                         value={advancedRole}
                         onChange={(e) => setAdvancedRole(e.target.value)}
-                        className="w-full bg-white border border-slate-200 rounded-lg text-sm p-2 outline-none focus:ring-2 focus:ring-primary/20"
+                        className="w-full rounded-lg border border-slate-200 bg-white p-2 text-sm outline-none focus:ring-2 focus:ring-primary/20"
                       >
                         <option value="All">All Skills</option>
-                        <option value="Python">Python</option>
-                        <option value="AWS">AWS</option>
-                        <option value="Rust">Rust</option>
-                        <option value="C++">C++</option>
-                        <option value="Go">Go</option>
-                        <option value="Kubernetes">Kubernetes</option>
+                        {skills.map((skill) => (
+                          <option key={skill} value={skill}>{skill}</option>
+                        ))}
                       </select>
                     </div>
                     <div className="flex items-end">
                       <button
                         onClick={() => { setMinCgpa('All'); setBranch('All'); setMatchPercent('All'); setAdvancedRole('All'); }}
-                        className="w-full py-2 bg-slate-200 text-slate-700 font-bold rounded-lg text-xs uppercase tracking-wider hover:bg-slate-300 transition-colors"
+                        className="w-full rounded-lg bg-slate-200 py-2 text-xs font-bold uppercase tracking-wider text-slate-700 transition-colors hover:bg-slate-300"
                       >
                         Reset All Filters
                       </button>
@@ -156,73 +153,61 @@ export function RecruiterDashboard({ setActiveTab }) {
               </AnimatePresence>
 
               <div className="flex flex-wrap items-center gap-4">
-                <div className="flex-1 min-w-[120px]">
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Min CGPA</label>
-                  <select
-                    value={minCgpa}
-                    onChange={(e) => setMinCgpa(e.target.value)}
-                    className="w-full bg-surface-container-low border-none rounded-lg text-sm focus:ring-primary/20 p-2 cursor-pointer font-medium text-slate-700"
-                  >
+                <div className="min-w-[120px] flex-1">
+                  <label className="mb-1 block text-[10px] font-bold uppercase text-slate-400">Min CGPA</label>
+                  <select value={minCgpa} onChange={(e) => setMinCgpa(e.target.value)} className="w-full cursor-pointer rounded-lg bg-surface-container-low p-2 text-sm font-medium text-slate-700 focus:ring-primary/20">
                     <option value="All">All Scores</option>
-                    <option value="3.9">3.9+ GPA</option>
-                    <option value="3.8">3.8+ GPA</option>
-                    <option value="3.7">3.7+ GPA</option>
+                    <option value="9">9.0+</option>
+                    <option value="8">8.0+</option>
+                    <option value="7">7.0+</option>
                   </select>
                 </div>
 
-                <div className="flex-1 min-w-[120px]">
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Branch</label>
-                  <select
-                    value={branch}
-                    onChange={(e) => setBranch(e.target.value)}
-                    className="w-full bg-surface-container-low border-none rounded-lg text-sm focus:ring-primary/20 p-2 cursor-pointer font-medium text-slate-700"
-                  >
+                <div className="min-w-[120px] flex-1">
+                  <label className="mb-1 block text-[10px] font-bold uppercase text-slate-400">Branch</label>
+                  <select value={branch} onChange={(e) => setBranch(e.target.value)} className="w-full cursor-pointer rounded-lg bg-surface-container-low p-2 text-sm font-medium text-slate-700 focus:ring-primary/20">
                     <option value="All">All Branches</option>
-                    <option value="Computer Science">Computer Science</option>
-                    <option value="Math & Computing">Math & Computing</option>
-                    <option value="Backend Systems">Backend Systems</option>
+                    {branches.map((branchName) => (
+                      <option key={branchName} value={branchName}>{branchName}</option>
+                    ))}
                   </select>
                 </div>
 
-                <div className="flex-1 min-w-[120px]">
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Min Match Score</label>
-                  <select
-                    value={matchPercent}
-                    onChange={(e) => setMatchPercent(e.target.value)}
-                    className="w-full bg-surface-container-low border-none rounded-lg text-sm focus:ring-primary/20 p-2 cursor-pointer font-medium text-slate-700"
-                  >
+                <div className="min-w-[120px] flex-1">
+                  <label className="mb-1 block text-[10px] font-bold uppercase text-slate-400">Min Match Score</label>
+                  <select value={matchPercent} onChange={(e) => setMatchPercent(e.target.value)} className="w-full cursor-pointer rounded-lg bg-surface-container-low p-2 text-sm font-medium text-slate-700 focus:ring-primary/20">
                     <option value="All">All Fits</option>
-                    <option value="95">95%+ Match</option>
                     <option value="90">90%+ Match</option>
                     <option value="80">80%+ Match</option>
+                    <option value="70">70%+ Match</option>
                   </select>
                 </div>
               </div>
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
+              <table className="w-full border-collapse text-left">
                 <thead>
                   <tr className="bg-surface-container-low/50">
-                    <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Candidate</th>
-                    <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Education</th>
-                    <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">CGPA</th>
-                    <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Skills</th>
-                    <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Match</th>
-                    <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Status / Action</th>
+                    <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Candidate</th>
+                    <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Education</th>
+                    <th className="px-6 py-4 text-center text-[10px] font-black uppercase tracking-widest text-slate-400">CGPA</th>
+                    <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Skills</th>
+                    <th className="px-6 py-4 text-center text-[10px] font-black uppercase tracking-widest text-slate-400">Match</th>
+                    <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-outline-variant/10">
                   {filteredCandidates.length === 0 ? (
                     <tr>
-                      <td colSpan="6" className="px-6 py-8 text-center text-slate-400 font-semibold text-sm">No candidates match current pipeline filters.</td>
+                      <td colSpan="6" className="px-6 py-8 text-center text-sm font-semibold text-slate-400">No candidates match current pipeline filters.</td>
                     </tr>
                   ) : (
-                    filteredCandidates.map(candidate => (
-                      <tr key={candidate.id} className="hover:bg-surface-container-low transition-colors group">
+                    filteredCandidates.map((candidate) => (
+                      <tr key={candidate.id} className="group transition-colors hover:bg-surface-container-low">
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-3">
-                            <img src={candidate.avatar} className="w-10 h-10 rounded-lg object-cover" alt={candidate.name} />
+                            <img src={candidate.avatar} className="h-10 w-10 rounded-lg object-cover" alt={candidate.name} />
                             <div>
                               <p className="text-sm font-bold text-on-surface">{candidate.name}</p>
                               <p className="text-[10px] text-slate-500">Ref: {candidate.ref}</p>
@@ -234,20 +219,21 @@ export function RecruiterDashboard({ setActiveTab }) {
                           <p className="text-[10px] text-slate-500">{candidate.branch}</p>
                         </td>
                         <td className="px-6 py-4 text-center">
-                          <span className="text-sm font-bold text-on-surface">{candidate.cgpa}</span>
-                          <span className="text-[10px] text-slate-400">/4.0</span>
+                          <span className="text-sm font-bold text-on-surface">{candidate.cgpa || '-'}</span>
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex flex-wrap gap-1">
-                            {candidate.skills.map(skill => (
-                              <span key={skill} className="px-2 py-0.5 bg-primary/5 text-primary text-[10px] font-bold rounded">{skill}</span>
-                            ))}
+                            {candidate.skills.length ? candidate.skills.map((skill) => (
+                              <span key={skill} className="rounded bg-primary/5 px-2 py-0.5 text-[10px] font-bold text-primary">{skill}</span>
+                            )) : (
+                              <span className="text-xs text-slate-400">No tagged skills yet</span>
+                            )}
                           </div>
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center justify-center">
-                            <div className="relative w-10 h-10">
-                              <svg className="w-full h-full -rotate-90">
+                            <div className="relative h-10 w-10">
+                              <svg className="h-full w-full -rotate-90">
                                 <circle cx="20" cy="20" fill="transparent" r="16" stroke="#eceef0" strokeWidth="4" />
                                 <circle cx="20" cy="20" fill="transparent" r="16" stroke="#006b5f" strokeDasharray="100.5" strokeDashoffset={(100 - candidate.match)} strokeWidth="4" />
                               </svg>
@@ -256,21 +242,9 @@ export function RecruiterDashboard({ setActiveTab }) {
                           </div>
                         </td>
                         <td className="px-6 py-4">
-                          <select
-                            value={candidate.status}
-                            onChange={(e) => handleStatusChange(candidate.id, e.target.value)}
-                            className={cn(
-                              "px-3 py-1 text-[10px] font-black uppercase rounded-full border-none focus:ring-1 focus:ring-primary/20 cursor-pointer",
-                              candidate.status === 'Shortlisted' ? "bg-secondary-container text-on-secondary-container" :
-                                candidate.status === 'Interview' ? "bg-teal-50 text-teal-600" : "bg-surface-container-high text-slate-600"
-                            )}
-                          >
-                            <option value="Applied">Applied</option>
-                            <option value="Shortlisted">Shortlisted</option>
-                            <option value="Interview">Interview</option>
-                            <option value="On Hold">On Hold</option>
-                            <option value="Rejected">Rejected</option>
-                          </select>
+                          <span className={cn('rounded-full px-3 py-1 text-[10px] font-black uppercase', getStatusPill(candidate.status))}>
+                            {candidate.status}
+                          </span>
                         </td>
                       </tr>
                     ))
@@ -281,45 +255,38 @@ export function RecruiterDashboard({ setActiveTab }) {
           </Card>
         </div>
 
-        <aside className="w-full lg:w-80 space-y-6">
+        <aside className="w-full space-y-6 lg:w-80">
           <button
             onClick={() => setActiveTab('jobs')}
-            className="w-full bg-gradient-to-br from-primary to-primary-container text-white py-4 rounded-xl font-bold text-lg shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-3"
+            className="flex w-full items-center justify-center gap-3 rounded-xl bg-gradient-to-br from-primary to-primary-container py-4 text-lg font-bold text-white shadow-lg shadow-primary/20 transition-all hover:scale-[1.02] active:scale-[0.98]"
           >
             <span className="material-symbols-outlined">add_circle</span>
             Post New Job
           </button>
 
           <Card className="p-6">
-            <div className="flex items-center justify-between mb-6">
+            <div className="mb-6 flex items-center justify-between">
               <h3 className="font-bold text-on-surface">Recent Jobs</h3>
-              <button
-                onClick={() => setActiveTab('jobs')}
-                className="text-[10px] font-black text-primary uppercase tracking-widest hover:underline bg-transparent border-none"
-              >
+              <button onClick={() => setActiveTab('jobs')} className="border-none bg-transparent text-[10px] font-black uppercase tracking-widest text-primary hover:underline">
                 View All
               </button>
             </div>
             <div className="space-y-4">
-              {[
-                { title: "SDE Intern - Summer 2026", apps: "450", date: "Oct 30", important: true },
-                { title: "Product Analyst (New Grad)", apps: "128", date: "Nov 12" },
-                { title: "ML Research Associate", apps: "84", date: "Nov 05" }
-              ].map((job, i) => (
+              {recentJobs.map((job) => (
                 <div
-                  key={i}
+                  key={job.id}
                   onClick={() => setActiveTab('jobs')}
-                  className="p-4 rounded-lg bg-surface-container-low/50 hover:bg-surface-container-low transition-colors group cursor-pointer"
+                  className="group cursor-pointer rounded-lg bg-surface-container-low/50 p-4 transition-colors hover:bg-surface-container-low"
                 >
-                  <h4 className="text-sm font-bold text-on-surface group-hover:text-primary transition-colors">{job.title}</h4>
-                  <div className="flex items-center gap-4 mt-2">
+                  <h4 className="text-sm font-bold text-on-surface transition-colors group-hover:text-primary">{job.title}</h4>
+                  <div className="mt-2 flex items-center gap-4">
                     <div className="flex items-center gap-1">
                       <span className="material-symbols-outlined text-xs text-slate-400">group</span>
-                      <span className="text-[10px] font-bold text-slate-600">{job.apps} App</span>
+                      <span className="text-[10px] font-bold text-slate-600">{job.analytics.totalApplicants} App</span>
                     </div>
                     <div className="flex items-center gap-1">
-                      <span className="material-symbols-outlined text-xs text-slate-400">calendar_today</span>
-                      <span className={`text-[10px] font-bold ${job.important ? 'text-tertiary' : 'text-slate-500'}`}>{job.date}</span>
+                      <span className="material-symbols-outlined text-xs text-slate-400">workspace_premium</span>
+                      <span className="text-[10px] font-bold text-slate-500">{job.planTier}</span>
                     </div>
                   </div>
                 </div>

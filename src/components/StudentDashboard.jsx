@@ -1,42 +1,26 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { MetricCard } from './MetricCard';
 import { JobCard } from './JobCard';
 import { SectionHeader } from './ui/SectionHeader';
 import { Button } from './ui/Button';
 import { Badge } from './ui/Badge';
 import { motion } from 'motion/react';
+import { getStudentProfile } from '../lib/studentProfile';
+import { getInterviewDashboardStats, getInterviewFeedbackHistory } from '../lib/interviewInsights';
+import { getStoredAnnouncements } from '../lib/adminData';
+import { getPublishedJobs } from '../lib/recruiterData';
 
 export function StudentDashboard({ applications = [], setApplications, setActiveTab }) {
-  const savedProfile = JSON.parse(localStorage.getItem('careerpilot_student_profile') || '{}');
+  const savedProfile = getStudentProfile();
   const studentName = savedProfile.name || 'Student';
-  const jobs = [
-    {
-      id: '1',
-      title: 'Associate Software Engineer',
-      company: 'Google',
-      location: 'Mountain View, CA',
-      logo: 'https://lh3.googleusercontent.com/aida-public/AB6AXuC6n9O4Yw1sHm33bnxv42c3Lc__KboJawPt7X0Q7ccBUqzaPBfqbyO3NijginBJ6pnNTcE0_zmA7b1bGoiapK3X6BW-S-8TbXCeAv06XaZs1HCk-oGvvv1g-VLo9cAZjCiqB0aOwe6GDt5BS-e1hdsRwWFNw_UkfrG-HrmWWGQZ8xxzZibnX37QHy3ASKJFheqhCdg0lpHIJRVgXK5s52Z5gSAIq78DMoGGiR60gBtoynaU4cZUm8k_PZT2u6YCkx7jmjC36lPZNho',
-      match: 94,
-      type: 'Full-time',
-      locationType: 'Hybrid',
-      salary: '$140k - $180k',
-      missingSkills: ['GoLang', 'Docker'],
-      shortDescription: "Contribute to core infrastructure services and improve cloud scalability."
-    },
-    {
-      id: '2',
-      title: 'Product Design Intern',
-      company: 'Spotify',
-      location: 'New York, NY',
-      logo: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDg5TCxfVEVTwqJBz3K-PoZz7BV9o2AA5pVePpvL0rcQ2qmEXRmFlA0q4xQj7Ledty0tT-oWh2v2MJfW10NJ7T7tBsXlcXcFhkRCegUsSzWpq1n-AwnLT3vxcZslE9dqzR8qr6GivlnTq0nPfj52oIBX2EI5FBBkYXMZKOXFqLvniLWgMp_jvg1z5bBSSGNYbv98_i3eMvUx7ss6vf3rnSI7gZmquBT9kSXD_J-T9MEFc6Y8BfHITPC-q8VBN9vrnEJMIYTTXdwmiA',
-      match: 88,
-      type: 'Internship',
-      locationType: 'Remote',
-      salary: '$6k/mo',
-      missingSkills: ['Prototyping'],
-      shortDescription: "Design intuitive features for listeners worldwide as part of our summer program."
-    }
-  ];
+  const interviewStats = getInterviewDashboardStats(getInterviewFeedbackHistory());
+  const [jobs, setJobs] = useState(() => getPublishedJobs().slice(0, 3));
+  const [announcements, setAnnouncements] = useState(() => getStoredAnnouncements().slice(0, 3));
+  const latestResumeAnalysis = JSON.parse(localStorage.getItem('careerpilot_latest_resume_analysis') || 'null');
+  const applicationMatchScores = applications.map((app) => app.matchScore).filter((score) => typeof score === 'number');
+  const averageApplicationMatch = applicationMatchScores.length
+    ? Math.round(applicationMatchScores.reduce((sum, score) => sum + score, 0) / applicationMatchScores.length)
+    : 76;
 
   const actions = [
     { title: "Improve your Resume", desc: "Add your recent Hackathon project.", progress: 90, icon: "edit_document", color: "primary", actionKey: "profile" },
@@ -45,6 +29,21 @@ export function StudentDashboard({ applications = [], setApplications, setActive
   ];
 
   const [activeTrackerIndex, setActiveTrackerIndex] = useState(0);
+
+  useEffect(() => {
+    const syncJobs = () => setJobs(getPublishedJobs().slice(0, 3));
+    const syncAnnouncements = () => setAnnouncements(getStoredAnnouncements().slice(0, 3));
+    window.addEventListener('careerpilot:jobs-updated', syncJobs);
+    window.addEventListener('careerpilot:announcements-updated', syncAnnouncements);
+    return () => {
+      window.removeEventListener('careerpilot:jobs-updated', syncJobs);
+      window.removeEventListener('careerpilot:announcements-updated', syncAnnouncements);
+    };
+  }, []);
+
+  const openTailoredSearch = () => {
+    setActiveTab('search');
+  };
 
   const handleApply = (job) => {
     const isAlreadyApplied = applications.some(
@@ -72,30 +71,30 @@ export function StudentDashboard({ applications = [], setApplications, setActive
         label: "Shortlisted", 
         date: status !== 'Applied' ? "Completed" : "In Progress", 
         active: status !== 'Applied', 
-        done: ['Interview', 'Offered', 'Rejected'].includes(status), 
+        done: ['Interview', 'Offered', 'Accepted', 'Declined', 'Rejected'].includes(status), 
         current: status === 'Reviewing',
         icon: status === 'Reviewing' ? "schedule" : "check" 
       },
       { 
         label: "Interview", 
-        date: status === 'Interview' ? "Scheduled" : (['Offered', 'Rejected'].includes(status) ? "Completed" : "Pending"), 
-        active: ['Interview', 'Offered', 'Rejected'].includes(status), 
-        done: ['Offered', 'Rejected'].includes(status), 
+        date: status === 'Interview' ? "Scheduled" : (['Offered', 'Accepted', 'Declined', 'Rejected'].includes(status) ? "Completed" : "Pending"), 
+        active: ['Interview', 'Offered', 'Accepted', 'Declined', 'Rejected'].includes(status), 
+        done: ['Offered', 'Accepted', 'Declined', 'Rejected'].includes(status), 
         current: status === 'Interview',
         icon: status === 'Interview' ? "schedule" : "check" 
       },
       { 
-        label: status === 'Rejected' ? "Closed" : "Offer", 
-        date: status === 'Offered' ? "Received" : (status === 'Rejected' ? "Not Selected" : "Pending"), 
-        active: ['Offered', 'Rejected'].includes(status), 
-        done: ['Offered', 'Rejected'].includes(status), 
+        label: status === 'Rejected' ? "Closed" : status === 'Accepted' ? "Accepted" : status === 'Declined' ? "Declined" : "Offer", 
+        date: status === 'Offered' ? "Received" : status === 'Accepted' ? "Joined" : status === 'Declined' ? "Closed" : (status === 'Rejected' ? "Not Selected" : "Pending"), 
+        active: ['Offered', 'Accepted', 'Declined', 'Rejected'].includes(status), 
+        done: ['Offered', 'Accepted', 'Declined', 'Rejected'].includes(status), 
         current: false, 
-        icon: status === 'Rejected' ? "cancel" : "celebration" 
+        icon: status === 'Rejected' || status === 'Declined' ? "cancel" : "celebration" 
       }
     ];
   };
 
-  const activeApps = applications.filter(app => app.status !== 'Rejected');
+  const activeApps = applications.filter(app => !['Rejected', 'Declined', 'Accepted'].includes(app.status));
   const currentTracker = activeApps[activeTrackerIndex % (activeApps.length || 1)];
 
   const handlePrevTracker = () => {
@@ -123,9 +122,30 @@ export function StudentDashboard({ applications = [], setApplications, setActive
       </section>
 
       <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <MetricCard label="ATS Resume Score" value="82/100" subtext="Based on standard ATS parsing" progress={82} icon="document_scanner" color="primary" />
-        <MetricCard label="Profile Match Avg" value="76%" subtext="Across your saved job listings" progress={76} icon="radar" color="secondary" />
-        <MetricCard label="Mock Interview Score" value="68%" subtext="Average across 5 technical mocks" progress={68} icon="record_voice_over" color="tertiary" />
+        <MetricCard
+          label="ATS Resume Score"
+          value={`${latestResumeAnalysis?.atsScore ?? 82}/100`}
+          subtext={latestResumeAnalysis ? `Latest JD match: ${latestResumeAnalysis.matchScore}%` : 'Run Resume AI Match to generate a real score'}
+          progress={latestResumeAnalysis?.atsScore ?? 82}
+          icon="document_scanner"
+          color="primary"
+        />
+        <MetricCard
+          label="Profile Match Avg"
+          value={`${averageApplicationMatch}%`}
+          subtext={applications.length > 0 ? 'Across your submitted applications' : 'Your average job alignment updates after one-click apply'}
+          progress={averageApplicationMatch}
+          icon="radar"
+          color="secondary"
+        />
+        <MetricCard
+          label="Mock Interview Score"
+          value={`${interviewStats.averageScore}%`}
+          subtext={interviewStats.sessions > 0 ? `Across ${interviewStats.sessions} completed mocks` : 'Complete a mock session to unlock live scoring'}
+          progress={interviewStats.averageScore || 0}
+          icon="record_voice_over"
+          color="tertiary"
+        />
       </section>
 
       <div className="grid grid-cols-1 gap-8 items-start">
@@ -145,13 +165,60 @@ export function StudentDashboard({ applications = [], setApplications, setActive
                   key={job.id} 
                   job={job} 
                   applied={isApplied} 
-                  onApply={() => handleApply(job)} 
+                  onApply={() => handleApply(job)}
+                  onTailorResume={openTailoredSearch}
                 />
               );
             })}
           </div>
         </section>
       </div>
+
+      <section className="grid grid-cols-1 gap-6 lg:grid-cols-[0.95fr_1.05fr]">
+        <div className="rounded-xl border border-slate-200 bg-white p-6 elev-sm">
+          <SectionHeader title="Placement announcements" />
+          <div className="mt-4 space-y-4">
+            {announcements.length === 0 ? (
+              <p className="text-sm text-slate-500">No announcements yet.</p>
+            ) : (
+              announcements.map((announcement) => (
+                <div key={announcement.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <h4 className="font-semibold text-slate-900">{announcement.title}</h4>
+                    <span className="rounded-full bg-primary-soft px-3 py-1 text-[11px] font-semibold text-primary">{announcement.audience}</span>
+                  </div>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">{announcement.message}</p>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-slate-200 bg-white p-6 elev-sm">
+          <SectionHeader title="Action plan" />
+          <div className="mt-4 space-y-4">
+            {actions.map((action) => (
+              <div key={action.title} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex items-start gap-4">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary-soft text-primary">
+                    <span className="material-symbols-outlined">{action.icon}</span>
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between gap-3">
+                      <h4 className="font-semibold text-slate-900">{action.title}</h4>
+                      <span className="text-xs font-semibold text-slate-500">{action.progress}%</span>
+                    </div>
+                    <p className="mt-1 text-sm text-slate-600">{action.desc}</p>
+                    <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-200">
+                      <div className="h-full rounded-full bg-primary" style={{ width: `${action.progress}%` }}></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
 
       <section className="space-y-6">
         <SectionHeader

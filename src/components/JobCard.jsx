@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Button } from './ui/Button';
 import { Badge } from './ui/Badge';
 
-export function JobCard({ job, onApply, applied, ...rest }) {
+export function JobCard({ job, onApply, onTailorResume, applied, ...rest }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const data = job || rest;
   const company = data.company || '';
@@ -132,7 +132,7 @@ export function JobCard({ job, onApply, applied, ...rest }) {
             </>
           ) : "Apply now"}
         </Button>
-        <Button variant="secondary" size="lg">
+        <Button variant="secondary" size="lg" onClick={() => onTailorResume?.(data)}>
           <span className="material-symbols-outlined text-base">auto_awesome</span>
           Tailor resume
         </Button>

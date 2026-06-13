@@ -1,118 +1,117 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Card } from './ui/Card';
+import { getDepartmentBreakdown, getStoredStudents, mergeStudentRecords, normalizeStudentRecord, saveStoredStudents } from '../lib/adminData';
 
-const DEFAULT_STUDENTS = [
-  { name: 'Alex Rivera', role: 'Full Stack', cgpa: 3.92, placement: 'Placed (Google)', initial: 'AR' },
-  { name: 'Sonia Gupta', role: 'Data Analyst', cgpa: 3.85, placement: 'Placed (Accenture)', initial: 'SG' },
-  { name: 'Rahul Dev', role: 'Backend Dev', cgpa: 3.72, placement: 'Open', initial: 'RD' },
-  { name: 'Mira Nair', role: 'Designer', cgpa: 3.95, placement: 'In-Process', initial: 'MN' },
-];
-
-const inputClass = "w-full px-4 py-2.5 rounded-lg bg-white border border-slate-200 focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-colors text-sm";
+const inputClass = 'w-full rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none transition-colors focus:border-primary focus:ring-4 focus:ring-primary/10';
 
 export function StudentRecords() {
-  const [students, setStudents] = useState([]);
+  const [manualStudents, setManualStudents] = useState(() => getStoredStudents());
+  const [applications, setApplications] = useState(() => {
+    const stored = localStorage.getItem('careerpilot_applications');
+    return stored ? JSON.parse(stored) : [];
+  });
   const [showModal, setShowModal] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
-
-  const [name, setName] = useState('');
-  const [role, setRole] = useState('Full Stack');
-  const [cgpa, setCgpa] = useState('');
-  const [placement, setPlacement] = useState('Open');
+  const [draft, setDraft] = useState({
+    name: '',
+    role: 'Full Stack',
+    cgpa: '',
+    placement: 'Open',
+    branch: 'Computer Science',
+  });
 
   useEffect(() => {
-    const stored = localStorage.getItem('careerpilot_students');
-    if (stored) {
-      setStudents(JSON.parse(stored));
-    } else {
-      localStorage.setItem('careerpilot_students', JSON.stringify(DEFAULT_STUDENTS));
-      setStudents(DEFAULT_STUDENTS);
-    }
+    const syncStudents = () => setManualStudents(getStoredStudents());
+    const syncApplications = () => {
+      const stored = localStorage.getItem('careerpilot_applications');
+      setApplications(stored ? JSON.parse(stored) : []);
+    };
+    window.addEventListener('careerpilot:students-updated', syncStudents);
+    window.addEventListener('storage', syncApplications);
+    return () => {
+      window.removeEventListener('careerpilot:students-updated', syncStudents);
+      window.removeEventListener('storage', syncApplications);
+    };
   }, []);
 
-  const handleNewEntry = (e) => {
-    e.preventDefault();
-    if (!name || !cgpa) return;
+  const students = useMemo(
+    () => mergeStudentRecords(manualStudents, applications),
+    [applications, manualStudents]
+  );
 
-    const newStudent = {
-      name,
-      role,
-      cgpa: Number(cgpa),
-      placement,
-      initial: name.split(' ').map(n => n[0]).join('').toUpperCase()
-    };
+  const departments = useMemo(
+    () => getDepartmentBreakdown(students).slice(0, 4),
+    [students]
+  );
 
-    const updated = [newStudent, ...students];
-    localStorage.setItem('careerpilot_students', JSON.stringify(updated));
-    setStudents(updated);
+  const handleNewEntry = (event) => {
+    event.preventDefault();
+    if (!draft.name || !draft.cgpa) return;
+
+    const newStudent = normalizeStudentRecord(draft);
+    setManualStudents(saveStoredStudents([newStudent, ...manualStudents]));
     setShowModal(false);
-
-    setName('');
-    setCgpa('');
-    setPlacement('Open');
-
+    setDraft({ name: '', role: 'Full Stack', cgpa: '', placement: 'Open', branch: 'Computer Science' });
     setSuccessMsg('Student added successfully!');
     setTimeout(() => setSuccessMsg(''), 2000);
   };
 
   const handleBulkImport = () => {
     const bulkData = [
-      { name: 'Vijay Kumar', role: 'DevOps Engineer', cgpa: 3.65, placement: 'Open', initial: 'VK' },
-      { name: 'Anjali Shah', role: 'QA Analyst', cgpa: 3.78, placement: 'Placed (Stripe)', initial: 'AS' },
-      { name: 'David Smith', role: 'Security Analyst', cgpa: 3.91, placement: 'In-Process', initial: 'DS' }
-    ];
+      { name: 'Vijay Kumar', role: 'DevOps Engineer', cgpa: 7.4, placement: 'Open', branch: 'Information Technology' },
+      { name: 'Anjali Shah', role: 'QA Analyst', cgpa: 8.1, placement: 'Placed (Stripe)', branch: 'Computer Science' },
+      { name: 'David Smith', role: 'Security Analyst', cgpa: 8.8, placement: 'In-Process', branch: 'Electronics' },
+    ].map(normalizeStudentRecord);
 
-    const updated = [...bulkData, ...students];
-    localStorage.setItem('careerpilot_students', JSON.stringify(updated));
-    setStudents(updated);
-
+    setManualStudents(saveStoredStudents([...bulkData, ...manualStudents]));
     setSuccessMsg('Successfully bulk imported 3 student records!');
     setTimeout(() => setSuccessMsg(''), 2000);
   };
 
+  const updateDraft = (field, value) => {
+    setDraft((current) => ({ ...current, [field]: value }));
+  };
+
   return (
-    <div className="pt-24 px-8 pb-12 max-w-7xl mx-auto space-y-8">
+    <div className="mx-auto max-w-7xl space-y-8 px-8 pb-12 pt-24">
       {successMsg && (
-        <div className="p-4 bg-success-soft border border-success/20 text-success text-sm font-medium rounded-xl flex items-center gap-2">
+        <div className="flex items-center gap-2 rounded-xl border border-success/20 bg-success-soft p-4 text-sm font-medium text-success">
           <span className="material-symbols-outlined text-base">check_circle</span>
           <span>{successMsg}</span>
         </div>
       )}
 
-      <div className="flex justify-between items-end">
+      <div className="flex items-end justify-between">
         <div>
-          <h2 className="text-2xl md:text-3xl font-headline font-semibold text-slate-900 tracking-tight">Student registry</h2>
-          <p className="text-slate-500 mt-1 text-sm">Monitoring academic and placement progress for university students.</p>
+          <h2 className="text-2xl font-headline font-semibold tracking-tight text-slate-900 md:text-3xl">Student registry</h2>
+          <p className="mt-1 text-sm text-slate-500">Monitor shared application progress, manual records, and branch-wise placement movement.</p>
         </div>
         <div className="flex gap-3">
-          <button onClick={handleBulkImport} className="px-4 py-2.5 border border-slate-300 bg-white text-slate-700 font-semibold text-sm rounded-xl hover:bg-slate-50 transition-colors">
+          <button onClick={handleBulkImport} className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50">
             Bulk import
           </button>
-          <button onClick={() => setShowModal(true)} className="px-4 py-2.5 bg-primary text-on-primary font-semibold text-sm rounded-xl hover:bg-primary-hover transition-colors focus:outline-none focus:ring-4 focus:ring-primary/10">
+          <button onClick={() => setShowModal(true)} className="rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-on-primary transition-colors hover:bg-primary-hover focus:outline-none focus:ring-4 focus:ring-primary/10">
             New student entry
           </button>
         </div>
       </div>
 
       <div className="grid grid-cols-12 gap-6">
-        <div className="col-span-12 lg:col-span-4 space-y-6">
+        <div className="col-span-12 space-y-6 lg:col-span-4">
           <Card className="p-6">
-            <h3 className="text-xs font-semibold text-slate-500 mb-6">Department stats</h3>
+            <h3 className="mb-6 text-xs font-semibold text-slate-500">Department stats</h3>
             <div className="space-y-6">
-              {[
-                { name: 'Computer Science', count: 1200, placed: 85 },
-                { name: 'Information Tech', count: 850, placed: 72 },
-                { name: 'Electronics', count: 420, placed: 45 }
-              ].map(dept => (
+              {departments.map((dept) => (
                 <div key={dept.name}>
-                  <div className="flex justify-between items-center mb-2">
+                  <div className="mb-2 flex items-center justify-between">
                     <span className="text-sm font-semibold text-slate-900">{dept.name}</span>
-                    <span className="text-xs font-semibold text-primary">{dept.placed}% placed</span>
+                    <span className="text-xs font-semibold text-primary">{dept.rate}% placed</span>
                   </div>
-                  <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                    <div className="h-full bg-primary rounded-full" style={{ width: `${dept.placed}%` }}></div>
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+                    <div className="h-full rounded-full bg-primary" style={{ width: `${dept.rate}%` }}></div>
                   </div>
+                  <p className="mt-2 text-xs text-slate-500">{dept.placed}/{dept.total} placed · Avg CGPA {dept.avgCgpa}</p>
                 </div>
               ))}
             </div>
@@ -120,32 +119,32 @@ export function StudentRecords() {
         </div>
 
         <div className="col-span-12 lg:col-span-8">
-          <Card className="p-0 overflow-hidden">
-            <table className="w-full text-left border-collapse">
+          <Card className="overflow-hidden p-0">
+            <table className="w-full border-collapse text-left">
               <thead>
-                <tr className="bg-slate-50 border-b border-slate-200">
+                <tr className="border-b border-slate-200 bg-slate-50">
                   <th className="px-8 py-4 text-[11px] font-semibold text-slate-500">Student</th>
                   <th className="px-8 py-4 text-[11px] font-semibold text-slate-500">Target role</th>
-                  <th className="px-8 py-4 text-[11px] font-semibold text-slate-500 text-center">CGPA</th>
+                  <th className="px-8 py-4 text-[11px] font-semibold text-slate-500">Branch</th>
+                  <th className="px-8 py-4 text-center text-[11px] font-semibold text-slate-500">CGPA</th>
                   <th className="px-8 py-4 text-[11px] font-semibold text-slate-500">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {students.map(s => (
-                  <tr key={s.name} className="hover:bg-slate-50 transition-colors">
+                {students.map((student) => (
+                  <tr key={`${student.name}-${student.role}`} className="transition-colors hover:bg-slate-50">
                     <td className="px-8 py-4">
                       <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center font-semibold text-xs text-slate-600">{s.initial}</div>
-                        <span className="font-semibold text-slate-900">{s.name}</span>
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-600">{student.initial}</div>
+                        <span className="font-semibold text-slate-900">{student.name}</span>
                       </div>
                     </td>
-                    <td className="px-8 py-4 text-sm text-slate-500">{s.role}</td>
-                    <td className="px-8 py-4 text-center font-semibold text-slate-700">{s.cgpa}</td>
+                    <td className="px-8 py-4 text-sm text-slate-500">{student.role}</td>
+                    <td className="px-8 py-4 text-sm text-slate-500">{student.branch}</td>
+                    <td className="px-8 py-4 text-center font-semibold text-slate-700">{student.cgpa || '-'}</td>
                     <td className="px-8 py-4">
-                      <span className={`px-2.5 py-1 rounded-md text-[11px] font-semibold ${
-                        s.placement.includes('Placed') ? 'bg-primary-soft text-primary' : 'bg-slate-100 text-slate-500'
-                      }`}>
-                        {s.placement}
+                      <span className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${student.placement.startsWith('Placed') ? 'bg-primary-soft text-primary' : student.placement === 'In-Process' || student.placement.startsWith('Offer') ? 'bg-warning-soft text-warning' : 'bg-slate-100 text-slate-500'}`}>
+                        {student.placement}
                       </span>
                     </td>
                   </tr>
@@ -158,34 +157,34 @@ export function StudentRecords() {
 
       <AnimatePresence>
         {showModal && (
-          <div className="fixed inset-0 bg-slate-900/50 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
             <motion.div
               initial={{ opacity: 0, scale: 0.96 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.96 }}
-              className="bg-white w-full max-w-md rounded-2xl border border-slate-200 elev-md p-8 space-y-6"
+              className="w-full max-w-md space-y-6 rounded-2xl border border-slate-200 bg-white p-8 shadow-2xl"
             >
-              <div className="flex justify-between items-center border-b border-slate-100 pb-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-4">
                 <h3 className="text-lg font-headline font-semibold text-slate-900">Add student record</h3>
-                <button onClick={() => setShowModal(false)} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition-colors">
+                <button onClick={() => setShowModal(false)} className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600">
                   <span className="material-symbols-outlined text-xl">close</span>
                 </button>
               </div>
 
               <form onSubmit={handleNewEntry} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1.5">Student name</label>
-                  <input type="text" value={name} onChange={(e) => setName(e.target.value)} required placeholder="e.g. Vijay Kumar" className={inputClass} />
+                  <label className="mb-1.5 block text-xs font-medium text-slate-600">Student name</label>
+                  <input value={draft.name} onChange={(e) => updateDraft('name', e.target.value)} required placeholder="e.g. Vijay Kumar" className={inputClass} />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1.5">CGPA</label>
-                    <input type="number" value={cgpa} onChange={(e) => setCgpa(e.target.value)} required min="0" max="4" step="0.01" placeholder="e.g. 3.82" className={inputClass} />
+                    <label className="mb-1.5 block text-xs font-medium text-slate-600">CGPA</label>
+                    <input type="number" value={draft.cgpa} onChange={(e) => updateDraft('cgpa', e.target.value)} required min="0" max="10" step="0.01" placeholder="e.g. 8.2" className={inputClass} />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1.5">Target role</label>
-                    <select value={role} onChange={(e) => setRole(e.target.value)} className={inputClass}>
+                    <label className="mb-1.5 block text-xs font-medium text-slate-600">Target role</label>
+                    <select value={draft.role} onChange={(e) => updateDraft('role', e.target.value)} className={inputClass}>
                       <option>Full Stack</option>
                       <option>Data Analyst</option>
                       <option>Backend Dev</option>
@@ -195,23 +194,34 @@ export function StudentRecords() {
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1.5">Placement status</label>
-                  <select value={placement} onChange={(e) => setPlacement(e.target.value)} className={inputClass}>
-                    <option>Open</option>
-                    <option>In-Process</option>
-                    <option>Placed (Google)</option>
-                    <option>Placed (Microsoft)</option>
-                    <option>Placed (Amazon)</option>
-                    <option>Placed (Stripe)</option>
-                  </select>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="mb-1.5 block text-xs font-medium text-slate-600">Branch</label>
+                    <select value={draft.branch} onChange={(e) => updateDraft('branch', e.target.value)} className={inputClass}>
+                      <option>Computer Science</option>
+                      <option>Information Technology</option>
+                      <option>Electronics</option>
+                      <option>Mechanical</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs font-medium text-slate-600">Placement status</label>
+                    <select value={draft.placement} onChange={(e) => updateDraft('placement', e.target.value)} className={inputClass}>
+                      <option>Open</option>
+                      <option>In-Process</option>
+                      <option>Placed (Google)</option>
+                      <option>Placed (Microsoft)</option>
+                      <option>Placed (Amazon)</option>
+                      <option>Placed (Stripe)</option>
+                    </select>
+                  </div>
                 </div>
 
-                <div className="pt-4 flex justify-end gap-3">
-                  <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2.5 border border-slate-300 bg-white text-slate-700 text-sm font-semibold rounded-xl hover:bg-slate-50 transition-colors">
+                <div className="flex justify-end gap-3 pt-4">
+                  <button type="button" onClick={() => setShowModal(false)} className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50">
                     Cancel
                   </button>
-                  <button type="submit" className="px-4 py-2.5 bg-primary text-on-primary text-sm font-semibold rounded-xl hover:bg-primary-hover transition-colors">
+                  <button type="submit" className="rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-on-primary transition-colors hover:bg-primary-hover">
                     Save student record
                   </button>
                 </div>
@@ -225,7 +235,7 @@ export function StudentRecords() {
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
         onClick={() => setShowModal(true)}
-        className="fixed bottom-8 right-8 w-14 h-14 rounded-full bg-primary text-on-primary elev-md flex items-center justify-center hover:bg-primary-hover transition-colors z-40"
+        className="fixed bottom-8 right-8 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-on-primary shadow-xl transition-colors hover:bg-primary-hover"
       >
         <span className="material-symbols-outlined text-3xl">add</span>
       </motion.button>

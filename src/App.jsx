@@ -19,6 +19,8 @@ import { InterviewDesk } from './components/InterviewDesk';
 import { GlobalReports } from './components/GlobalReports';
 import { Card } from './components/ui/Card';
 import { motion, AnimatePresence } from 'motion/react';
+import { isStudentOnboardingComplete } from './lib/studentProfile';
+import { authApi } from './lib/backendSync';
 
 export default function App() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -153,7 +155,7 @@ export default function App() {
   const sidebarData = getSidebarData();
 
   const handleLogin = (user, isNewUser = false) => {
-    const onboardingRequired = user.role === 'student' && isNewUser;
+    const onboardingRequired = user.role === 'student' && !isStudentOnboardingComplete(user);
     localStorage.setItem('careerpilot_current_user', JSON.stringify(user));
     setCurrentUser(user);
     setPersona(user.role);
@@ -162,8 +164,17 @@ export default function App() {
     setActiveTab('dashboard');
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      const token = localStorage.getItem('careerpilot_session_token');
+      if (token) {
+        await authApi.logout(token);
+      }
+    } catch (error) {
+      console.error('Logout API error:', error);
+    }
     localStorage.removeItem('careerpilot_current_user');
+    localStorage.removeItem('careerpilot_session_token');
     setCurrentUser(null);
     setIsAuthenticated(false);
     setPersona('student');
@@ -242,6 +253,7 @@ export default function App() {
                 {persona === 'recruiter' && (
                   <RecruiterDashboard
                     setActiveTab={setActiveTab}
+                    applications={applications}
                   />
                 )}
                 {persona === 'admin' && <PlacementDashboard />}
@@ -273,15 +285,25 @@ export default function App() {
                     setCurrentUser={setCurrentUser}
                   />
                 )}
-                {activeTab === 'interviews' && <MockInterviews />}
+                {activeTab === 'interviews' && <MockInterviews applications={applications} />}
               </>
             )}
 
             {persona === 'recruiter' && (
               <>
-                {activeTab === 'jobs' && <JobManagement />}
-                {activeTab === 'candidates' && <Candidates />}
-                {activeTab === 'schedule' && <InterviewDesk />}
+                {activeTab === 'jobs' && <JobManagement applications={applications} />}
+                {activeTab === 'candidates' && (
+                  <Candidates
+                    applications={applications}
+                    setApplications={updateApplications}
+                  />
+                )}
+                {activeTab === 'schedule' && (
+                  <InterviewDesk
+                    applications={applications}
+                    setApplications={updateApplications}
+                  />
+                )}
               </>
             )}
 

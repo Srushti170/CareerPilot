@@ -1,5 +1,24 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
+import { getStudentProfile, saveStudentProfile } from '../lib/studentProfile';
+
+const SETTINGS_KEY = 'careerpilot_settings';
+const NOTIFICATION_SETTINGS_KEY = 'careerpilot_notification_preferences';
+
+const DEFAULT_ROLE_SETTINGS = {
+  student: {
+    jobType: 'Full-time',
+    alertFrequency: 'Daily',
+  },
+  recruiter: {
+    companyName: 'Stripe',
+    autoShortlist: true,
+  },
+  admin: {
+    placementYear: '2026-2027',
+    registrationAllowed: true,
+  },
+};
 
 export function Settings() {
   const [currentUser, setCurrentUser] = useState(null);
@@ -36,8 +55,33 @@ export function Settings() {
       setCurrentUser(parsed);
       setName(parsed.name || '');
       setEmail(parsed.email || '');
+
+      const savedSettings = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
+      const roleSettings = { ...DEFAULT_ROLE_SETTINGS[parsed.role], ...(savedSettings[parsed.role] || {}) };
+      const savedNotifications = JSON.parse(localStorage.getItem(NOTIFICATION_SETTINGS_KEY) || '{}');
+
+      if (parsed.role === 'student') {
+        setJobType(roleSettings.jobType);
+        setAlertFrequency(roleSettings.alertFrequency);
+      } else if (parsed.role === 'recruiter') {
+        setCompanyName(roleSettings.companyName);
+        setAutoShortlist(roleSettings.autoShortlist);
+      } else if (parsed.role === 'admin') {
+        setPlacementYear(roleSettings.placementYear);
+        setRegistrationAllowed(roleSettings.registrationAllowed);
+      }
+
+      setEmailNotifications(savedNotifications.emailNotifications ?? true);
+      setSmsNotifications(savedNotifications.smsNotifications ?? false);
+      setBrowserNotifications(savedNotifications.browserNotifications ?? true);
     }
   }, []);
+
+  const persistRoleSettings = (role, nextSettings) => {
+    const allSettings = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
+    const updated = { ...allSettings, [role]: nextSettings };
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(updated));
+  };
 
   const handleSaveProfile = (e) => {
     e.preventDefault();
@@ -58,18 +102,17 @@ export function Settings() {
       localStorage.setItem('careerpilot_current_user', JSON.stringify(updatedUser));
 
       if (currentUser.role === 'student') {
-        const studentProfile = JSON.parse(localStorage.getItem('careerpilot_student_profile') || '{}');
-        studentProfile.name = name;
-        studentProfile.email = email;
-        localStorage.setItem('careerpilot_student_profile', JSON.stringify(studentProfile));
+        const studentProfile = getStudentProfile(updatedUser);
+        saveStudentProfile({ ...studentProfile, name, email }, updatedUser);
+        persistRoleSettings(currentUser.role, { jobType, alertFrequency });
+      } else if (currentUser.role === 'recruiter') {
+        persistRoleSettings(currentUser.role, { companyName, autoShortlist });
+      } else if (currentUser.role === 'admin') {
+        persistRoleSettings(currentUser.role, { placementYear, registrationAllowed });
       }
 
       setCurrentUser(updatedUser);
       setSuccess('Profile details updated successfully!');
-
-      setTimeout(() => {
-        window.location.reload();
-      }, 1000);
     } else {
       setError('User account not found.');
     }
@@ -77,6 +120,11 @@ export function Settings() {
 
   const handleSaveNotifications = (e) => {
     e.preventDefault();
+    localStorage.setItem(NOTIFICATION_SETTINGS_KEY, JSON.stringify({
+      emailNotifications,
+      smsNotifications,
+      browserNotifications,
+    }));
     setSuccess('Notification preferences saved successfully!');
     setTimeout(() => setSuccess(''), 2000);
   };

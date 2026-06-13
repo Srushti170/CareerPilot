@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { motion } from 'motion/react';
+import { saveStudentProfile } from '../lib/studentProfile';
+import { authApi } from '../lib/backendSync';
 
 // Default pre-seeded users for demo & testing
 const DEFAULT_USERS = [
@@ -42,7 +44,18 @@ export function Login({ onLogin }) {
     return JSON.parse(stored);
   };
 
-  const handleAuth = (e) => {
+  const persistLocalUser = (user) => {
+    const users = getStoredUsers();
+    const existingIndex = users.findIndex((entry) => entry.email.toLowerCase() === user.email.toLowerCase());
+    const updatedUsers = existingIndex >= 0
+      ? users.map((entry, index) => (index === existingIndex ? { ...entry, ...user } : entry))
+      : [...users, user];
+
+    localStorage.setItem('careerpilot_users', JSON.stringify(updatedUsers));
+    return user;
+  };
+
+  const handleAuth = async (e) => {
     e.preventDefault();
     setError('');
     setSuccess('');
@@ -56,7 +69,14 @@ export function Login({ onLogin }) {
       );
 
       if (user) {
-        onLogin(user, false);
+        try {
+          const { user: authenticatedUser } = await authApi.login({ email, password, role });
+          onLogin(authenticatedUser, false);
+        } catch (apiError) {
+          console.warn('Backend login unavailable, using local auth fallback.', apiError);
+          persistLocalUser(user);
+          onLogin(user, false);
+        }
       } else {
         // Double check if user exists with a different role to give a helpful hint
         const anyUserWithEmail = users.find((u) => u.email.toLowerCase() === email.toLowerCase());
@@ -100,28 +120,30 @@ export function Login({ onLogin }) {
         role
       };
 
-      const updatedUsers = [...users, newUser];
-      localStorage.setItem('careerpilot_users', JSON.stringify(updatedUsers));
-
       if (role === 'student') {
-        localStorage.setItem('careerpilot_student_onboarding_complete', 'false');
-        localStorage.setItem('careerpilot_student_profile', JSON.stringify({
+        saveStudentProfile({
           name: newUser.name,
           email: newUser.email,
-          role: 'student',
-          education: [],
+          role: 'CS Senior Student',
           skills: [],
-          socials: { LinkedIn: { connected: false, handle: '' }, GitHub: { connected: false, handle: '' }, Portfolio: { connected: false, handle: '' } },
           onboardingComplete: false,
-        }));
+        }, newUser);
       }
 
       setSuccess('Account created successfully! Logging you in...');
-      
-      // Auto login after 1 second
-      setTimeout(() => {
-        onLogin(newUser, true);
-      }, 1000);
+      try {
+        const { user: createdUser } = await authApi.register(newUser);
+        persistLocalUser(createdUser);
+        setTimeout(() => {
+          onLogin(createdUser, true);
+        }, 700);
+      } catch (apiError) {
+        console.warn('Backend register unavailable, using local auth fallback.', apiError);
+        persistLocalUser(newUser);
+        setTimeout(() => {
+          onLogin(newUser, true);
+        }, 700);
+      }
     }
   };
 

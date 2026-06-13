@@ -2,272 +2,127 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { JobCard } from './JobCard';
 import { ResumeIntelligence } from './ResumeIntelligence';
+import { ResumeBuilder } from './ResumeBuilder';
+import { Button } from './ui/Button';
+import { Card } from './ui/Card';
+import { createApplicationRecord, generateCoverLetter, tailorResumeForJob } from '../lib/resumeTools';
+import { getStudentProfile } from '../lib/studentProfile';
+import { getPublishedJobs } from '../lib/recruiterData';
+import { generateCoverLetterWithAI, isCareerAiAvailable, rankJobsForStudentWithAI, tailorResumeWithAI } from '../lib/aiCareerTools';
 
 export function JobSearch({ searchQuery = '', setSearchQuery, applications = [], setApplications, setActiveTab }) {
   const [activeSearchTab, setActiveSearchTab] = useState('listings');
   const [localQuery, setLocalQuery] = useState(searchQuery);
+  const [selectedJob, setSelectedJob] = useState(null);
+  const [applicationDraft, setApplicationDraft] = useState(null);
+  const [applicationResumeDraft, setApplicationResumeDraft] = useState(null);
+  const [isGeneratingApplyPackage, setIsGeneratingApplyPackage] = useState(false);
+  const [isRefreshingMatches, setIsRefreshingMatches] = useState(false);
+  const [aiJobInsights, setAiJobInsights] = useState({});
 
   const [filterJobTypes, setFilterJobTypes] = useState([]);
   const [filterLocationTypes, setFilterLocationTypes] = useState([]);
   const [filterLocationText, setFilterLocationText] = useState('');
   const [filterExperience, setFilterExperience] = useState('Any Experience');
   const [filterIncome, setFilterIncome] = useState(0);
+  const [jobs, setJobs] = useState(() => getPublishedJobs());
+  const studentProfile = getStudentProfile();
+  const aiAvailable = isCareerAiAvailable();
 
   useEffect(() => {
     setLocalQuery(searchQuery);
   }, [searchQuery]);
 
-  const featuredJobs = [
-    {
-      company: "Google",
-      title: "Software Engineer III",
-      location: "Mountain View, CA",
-      type: "Full-time",
-      locationType: "On-site",
-      experience: "Senior (5+ years)",
-      salaryMin: 165000,
-      match: 98,
-      salary: "$165k - $220k",
-      tags: ["Distributed Systems", "Cloud"],
-      logo: "https://lh3.googleusercontent.com/aida-public/AB6AXuC6n9O4Yw1sHm33bnxv42c3Lc__KboJawPt7X0Q7ccBUqzaPBfqbyO3NijginBJ6pnNTcE0_zmA7b1bGoiapK3X6BW-S-8TbXCeAv06XaZs1HCk-oGvvv1g-VLo9cAZjCiqB0aOwe6GDt5BS-e1hdsRwWFNw_UkfrG-HrmWWGQZ8xxzZibnX37QHy3ASKJFheqhCdg0lpHIJRVgXK5s52Z5gSAIq78DMoGGiR60gBtoynaU4cZUm8k_PZT2u6YCkx7jmjC36lPZNho",
-      missingSkills: ["Go (Golang)"],
-      shortDescription: "Lead the design and implementation of highly scalable distributed cloud services.",
-      description: [
-        "Design, develop, test, deploy, maintain and improve software.",
-        "Manage individual project priorities, deadlines and deliverables.",
-        "Lead designs of major software components, systems, and features.",
-        "Mentor and train other team members on design techniques, and coding standards."
-      ]
-    },
-    {
-      company: "Stripe",
-      title: "Frontend Engineer (Payments)",
-      location: "Seattle, WA",
-      type: "Full-time",
-      locationType: "Remote",
-      experience: "Mid Level (3-5 years)",
-      salaryMin: 150000,
-      match: 94,
-      salary: "$150k - $190k",
-      tags: ["React", "Typescript", "Fintech"],
-      logo: "https://lh3.googleusercontent.com/aida-public/AB6AXuCwmqkI3ugEyAnfsIVvXzR8vd1J9f9masmOZDuUcNxM7Pmv5auaHnJq4jqZ5RB7EIjvXQsdKUi2ABBHG3llgUqyEP5yE7D0qP5CkjcWdlKUA7oZBD_Dlw2-p_9z5NlKJZYVCIdL0Vm7HIl-f2boEq24HBF7pJTQqExh8pVkjGr08UsJTHsMsobEApFce94gIcP0x-ewbECTANIIia9-IFVjjnPsCN_GKmKcyFq7ad9D5XaRJsmIF7esEeXyeTEQEeY4oE8nnrrOxvY",
-      missingSkills: ["GraphQL"],
-      shortDescription: "Build pixel-perfect, accessible, and performant user interfaces for global payment flows.",
-      description: [
-        "Architect and build responsive, accessible React components.",
-        "Collaborate with design and product to define frontend APIs and standards.",
-        "Optimize Webpack builds and frontend performance metrics.",
-        "Ensure secure and compliant rendering of sensitive payment information."
-      ]
-    },
-    {
-      company: "Airbnb",
-      title: "Product Designer",
-      location: "San Francisco, CA",
-      type: "Contract",
-      locationType: "Hybrid",
-      experience: "Mid Level (3-5 years)",
-      salaryMin: 90000,
-      match: 82,
-      salary: "$90/hr",
-      tags: ["Figma", "Design Systems"],
-      logo: "https://lh3.googleusercontent.com/aida-public/AB6AXuDg5TCxfVEVTwqJBz3K-PoZz7BV9o2AA5pVePpvL0rcQ2qmEXRmFlA0q4xQj7Ledty0tT-oWh2v2MJfW10NJ7T7tBsXlcXcFhkRCegUsSzWpq1n-AwnLT3vxcZslE9dqzR8qr6GivlnTq0nPfj52oIBX2EI5FBBkYXMZKOXFqLvniLWgMp_jvg1z5bBSSGNYbv98_i3eMvUx7ss6vf3rnSI7gZmquBT9kSXD_J-T9MEFc6Y8BfHITPC-q8VBN9vrnEJMIYTTXdwmiA",
-      missingSkills: ["Framer"],
-      shortDescription: "Craft intuitive end-to-end user journeys for hosts and guests around the world.",
-      description: [
-        "Create wireframes, prototypes, and high-fidelity designs.",
-        "Conduct user research and translate insights into design solutions.",
-        "Maintain and evolve our core Design System.",
-        "Partner closely with engineering to ensure high-quality implementation."
-      ]
-    },
-    {
-      company: "Meta",
-      title: "Machine Learning Engineer",
-      location: "Menlo Park, CA",
-      type: "Full-time",
-      locationType: "On-site",
-      experience: "Mid Level (3-5 years)",
-      salaryMin: 180000,
-      match: 88,
-      salary: "$180k - $250k",
-      tags: ["PyTorch", "Recommendation Systems"],
-      logo: "https://upload.wikimedia.org/wikipedia/commons/7/7b/Meta_Platforms_Inc._logo.svg",
-      missingSkills: ["C++"],
-      shortDescription: "Develop deep learning models to personalize content discovery for billions of users.",
-      description: [
-        "Train and evaluate large-scale recommendation models.",
-        "Optimize PyTorch inference pipelines for low latency.",
-        "Run massive A/B tests to measure model impact.",
-        "Publish novel ML research and contribute to open source."
-      ]
-    },
-    {
-      company: "Amazon",
-      title: "SDE Intern",
-      location: "Seattle, WA",
-      type: "Internship",
-      locationType: "On-site",
-      experience: "Entry Level (0-2 years)",
-      salaryMin: 96000,
-      match: 95,
-      salary: "$8k/mo",
-      tags: ["Java", "AWS"],
-      logo: "https://upload.wikimedia.org/wikipedia/commons/4/4a/Amazon_icon.svg",
-      missingSkills: ["DynamoDB"],
-      shortDescription: "Join a 12-week internship program building backend services for AWS core infrastructure.",
-      description: [
-        "Design and implement a scalable microservice using Java and AWS.",
-        "Participate in daily standups and agile sprint planning.",
-        "Write unit and integration tests to ensure code reliability.",
-        "Present your final project to senior engineering leadership."
-      ]
-    },
-    {
-      company: "Netflix",
-      title: "Backend Developer",
-      location: "Los Gatos, CA",
-      type: "Full-time",
-      locationType: "Remote",
-      experience: "Senior (5+ years)",
-      salaryMin: 200000,
-      match: 91,
-      salary: "$200k - $280k",
-      tags: ["Java", "Microservices", "Spring Boot"],
-      logo: "https://upload.wikimedia.org/wikipedia/commons/0/08/Netflix_2015_logo.svg",
-      missingSkills: ["gRPC"],
-      shortDescription: "Build resilient, high-throughput backend services powering global video streaming.",
-      description: [
-        "Design APIs that serve millions of requests per second.",
-        "Implement chaos engineering practices to ensure high availability.",
-        "Optimize JVM performance and memory footprints.",
-        "Collaborate with client teams to define efficient data payloads."
-      ]
-    },
-    {
-      company: "Microsoft",
-      title: "Data Scientist",
-      location: "Redmond, WA",
-      type: "Full-time",
-      locationType: "Hybrid",
-      experience: "Mid Level (3-5 years)",
-      salaryMin: 140000,
-      match: 86,
-      salary: "$140k - $180k",
-      tags: ["Python", "SQL", "PowerBI"],
-      logo: "https://upload.wikimedia.org/wikipedia/commons/4/44/Microsoft_logo.svg",
-      missingSkills: ["Azure ML"],
-      shortDescription: "Analyze massive telemetry datasets to drive product strategy for Office 365.",
-      description: [
-        "Build predictive models for user churn and engagement.",
-        "Design complex SQL pipelines and data warehouses.",
-        "Create interactive dashboards for executive leadership.",
-        "Translate abstract business questions into quantitative analyses."
-      ]
-    },
-    {
-      company: "Apple",
-      title: "Hardware Engineer",
-      location: "Cupertino, CA",
-      type: "Full-time",
-      locationType: "On-site",
-      experience: "Senior (5+ years)",
-      salaryMin: 150000,
-      match: 75,
-      salary: "$150k - $200k",
-      tags: ["Verilog", "PCB Design"],
-      logo: "https://upload.wikimedia.org/wikipedia/commons/f/fa/Apple_logo_black.svg",
-      missingSkills: ["SystemVerilog", "Thermal Analysis"],
-      shortDescription: "Design next-generation silicon and board-level components for future Apple devices.",
-      description: [
-        "Perform schematic capture and PCB layout reviews.",
-        "Conduct signal integrity and power integrity simulations.",
-        "Collaborate with industrial design and manufacturing teams.",
-        "Bring up and debug prototype hardware in the lab."
-      ]
-    },
-    {
-      company: "Vercel",
-      title: "Developer Advocate",
-      location: "San Francisco, CA",
-      type: "Part-time",
-      locationType: "Remote",
-      experience: "Mid Level (3-5 years)",
-      salaryMin: 80000,
-      match: 99,
-      salary: "$80k - $120k",
-      tags: ["Next.js", "Content Creation"],
-      logo: "https://assets.vercel.com/image/upload/v1588805858/repositories/vercel/logo.png",
-      missingSkills: [],
-      shortDescription: "Empower the developer community through education, open-source, and exceptional documentation.",
-      description: [
-        "Write in-depth technical blog posts and tutorials.",
-        "Speak at conferences and host community livestreams.",
-        "Gather feedback from developers to shape product roadmaps.",
-        "Build engaging demo applications showcasing new Vercel features."
-      ]
-    },
-    {
-      company: "Spotify",
-      title: "iOS Engineer",
-      location: "New York, NY",
-      type: "Full-time",
-      locationType: "Hybrid",
-      experience: "Entry Level (0-2 years)",
-      salaryMin: 130000,
-      match: 89,
-      salary: "$130k - $170k",
-      tags: ["Swift", "Objective-C"],
-      logo: "https://upload.wikimedia.org/wikipedia/commons/1/19/Spotify_logo_without_text.svg",
-      missingSkills: ["CoreAudio"],
-      shortDescription: "Deliver seamless audio streaming experiences to millions of iOS users worldwide.",
-      description: [
-        "Write clean, testable Swift code for the core Spotify app.",
-        "Collaborate with designers to implement fluid animations and UI.",
-        "Optimize app binary size and battery consumption.",
-        "Participate in comprehensive code reviews and architectural planning."
-      ]
-    },
-    {
-      company: "Uber",
-      title: "Product Manager",
-      location: "San Francisco, CA",
-      type: "Full-time",
-      locationType: "On-site",
-      experience: "Senior (5+ years)",
-      salaryMin: 160000,
-      match: 81,
-      salary: "$160k - $210k",
-      tags: ["Strategy", "Agile", "Data Analysis"],
-      logo: "https://upload.wikimedia.org/wikipedia/commons/c/cc/Uber_logo_2018.png",
-      missingSkills: ["SQL", "Growth Marketing"],
-      shortDescription: "Lead the roadmap and execution for the driver-side earnings experience.",
-      description: [
-        "Define the vision and strategy for driver financial products.",
-        "Write PRDs and coordinate sprints with engineering and design.",
-        "Analyze market trends and conduct user interviews.",
-        "Track KPIs and iterate rapidly based on data insights."
-      ]
-    }
-  ];
+  useEffect(() => {
+    const syncJobs = () => setJobs(getPublishedJobs());
+    window.addEventListener('careerpilot:jobs-updated', syncJobs);
+    return () => window.removeEventListener('careerpilot:jobs-updated', syncJobs);
+  }, []);
 
-  const handleApply = (job) => {
+  const refreshAiMatches = async () => {
+    if (!aiAvailable || isRefreshingMatches) return;
+    setIsRefreshingMatches(true);
+    try {
+      const rankedJobs = await rankJobsForStudentWithAI({
+        profile: studentProfile,
+        jobs,
+      });
+      const insightMap = rankedJobs.reduce((acc, item) => {
+        acc[`${item.company}::${item.title}`] = item;
+        return acc;
+      }, {});
+      setAiJobInsights(insightMap);
+    } catch (error) {
+      console.error('Gemini job ranking error, keeping default ranking:', error);
+    }
+    setIsRefreshingMatches(false);
+  };
+
+  const handleApply = async (job) => {
     const isAlreadyApplied = applications.some(
       app => app.company.toLowerCase() === job.company.toLowerCase() &&
              app.role.toLowerCase() === job.title.toLowerCase()
     );
     if (isAlreadyApplied) return;
 
-    const newApp = {
-      id: Date.now().toString(),
-      company: job.company,
-      role: job.title,
-      appliedDate: new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
-      status: 'Applied',
-      logo: job.logo || `https://ui-avatars.com/api/?name=${encodeURIComponent(job.company)}&background=random`
-    };
+    setIsGeneratingApplyPackage(true);
+    let tailoredResume = applicationResumeDraft && selectedJob?.company === job.company && selectedJob?.title === job.title
+      ? applicationResumeDraft
+      : tailorResumeForJob(studentProfile, job);
+    let coverLetter = generateCoverLetter(studentProfile, job, tailoredResume);
 
+    if (aiAvailable) {
+      try {
+        const aiResumeDraft = await tailorResumeWithAI({
+          profile: studentProfile,
+          job,
+          currentDraft: tailoredResume,
+        });
+
+        tailoredResume = {
+          ...tailoredResume,
+          summary: aiResumeDraft.tailoredSummary || tailoredResume.summary,
+          tailoredSummary: aiResumeDraft.tailoredSummary || tailoredResume.tailoredSummary,
+          skills: aiResumeDraft.skills.length > 0 ? aiResumeDraft.skills : tailoredResume.skills,
+          experienceBullets: aiResumeDraft.experienceBullets.length > 0 ? aiResumeDraft.experienceBullets : tailoredResume.experienceBullets,
+          projectBullets: aiResumeDraft.projectBullets.length > 0 ? aiResumeDraft.projectBullets : tailoredResume.projectBullets,
+          missingSkills: aiResumeDraft.missingSkills.length > 0 ? aiResumeDraft.missingSkills : tailoredResume.missingSkills,
+          suggestedBullets: aiResumeDraft.suggestedBullets.length > 0 ? aiResumeDraft.suggestedBullets : tailoredResume.suggestedBullets,
+          matchScore: aiResumeDraft.matchScore || tailoredResume.matchScore,
+        };
+
+        coverLetter = await generateCoverLetterWithAI({
+          profile: studentProfile,
+          job,
+          tailoredResume,
+        });
+      } catch (error) {
+        console.error('Gemini apply package error, using fallback:', error);
+      }
+    }
+
+    setSelectedJob(job);
+    setApplicationResumeDraft(tailoredResume);
+    setApplicationDraft({
+      job,
+      coverLetter,
+      tailoredResume,
+    });
+    setIsGeneratingApplyPackage(false);
+  };
+
+  const handleConfirmApply = () => {
+    if (!applicationDraft) return;
+    const newApp = createApplicationRecord(applicationDraft.job, studentProfile, applicationDraft.tailoredResume);
+    newApp.coverLetter = applicationDraft.coverLetter;
     setApplications([newApp, ...applications]);
+    setApplicationDraft(null);
+  };
+
+  const handleTailorResume = (job) => {
+    setSelectedJob(job);
+    setApplicationResumeDraft(tailorResumeForJob(studentProfile, job));
+    setActiveSearchTab('builder');
   };
 
   const handleSearchChange = (e) => {
@@ -278,7 +133,7 @@ export function JobSearch({ searchQuery = '', setSearchQuery, applications = [],
     }
   };
 
-  const filteredJobs = featuredJobs.filter(job => {
+  const filteredJobs = jobs.filter(job => {
     const q = localQuery.toLowerCase();
     const matchesQuery = !q || job.title.toLowerCase().includes(q) ||
                          job.company.toLowerCase().includes(q) ||
@@ -292,6 +147,10 @@ export function JobSearch({ searchQuery = '', setSearchQuery, applications = [],
     const matchesIncome = job.salaryMin >= filterIncome;
 
     return matchesQuery && matchesType && matchesLocType && matchesLocText && matchesExp && matchesIncome;
+  }).sort((a, b) => {
+    const aInsight = aiJobInsights[`${a.company}::${a.title}`];
+    const bInsight = aiJobInsights[`${b.company}::${b.title}`];
+    return (bInsight?.matchScore || b.match || 0) - (aInsight?.matchScore || a.match || 0);
   });
 
   const tabClass = (active) =>
@@ -305,6 +164,9 @@ export function JobSearch({ searchQuery = '', setSearchQuery, applications = [],
           <div className="flex p-1 bg-slate-100 rounded-xl">
             <button onClick={() => setActiveSearchTab('listings')} className={tabClass(activeSearchTab === 'listings')}>
               All listings
+            </button>
+            <button onClick={() => setActiveSearchTab('builder')} className={tabClass(activeSearchTab === 'builder')}>
+              Resume builder
             </button>
             <button onClick={() => setActiveSearchTab('intelligence')} className={tabClass(activeSearchTab === 'intelligence')}>
               Resume AI match
@@ -324,6 +186,14 @@ export function JobSearch({ searchQuery = '', setSearchQuery, applications = [],
                 className="w-full bg-white pl-12 pr-6 py-3 rounded-xl border border-slate-200 focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-colors text-slate-900"
               />
             </div>
+            <button
+              onClick={refreshAiMatches}
+              disabled={!aiAvailable || isRefreshingMatches}
+              className="px-5 bg-white rounded-xl border border-slate-300 flex items-center gap-2 font-semibold text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50"
+            >
+              <span className="material-symbols-outlined">auto_awesome</span>
+              {isRefreshingMatches ? 'Refreshing...' : 'AI match'}
+            </button>
             <button className="px-5 bg-white rounded-xl border border-slate-300 flex items-center gap-2 font-semibold text-slate-700 hover:bg-slate-50 transition-colors">
               <span className="material-symbols-outlined">tune</span>
               Filters
@@ -353,7 +223,18 @@ export function JobSearch({ searchQuery = '', setSearchQuery, applications = [],
                            app.role.toLowerCase() === job.title.toLowerCase()
                   );
                   return (
-                    <JobCard key={i} job={job} applied={isApplied} onApply={() => handleApply(job)} />
+                    <JobCard
+                      key={i}
+                      job={{
+                        ...job,
+                        match: aiJobInsights[`${job.company}::${job.title}`]?.matchScore || job.match,
+                        shortDescription: aiJobInsights[`${job.company}::${job.title}`]?.reason || job.shortDescription,
+                        missingSkills: aiJobInsights[`${job.company}::${job.title}`]?.skillGap ? [aiJobInsights[`${job.company}::${job.title}`].skillGap] : job.missingSkills,
+                      }}
+                      applied={isApplied}
+                      onApply={() => handleApply(job)}
+                      onTailorResume={handleTailorResume}
+                    />
                   );
                 })
               )}
@@ -480,6 +361,27 @@ export function JobSearch({ searchQuery = '', setSearchQuery, applications = [],
               </div>
             </aside>
           </motion.div>
+        ) : activeSearchTab === 'builder' ? (
+          <motion.div
+            key="builder"
+            initial={{ opacity: 0, x: 12 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -12 }}
+          >
+            <ResumeBuilder
+              targetJob={selectedJob}
+              setActiveTab={setActiveTab}
+              onUseForApply={(draft) => {
+                if (!selectedJob) return;
+                setApplicationResumeDraft(draft);
+                setApplicationDraft({
+                  job: selectedJob,
+                  coverLetter: generateCoverLetter(studentProfile, selectedJob, draft),
+                  tailoredResume: draft,
+                });
+              }}
+            />
+          </motion.div>
         ) : (
           <motion.div
             key="intelligence"
@@ -489,6 +391,97 @@ export function JobSearch({ searchQuery = '', setSearchQuery, applications = [],
           >
             <ResumeIntelligence />
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {applicationDraft && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.96 }}
+              className="w-full max-w-3xl rounded-2xl border border-slate-200 bg-white p-8 elev-md"
+            >
+              <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-primary">One-click apply</p>
+                  <h3 className="mt-2 text-2xl font-headline font-semibold text-slate-900">
+                    {applicationDraft.job.title} at {applicationDraft.job.company}
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Review the tailored resume package and cover letter before sending your application.
+                  </p>
+                </div>
+                <button onClick={() => setApplicationDraft(null)} className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600">
+                  <span className="material-symbols-outlined">close</span>
+                </button>
+              </div>
+
+              <div className="mt-6 grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
+                <Card className="p-5">
+                  <h4 className="text-sm font-semibold text-slate-900">Application Package</h4>
+                  <div className="mt-4 space-y-4 text-sm text-slate-600">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.06em] text-slate-400">Candidate</p>
+                      <p className="mt-1 text-slate-900">{studentProfile.name || 'Student Candidate'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.06em] text-slate-400">Resume Match</p>
+                      <p className="mt-1 text-slate-900">{applicationDraft.tailoredResume.matchScore}% match</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.06em] text-slate-400">Generation Mode</p>
+                      <p className="mt-1 text-slate-900">{aiAvailable ? 'Gemini-assisted package' : 'Fallback local package'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.06em] text-slate-400">Skills Submitted</p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {applicationDraft.tailoredResume.skills.slice(0, 8).map((skill) => (
+                          <span key={skill} className="rounded-full bg-primary-soft px-3 py-1 text-xs font-semibold text-primary">{skill}</span>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.06em] text-slate-400">Role-specific summary</p>
+                      <p className="mt-1 leading-6 text-slate-700">{applicationDraft.tailoredResume.summary}</p>
+                    </div>
+                    {applicationDraft.tailoredResume.missingSkills?.length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.06em] text-slate-400">Skill gaps to close next</p>
+                        <p className="mt-1 leading-6 text-slate-700">{applicationDraft.tailoredResume.missingSkills.join(', ')}</p>
+                      </div>
+                    )}
+                  </div>
+                </Card>
+
+                <Card className="p-5">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-sm font-semibold text-slate-900">AI Cover Letter</h4>
+                    <Button variant="ghost" size="sm" onClick={() => setActiveSearchTab('builder')}>
+                      Edit Resume
+                    </Button>
+                  </div>
+                  <textarea
+                    value={applicationDraft.coverLetter}
+                    onChange={(e) => setApplicationDraft({ ...applicationDraft, coverLetter: e.target.value })}
+                    rows="12"
+                    className="mt-4 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-700 outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10"
+                  />
+                </Card>
+              </div>
+
+              <div className="mt-6 flex flex-wrap justify-end gap-3">
+                <Button variant="secondary" onClick={() => {
+                  setSelectedJob(applicationDraft.job);
+                  setActiveSearchTab('builder');
+                }}>
+                  Tailor Resume More
+                </Button>
+                <Button onClick={handleConfirmApply}>Submit Application</Button>
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </div>
