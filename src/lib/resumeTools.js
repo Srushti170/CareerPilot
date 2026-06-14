@@ -82,6 +82,17 @@ function buildProjectBullets(profile) {
   return ['Add 1-2 high-signal projects here to strengthen job-specific applications.'];
 }
 
+function extractKeywords(text = '') {
+  return Array.from(new Set(
+    String(text)
+      .toLowerCase()
+      .replace(/[^a-z0-9+#./\s-]/g, ' ')
+      .split(/\s+/)
+      .map((token) => token.trim())
+      .filter((token) => token.length > 2)
+  ));
+}
+
 export function buildResumeDraft(profile = getStudentProfile(), job = null) {
   const safeProfile = profile || getStudentProfile();
   const jobKeywords = job ? extractKeywordsFromJob(job) : [];
@@ -149,6 +160,91 @@ export function tailorResumeForJob(profile = getStudentProfile(), job = null) {
     missingSkills,
     suggestedBullets,
     matchScore: computedMatch,
+  };
+}
+
+export function resumeDraftToText(draft = {}) {
+  const education = draft.education || {};
+  const sections = [
+    draft.candidateName,
+    draft.targetRole ? `Target role: ${draft.targetRole}` : '',
+    draft.targetCompany ? `Target company: ${draft.targetCompany}` : '',
+    draft.headline,
+    draft.summary || draft.tailoredSummary,
+    draft.skills?.length ? `Skills: ${draft.skills.join(', ')}` : '',
+    education.university,
+    education.degree,
+    education.gpa ? `GPA: ${education.gpa}` : '',
+    education.coursework ? `Coursework: ${education.coursework}` : '',
+    draft.experienceBullets?.length ? `Experience: ${draft.experienceBullets.join(' ')}` : '',
+    draft.projectBullets?.length ? `Projects: ${draft.projectBullets.join(' ')}` : '',
+    draft.achievements?.length ? `Achievements: ${draft.achievements.join(' ')}` : '',
+    draft.certifications?.length ? `Certifications: ${draft.certifications.join(' ')}` : '',
+  ].filter(Boolean);
+
+  return sections.join('\n');
+}
+
+export function buildFallbackApplyReview({ draft = {}, job = {}, profile = {} }) {
+  const jobText = [
+    job.title,
+    job.company,
+    job.shortDescription,
+    ...(job.description || []),
+    ...(job.requirements || []),
+    ...(job.tags || []),
+  ].filter(Boolean).join(' ');
+
+  const jobKeywords = extractKeywords(jobText);
+  const resumeKeywords = new Set(extractKeywords(resumeDraftToText(draft)));
+  const curatedKeywords = Array.from(new Set(
+    jobKeywords.filter((keyword) => (
+      /react|node|python|java|sql|aws|docker|kubernetes|system|design|machine|learning|data|analytics|api|testing|typescript|javascript|frontend|backend|cloud|git|leadership|figma/.test(keyword)
+    ))
+  )).slice(0, 14);
+
+  const sourceKeywords = curatedKeywords.length > 0 ? curatedKeywords : jobKeywords.slice(0, 14);
+  const matchedKeywords = sourceKeywords.filter((keyword) => resumeKeywords.has(keyword));
+  const missingKeywords = sourceKeywords.filter((keyword) => !resumeKeywords.has(keyword));
+  const hasProjects = (draft.projectBullets || []).length > 0;
+  const hasExperience = (draft.experienceBullets || []).length > 0;
+  const hasMetrics = /\d+%|\d+\+|\d+\s*(users|projects|features|internships|months|years|clients)/i.test(resumeDraftToText(draft));
+
+  const matchScore = sourceKeywords.length === 0
+    ? Math.max(55, Number(draft.matchScore || job.match || 0))
+    : Math.max(40, Math.min(96, Math.round((matchedKeywords.length / sourceKeywords.length) * 100)));
+
+  const atsSignals = [
+    draft.summary || draft.tailoredSummary,
+    draft.skills?.length >= 4,
+    hasExperience,
+    hasProjects,
+    hasMetrics,
+    profile.university || draft.education?.university,
+  ].filter(Boolean).length;
+
+  const atsScore = Math.max(38, Math.min(97, Math.round(matchScore * 0.68 + atsSignals * 6)));
+  const readiness = atsScore >= 70 && matchScore >= 65 ? 'ready' : atsScore >= 58 && matchScore >= 55 ? 'needs-work' : 'weak-fit';
+
+  return {
+    atsScore,
+    matchScore,
+    missingKeywords,
+    strengths: [
+      hasProjects ? { title: 'Project evidence present', desc: 'Your resume includes project material that can be tailored to the target role.' } : null,
+      hasExperience ? { title: 'Experience section present', desc: 'You already have experience bullets that can be aligned more tightly to the job description.' } : null,
+      matchedKeywords.length >= 4 ? { title: 'Keyword overlap found', desc: 'The tailored draft already matches several terms from the job description.' } : null,
+    ].filter(Boolean),
+    improvementTips: [
+      missingKeywords.length > 0 ? `Add these missing terms only where truthful: ${missingKeywords.slice(0, 5).join(', ')}.` : 'Keyword overlap is already reasonably strong for this role.',
+      !hasMetrics ? 'Add measurable outcomes to experience or project bullets so ATS and recruiters see impact faster.' : 'Keep measurable outcomes near your strongest bullets.',
+      !hasProjects ? 'Add 1 to 2 relevant projects before applying to this role.' : 'Move the most role-relevant project to the top of the resume.',
+      job.requirements?.[0] ? `Make sure your strongest bullets clearly connect to ${job.requirements[0]}.` : 'Tighten your bullets so they map directly to the most important job requirements.',
+    ],
+    suggestedBullets: (missingKeywords.slice(0, 2).map((keyword, index) => (
+      `Applied ${keyword} in ${index === 0 ? 'hands-on coursework and projects' : 'practical feature development'}, with clear ownership and delivery outcomes.`
+    ))),
+    readiness,
   };
 }
 

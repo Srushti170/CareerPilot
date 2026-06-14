@@ -5,10 +5,11 @@ import { Card } from './ui/Card';
 import { getStudentProfile, saveStudentProfile } from '../lib/studentProfile';
 import { buildResumeDraft, tailorResumeForJob } from '../lib/resumeTools';
 import { isCareerAiAvailable, tailorResumeWithAI } from '../lib/aiCareerTools';
+import { openResumePrintPreview, saveResumeVersion } from '../lib/resumeVersions';
 
 const inputClass = 'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10';
 
-export function ResumeBuilder({ targetJob = null, onUseForApply }) {
+export function ResumeBuilder({ targetJob = null, onUseForApply, reviewContext = null }) {
   const studentProfile = getStudentProfile();
   const aiAvailable = isCareerAiAvailable();
   const tailoredDraft = useMemo(() => tailorResumeForJob(studentProfile, targetJob), [studentProfile, targetJob]);
@@ -64,50 +65,14 @@ export function ResumeBuilder({ targetJob = null, onUseForApply }) {
       coursework,
       onboardingComplete: true,
     });
+    saveResumeVersion({ draft: currentDraft, job: targetJob, source: 'resume-builder' });
     setSavedMessage('Resume sections saved to your student profile.');
     window.setTimeout(() => setSavedMessage(''), 2500);
   };
 
   const handleExport = () => {
-    const previewWindow = window.open('', '_blank');
-    if (!previewWindow) return;
-
-    previewWindow.document.write(`
-      <html>
-        <head>
-          <title>${currentDraft.candidateName} Resume</title>
-          <style>
-            body { font-family: Arial, sans-serif; color: #0f172a; margin: 36px; line-height: 1.5; }
-            h1 { margin-bottom: 6px; }
-            h2 { margin-top: 24px; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; font-size: 16px; text-transform: uppercase; }
-            .muted { color: #475569; font-size: 13px; }
-            ul { padding-left: 18px; }
-            li { margin-bottom: 6px; }
-            .chips { margin-top: 8px; }
-            .chip { display: inline-block; padding: 4px 8px; margin: 0 6px 6px 0; background: #e6f4f1; border-radius: 999px; font-size: 12px; }
-          </style>
-        </head>
-        <body>
-          <h1>${currentDraft.candidateName}</h1>
-          <div class="muted">${studentProfile.email || ''} ${studentProfile.phone ? `| ${studentProfile.phone}` : ''}</div>
-          <div class="muted">${currentDraft.targetCompany ? `Targeting ${currentDraft.targetRole} at ${currentDraft.targetCompany}` : currentDraft.targetRole}</div>
-          <h2>Professional Summary</h2>
-          <p>${currentDraft.summary}</p>
-          <h2>Skills</h2>
-          <div class="chips">${currentDraft.skills.map((skill) => `<span class="chip">${skill}</span>`).join('')}</div>
-          <h2>Education</h2>
-          <p><strong>${currentDraft.education.university}</strong> - ${currentDraft.education.degree}</p>
-          <p class="muted">${currentDraft.education.graduation} ${currentDraft.education.gpa ? `| GPA: ${currentDraft.education.gpa}` : ''}</p>
-          ${currentDraft.education.coursework ? `<p>${currentDraft.education.coursework}</p>` : ''}
-          <h2>Experience</h2>
-          <ul>${currentDraft.experienceBullets.map((item) => `<li>${item}</li>`).join('')}</ul>
-          <h2>Projects</h2>
-          <ul>${currentDraft.projectBullets.map((item) => `<li>${item}</li>`).join('')}</ul>
-          <script>window.onload = () => window.print();</script>
-        </body>
-      </html>
-    `);
-    previewWindow.document.close();
+    saveResumeVersion({ draft: currentDraft, job: targetJob, source: 'resume-export' });
+    openResumePrintPreview(currentDraft);
   };
 
   const handleAiTailor = async () => {
@@ -218,6 +183,20 @@ export function ResumeBuilder({ targetJob = null, onUseForApply }) {
             <Card className="p-6">
               <h3 className="text-lg font-semibold text-slate-900">Tailoring Insights</h3>
               <div className="mt-4 space-y-4">
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.06em] text-slate-500">Apply guidance</p>
+                  <p className="mt-2 text-sm leading-6 text-slate-700">
+                    The one-click apply flow will now re-check this draft with AI before submission. If the ATS fit is still low, CareerPilot will stop the application and show improvement recommendations instead of applying blindly.
+                  </p>
+                </div>
+                {reviewContext && (
+                  <div className="rounded-xl border border-warning/20 bg-warning-soft/40 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.06em] text-warning">Priority fixes before apply</p>
+                    <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-700">
+                      {(reviewContext.improvementTips || []).map((item) => <li key={item}>- {item}</li>)}
+                    </ul>
+                  </div>
+                )}
                 <div>
                   <p className="mb-2 text-xs font-semibold uppercase tracking-[0.06em] text-slate-500">Recommended Keywords</p>
                   <div className="flex flex-wrap gap-2">
@@ -235,12 +214,24 @@ export function ResumeBuilder({ targetJob = null, onUseForApply }) {
                     {currentDraft.missingSkills.map((skill) => (
                       <span key={skill} className="rounded-full bg-warning-soft px-3 py-1 text-xs font-semibold text-warning">{skill}</span>
                     ))}
+                    {(reviewContext?.missingKeywords || []).map((skill) => (
+                      <span key={`review-${skill}`} className="rounded-full bg-warning-soft px-3 py-1 text-xs font-semibold text-warning">{skill}</span>
+                    ))}
                   </div>
                 </div>
+                {reviewContext?.requirementsToImprove?.length > 0 && (
+                  <div>
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-[0.06em] text-slate-500">Requirements To Strengthen</p>
+                    <ul className="space-y-2 text-sm leading-6 text-slate-600">
+                      {reviewContext.requirementsToImprove.map((item) => <li key={item}>- {item}</li>)}
+                    </ul>
+                  </div>
+                )}
                 <div>
                   <p className="mb-2 text-xs font-semibold uppercase tracking-[0.06em] text-slate-500">Suggested Bullet Angles</p>
                   <ul className="space-y-2 text-sm leading-6 text-slate-600">
                     {currentDraft.suggestedBullets.map((bullet) => <li key={bullet}>- {bullet}</li>)}
+                    {(reviewContext?.suggestedBullets || []).map((bullet) => <li key={`review-bullet-${bullet}`}>- {bullet}</li>)}
                   </ul>
                 </div>
               </div>

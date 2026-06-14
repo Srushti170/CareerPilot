@@ -286,7 +286,7 @@ export function RecruiterDashboard({ setActiveTab, applications = [] }) {
                     </div>
                     <div className="flex items-center gap-1">
                       <span className="material-symbols-outlined text-xs text-slate-400">workspace_premium</span>
-                      <span className="text-[10px] font-bold text-slate-500">{job.planTier}</span>
+                      <span className="text-[10px] font-bold text-slate-500">{job.planTier} Tier</span>
                     </div>
                   </div>
                 </div>

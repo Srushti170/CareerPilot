@@ -1,3 +1,5 @@
+import { stateApi } from './backendSync';
+
 const JOBS_KEY = 'careerpilot_jobs';
 
 const DEFAULT_JOBS = [
@@ -165,6 +167,9 @@ export function saveStoredJobs(jobs = []) {
   const normalized = jobs.map(normalizeJob);
   localStorage.setItem(JOBS_KEY, JSON.stringify(normalized));
   window.dispatchEvent(new CustomEvent('careerpilot:jobs-updated', { detail: normalized }));
+  stateApi.saveJobs(normalized).catch((error) => {
+    console.error('Jobs sync error:', error);
+  });
   return normalized;
 }
 

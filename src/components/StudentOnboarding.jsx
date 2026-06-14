@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { motion } from 'motion/react';
 import { getStudentProfile, saveStudentProfile } from '../lib/studentProfile';
+import { authApi } from '../lib/backendSync';
 
 const DEFAULT_PROFILE = {
   name: '',
@@ -69,7 +70,7 @@ export function StudentOnboarding({ currentUser, onComplete }) {
     setForm((prev) => ({ ...prev, skills: prev.skills.filter((item) => item !== skill) }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
     if (!form.university.trim() || !form.degree.trim() || form.skills.length === 0 || !form.codingProfiles.LinkedIn.trim() || !form.codingProfiles.GitHub.trim()) {
@@ -95,8 +96,18 @@ export function StudentOnboarding({ currentUser, onComplete }) {
     saveStudentProfile(profile, currentUser);
 
     if (currentUser) {
-      const updatedUser = { ...currentUser, profileCompleted: true };
+      const updatedUser = { ...currentUser, name: profile.name, email: profile.email, profileCompleted: true };
       localStorage.setItem('careerpilot_current_user', JSON.stringify(updatedUser));
+
+      try {
+        await authApi.updateProfile({
+          currentEmail: currentUser.email,
+          name: profile.name,
+          email: profile.email,
+        });
+      } catch (error) {
+        console.error('Onboarding account sync error:', error);
+      }
     }
 
     setMessage('Profile ready. Opening your dashboard now.');

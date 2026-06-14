@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { GoogleGenAI } from '@google/genai';
 import { Card } from './MetricCard';
 import {
   getInterviewDashboardStats,
@@ -8,9 +7,7 @@ import {
   saveInterviewFeedbackHistory,
 } from '../lib/interviewInsights';
 import { getPublishedJobs } from '../lib/recruiterData';
-
-const apiKey = import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.GEMINI_API_KEY || '';
-const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
+import { aiApi, integrationApi } from '../lib/backendSync';
 const MAX_CONTEXT_ANSWERS = 3;
 
 function cleanJsonString(str) {
@@ -19,6 +16,19 @@ function cleanJsonString(str) {
 
 function normalizeText(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = String(reader.result || '');
+      const [, base64 = ''] = result.split(',');
+      resolve(base64);
+    };
+    reader.onerror = () => reject(reader.error || new Error('Failed to read audio blob.'));
+    reader.readAsDataURL(blob);
+  });
 }
 
 function slugify(value) {
@@ -216,24 +226,9 @@ function buildFallbackFeedback({ target, answers }) {
 }
 
 async function generateOpeningQuestion(target) {
-  if (!ai) return getFallbackOpeningQuestion(target);
-
   try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: `You are conducting a live mock interview.
-
-Use the full role context below to ask exactly one opening interview question.
-- The question must sound like a real interviewer speaking live.
-- It must be specific to the company, role, and job description.
-- It should invite the candidate to answer verbally in 60-120 seconds.
-- Do not ask multiple questions at once.
-- Return ONLY the question as plain text.
-
-${buildJobContext(target)}`,
-    });
-
-    return normalizeText(response.text) || getFallbackOpeningQuestion(target);
+    const response = await aiApi.generateOpeningQuestion(target);
+    return normalizeText(response.question) || getFallbackOpeningQuestion(target);
   } catch (error) {
     console.error('Opening question generation error:', error);
     return getFallbackOpeningQuestion(target);
@@ -241,33 +236,9 @@ ${buildJobContext(target)}`,
 }
 
 async function generateFollowUpQuestion(target, qaHistory) {
-  if (!ai) return getFallbackFollowUpQuestion(target, qaHistory);
-
-  const recentHistory = qaHistory.slice(-MAX_CONTEXT_ANSWERS).map((entry, index) => (
-    `Round ${index + 1}\nQuestion: ${entry.question}\nAnswer: ${entry.answer || ''}`
-  )).join('\n\n');
-
   try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: `You are conducting a live mock interview and need the next follow-up question.
-
-Rules:
-- Ask exactly one question.
-- The question must adapt to the candidate's last answer.
-- Keep it relevant to the job description and the candidate's background.
-- Vary across motivation, technical depth, project evidence, communication, trade-offs, and behavioral judgment.
-- Avoid repeating earlier questions.
-- Return ONLY the next question as plain text.
-
-Role context:
-${buildJobContext(target)}
-
-Conversation so far:
-${recentHistory}`,
-    });
-
-    return normalizeText(response.text) || getFallbackFollowUpQuestion(target, qaHistory);
+    const response = await aiApi.generateFollowUpQuestion(target, qaHistory.slice(-MAX_CONTEXT_ANSWERS));
+    return normalizeText(response.question) || getFallbackFollowUpQuestion(target, qaHistory);
   } catch (error) {
     console.error('Follow-up question generation error:', error);
     return getFallbackFollowUpQuestion(target, qaHistory);
@@ -276,47 +247,20 @@ ${recentHistory}`,
 
 async function evaluateInterview(target, qaHistory) {
   const answers = qaHistory.map((entry) => entry.answer || '');
-  if (!ai) return buildFallbackFeedback({ target, answers });
 
   try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: `You are evaluating a completed mock interview.
-
-Assess the candidate on:
-- communication and clarity
-- job-specific relevance
-- technical or functional depth
-- confidence and structure
-- awareness of trade-offs and impact
-
-Role context:
-${buildJobContext(target)}
-
-Interview transcript:
-${qaHistory.map((entry, index) => `Question ${index + 1}: ${entry.question}\nAnswer ${index + 1}: ${entry.answer || ''}`).join('\n\n')}
-
-Return ONLY JSON:
-{
-  "score": 84,
-  "summary": "2-3 sentence summary",
-  "strengths": ["strength 1", "strength 2", "strength 3"],
-  "weakAreas": ["weak area 1", "weak area 2", "weak area 3"]
-}`,
-    });
-
-    const parsed = JSON.parse(cleanJsonString(response.text || '{}'));
-    if (typeof parsed.score === 'number' && parsed.summary) {
+    const response = await aiApi.evaluateInterview(target, qaHistory);
+    if (typeof response.score === 'number' && response.summary) {
       return {
         id: Date.now().toString(),
         title: `${target.company} - ${target.title}`,
         topicId: target.job.id || 'job-interview',
         roleTrack: target.roleTrack,
-        score: Math.max(0, Math.min(100, Math.round(parsed.score))),
+        score: Math.max(0, Math.min(100, Math.round(response.score))),
         date: new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit' }),
-        summary: normalizeText(parsed.summary),
-        strengths: Array.isArray(parsed.strengths) ? parsed.strengths.map(normalizeText).filter(Boolean).slice(0, 3) : [],
-        weakAreas: Array.isArray(parsed.weakAreas) ? parsed.weakAreas.map(normalizeText).filter(Boolean).slice(0, 3) : [],
+        summary: normalizeText(response.summary),
+        strengths: Array.isArray(response.strengths) ? response.strengths.map(normalizeText).filter(Boolean).slice(0, 3) : [],
+        weakAreas: Array.isArray(response.weakAreas) ? response.weakAreas.map(normalizeText).filter(Boolean).slice(0, 3) : [],
         questionCount: qaHistory.length,
       };
     }
@@ -327,15 +271,33 @@ Return ONLY JSON:
   return buildFallbackFeedback({ target, answers });
 }
 
+async function transcribeAnswerAudio(audioBlob) {
+  if (!audioBlob || audioBlob.size === 0) return '';
+
+  try {
+    const base64Audio = await blobToBase64(audioBlob);
+    const response = await aiApi.transcribeInterviewAudio({
+      mimeType: audioBlob.type || 'audio/webm',
+      data: base64Audio,
+    });
+    return normalizeText(response.transcript || '');
+  } catch (error) {
+    console.error('Audio transcription error:', error);
+    return '';
+  }
+}
+
 export function MockInterviews({ applications = [] }) {
   const videoRef = useRef(null);
   const recognitionRef = useRef(null);
-  const shouldKeepListeningRef = useRef(false);
-  const manualStopRef = useRef(false);
-  const restartListeningTimeoutRef = useRef(null);
   const mediaStreamRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const recordedChunksRef = useRef([]);
+  const speechUtteranceRef = useRef(null);
+  const answerRecorderRef = useRef(null);
+  const answerChunksRef = useRef([]);
+  const answerCaptureActiveRef = useRef(false);
+  const needsAudioTranscriptionRef = useRef(false);
 
   const [selectedTargetId, setSelectedTargetId] = useState('');
   const [questionCount, setQuestionCount] = useState(4);
@@ -355,6 +317,9 @@ export function MockInterviews({ applications = [] }) {
   const [answerDraft, setAnswerDraft] = useState('');
   const [answerSeconds, setAnswerSeconds] = useState(0);
   const [interimTranscript, setInterimTranscript] = useState('');
+  const [mediaStatus, setMediaStatus] = useState('Camera and microphone not connected yet.');
+  const [isTranscribingAnswer, setIsTranscribingAnswer] = useState(false);
+  const [aiConfigured, setAiConfigured] = useState(true);
 
   const publishedJobs = useMemo(() => getPublishedJobs(), []);
   const interviewTargets = useMemo(
@@ -376,10 +341,21 @@ export function MockInterviews({ applications = [] }) {
   }, [interviewTargets, selectedTargetId]);
 
   useEffect(() => {
-    if (videoRef.current && mediaStreamRef.current) {
-      videoRef.current.srcObject = mediaStreamRef.current;
-    }
-  }, [mediaEnabled, activeSession]);
+    const loadProviderStatus = async () => {
+      try {
+        const providers = await integrationApi.getStatus();
+        setAiConfigured(providers?.ai?.provider === 'gemini-server');
+      } catch (error) {
+        console.warn('Unable to fetch AI provider status.', error);
+      }
+    };
+
+    loadProviderStatus();
+  }, []);
+
+  useEffect(() => {
+    attachStreamToPreview();
+  }, [mediaEnabled]);
 
   useEffect(() => {
     let timer;
@@ -398,16 +374,52 @@ export function MockInterviews({ applications = [] }) {
     speakQuestion(activeQuestion);
   }, [activeQuestion, activeSession?.currentQuestionIndex]);
 
+  useEffect(() => {
+    if (!activeSession) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [activeSession]);
+
   useEffect(() => () => {
     stopListening();
     stopMedia();
     window.speechSynthesis?.cancel();
-    if (restartListeningTimeoutRef.current) {
-      window.clearTimeout(restartListeningTimeoutRef.current);
-    }
+    speechUtteranceRef.current = null;
   }, []);
 
+  function attachStreamToPreview() {
+    if (!videoRef.current || !mediaStreamRef.current) return;
+
+    const video = videoRef.current;
+    if (video.srcObject !== mediaStreamRef.current) {
+      video.srcObject = mediaStreamRef.current;
+    }
+
+    const playPreview = async () => {
+      try {
+        await video.play();
+      } catch (error) {
+        console.error('Video preview play error:', error);
+      }
+    };
+
+    video.onloadedmetadata = () => {
+      playPreview();
+    };
+
+    playPreview();
+  }
+
   function stopMedia() {
+    if (answerRecorderRef.current && answerRecorderRef.current.state !== 'inactive') {
+      answerRecorderRef.current.stop();
+    }
+    answerRecorderRef.current = null;
+    answerCaptureActiveRef.current = false;
+    answerChunksRef.current = [];
     stopRecording();
     if (mediaStreamRef.current) {
       mediaStreamRef.current.getTracks().forEach((track) => track.stop());
@@ -422,7 +434,9 @@ export function MockInterviews({ applications = [] }) {
 
     try {
       recordedChunksRef.current = [];
-      const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+      const preferredMimeTypes = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+      const mimeType = preferredMimeTypes.find((type) => MediaRecorder.isTypeSupported?.(type)) || '';
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
       recorder.ondataavailable = (event) => {
         if (event.data && event.data.size > 0) {
           recordedChunksRef.current.push(event.data);
@@ -455,24 +469,110 @@ export function MockInterviews({ applications = [] }) {
     mediaRecorderRef.current = null;
   }
 
+  function startAnswerCapture(stream) {
+    if (typeof MediaRecorder === 'undefined' || !stream) return false;
+    if (answerRecorderRef.current?.state === 'recording') return true;
+
+    const audioTracks = stream.getAudioTracks();
+    if (!audioTracks.length) {
+      setPermissionError('Microphone track is unavailable. Please reconnect your microphone and try again.');
+      return false;
+    }
+
+    try {
+      answerChunksRef.current = [];
+      const audioStream = new MediaStream(audioTracks);
+      const preferredMimeTypes = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'];
+      const mimeType = preferredMimeTypes.find((type) => MediaRecorder.isTypeSupported?.(type)) || '';
+      const recorder = mimeType ? new MediaRecorder(audioStream, { mimeType }) : new MediaRecorder(audioStream);
+      recorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          answerChunksRef.current.push(event.data);
+        }
+      };
+      recorder.onstart = () => {
+        answerCaptureActiveRef.current = true;
+      };
+      recorder.onstop = () => {
+        answerCaptureActiveRef.current = false;
+      };
+      recorder.start();
+      answerRecorderRef.current = recorder;
+      return true;
+    } catch (error) {
+      console.error('Answer capture start error:', error);
+      setPermissionError('Answer recording could not start. Please try again.');
+      return false;
+    }
+  }
+
+  async function stopAnswerCapture() {
+    if (!answerRecorderRef.current) {
+      return answerChunksRef.current.length
+        ? new Blob(answerChunksRef.current, { type: answerChunksRef.current[0]?.type || 'audio/webm' })
+        : null;
+    }
+
+    const recorder = answerRecorderRef.current;
+
+    if (recorder.state === 'inactive') {
+      answerRecorderRef.current = null;
+      return answerChunksRef.current.length
+        ? new Blob(answerChunksRef.current, { type: answerChunksRef.current[0]?.type || recorder.mimeType || 'audio/webm' })
+        : null;
+    }
+
+    return new Promise((resolve) => {
+      recorder.onstop = () => {
+        answerCaptureActiveRef.current = false;
+        const blob = answerChunksRef.current.length
+          ? new Blob(answerChunksRef.current, { type: answerChunksRef.current[0]?.type || recorder.mimeType || 'audio/webm' })
+          : null;
+        answerRecorderRef.current = null;
+        resolve(blob);
+      };
+      recorder.stop();
+    });
+  }
+
   async function requestMediaAccess() {
     setPermissionError('');
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      if (mediaStreamRef.current) {
+        mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: 'user',
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
       mediaStreamRef.current = stream;
       setMediaEnabled(true);
+      setMediaStatus('Camera and microphone connected successfully.');
+      window.setTimeout(() => attachStreamToPreview(), 0);
       return true;
     } catch (error) {
       console.error('Media permission error:', error);
       setPermissionError('Camera and microphone access are required for the live mock interview experience.');
+      setMediaStatus('Camera and microphone access was denied or unavailable.');
       return false;
     }
   }
 
   function speakQuestion(question) {
     if (!question || !window.speechSynthesis) return;
+    void stopListening();
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(question);
+    speechUtteranceRef.current = utterance;
     utterance.rate = 1;
     utterance.pitch = 1;
     utterance.onstart = () => setIsAiSpeaking(true);
@@ -482,20 +582,43 @@ export function MockInterviews({ applications = [] }) {
   }
 
   function startListening() {
-    if (!recognitionSupported || isListening) return;
+    if (isListening || loadingNextQuestion || evaluating || isTranscribingAnswer) return;
+    if (isAiSpeaking) {
+      setPermissionError('Wait for the interviewer to finish speaking before starting your answer.');
+      return;
+    }
+    if (!mediaEnabled) {
+      setPermissionError('Turn on camera and microphone access before answering.');
+      return;
+    }
+    if (!recognitionSupported && !aiConfigured) {
+      setPermissionError('This browser cannot do live speech recognition, and the server AI interviewer is not configured yet. Connect the Gemini server key or use a browser with speech recognition support.');
+      return;
+    }
+
+    if (!startAnswerCapture(mediaStreamRef.current)) {
+      return;
+    }
+
+    needsAudioTranscriptionRef.current = !recognitionSupported;
+    setPermissionError('');
+    setInterimTranscript('');
+    setIsListening(true);
+
+    if (!recognitionSupported) {
+      setMediaStatus('Recording answer audio. Transcription will be generated after you stop speaking.');
+      return;
+    }
 
     const RecognitionCtor = getSpeechRecognitionCtor();
     const recognition = new RecognitionCtor();
-    manualStopRef.current = false;
-    shouldKeepListeningRef.current = true;
-    setPermissionError('');
     recognition.lang = 'en-US';
     recognition.continuous = true;
     recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
 
     recognition.onstart = () => {
-      setIsListening(true);
-      setInterimTranscript('');
+      setMediaStatus('Microphone is live. Speak naturally and your answer will appear below.');
     };
 
     recognition.onresult = (event) => {
@@ -519,48 +642,97 @@ export function MockInterviews({ applications = [] }) {
 
     recognition.onerror = (event) => {
       console.error('Speech recognition error:', event.error);
-      setIsListening(false);
+      recognitionRef.current = null;
       if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
-        shouldKeepListeningRef.current = false;
+        needsAudioTranscriptionRef.current = true;
         setPermissionError('Microphone transcription permission was blocked by the browser. Please allow mic access and try again.');
+        setMediaStatus('Live transcription was blocked. Keep speaking and the answer will be transcribed after you stop.');
       } else if (event.error === 'audio-capture') {
-        shouldKeepListeningRef.current = false;
+        needsAudioTranscriptionRef.current = true;
         setPermissionError('No microphone input was detected. Please check your mic and browser device settings.');
+        setMediaStatus('Microphone input was not detected.');
       } else if (event.error === 'no-speech') {
-        setPermissionError('No speech was detected yet. Keep the mic open and start speaking clearly.');
+        needsAudioTranscriptionRef.current = true;
+        setPermissionError('No speech was detected. Click start answer again and speak clearly after the mic opens.');
+        setMediaStatus('No live transcript detected yet. Keep speaking or try again.');
+      } else if (event.error === 'network') {
+        if (aiConfigured) {
+          needsAudioTranscriptionRef.current = true;
+          setPermissionError('Browser speech recognition hit a network error. Your answer is still being recorded and will be transcribed after you stop.');
+          setMediaStatus('Using AI audio transcription fallback. Keep speaking, then click stop answer.');
+        } else {
+          setPermissionError('Browser speech recognition hit a network error and the server AI fallback is not configured. Please retry or type your answer manually.');
+          setMediaStatus('Live transcription failed and no AI fallback is available.');
+        }
+      } else if (event.error === 'aborted') {
+        if (answerCaptureActiveRef.current) {
+          needsAudioTranscriptionRef.current = true;
+          setMediaStatus('Live transcription stopped. Audio capture is still running.');
+        } else {
+          setMediaStatus('Microphone stopped.');
+        }
+      } else {
+        needsAudioTranscriptionRef.current = true;
+        setPermissionError('Speech recognition stopped unexpectedly. We will use audio transcription for this answer.');
+        setMediaStatus('Speech recognition stopped unexpectedly. Audio transcription fallback is active.');
       }
     };
 
     recognition.onend = () => {
-      setIsListening(false);
       recognitionRef.current = null;
-      const shouldRestart = shouldKeepListeningRef.current && !manualStopRef.current;
-      if (shouldRestart) {
-        restartListeningTimeoutRef.current = window.setTimeout(() => {
-          if (shouldKeepListeningRef.current && !recognitionRef.current) {
-            startListening();
-          }
-        }, 200);
-        return;
+      if (!answerCaptureActiveRef.current) {
+        setIsListening(false);
+        setMediaStatus('Microphone stopped. You can review the transcript or start speaking again.');
       }
     };
 
     recognitionRef.current = recognition;
-    recognition.start();
+    try {
+      recognition.start();
+    } catch (error) {
+      console.error('Speech recognition start error:', error);
+      recognitionRef.current = null;
+      setIsListening(false);
+      setPermissionError('The browser could not start speech recognition. Please try again.');
+      setMediaStatus('Speech recognition could not start.');
+    }
   }
 
-  function stopListening() {
-    shouldKeepListeningRef.current = false;
-    manualStopRef.current = true;
-    if (restartListeningTimeoutRef.current) {
-      window.clearTimeout(restartListeningTimeoutRef.current);
-      restartListeningTimeoutRef.current = null;
-    }
+  async function stopListening() {
     if (recognitionRef.current) {
       recognitionRef.current.stop();
       recognitionRef.current = null;
     }
+
+    const audioBlob = await stopAnswerCapture();
+    const draftSnapshot = normalizeText(answerDraft);
+    const interimSnapshot = normalizeText(interimTranscript);
+    const needsTranscription = Boolean(
+      audioBlob &&
+      (needsAudioTranscriptionRef.current || !draftSnapshot && !interimSnapshot)
+    );
+
+    let transcribedText = '';
+    if (needsTranscription) {
+      setIsTranscribingAnswer(true);
+      setMediaStatus('Transcribing your spoken answer...');
+      transcribedText = await transcribeAnswerAudio(audioBlob);
+      setIsTranscribingAnswer(false);
+
+      if (transcribedText) {
+        setAnswerDraft((prev) => normalizeText(`${prev} ${transcribedText}`));
+        setInterimTranscript('');
+        setMediaStatus('Answer transcribed successfully. Review it and continue.');
+      } else {
+        setMediaStatus('Audio was captured, but transcription could not be generated. You can type or retry.');
+      }
+    } else {
+      setMediaStatus('Microphone stopped. You can review the transcript or start speaking again.');
+    }
+
+    needsAudioTranscriptionRef.current = false;
     setIsListening(false);
+    return transcribedText;
   }
 
   async function handleInitializeSession() {
@@ -574,6 +746,7 @@ export function MockInterviews({ applications = [] }) {
     setAnswerDraft('');
     setInterimTranscript('');
     setPermissionError('');
+    setMediaStatus('Preparing your live interview session.');
     if (recordingUrl) {
       URL.revokeObjectURL(recordingUrl);
       setRecordingUrl('');
@@ -593,13 +766,14 @@ export function MockInterviews({ applications = [] }) {
       startedAt: new Date().toISOString(),
     });
     setPreparingSession(false);
+    setMediaStatus('Interview ready. Listen to the question, then click start answer when you are ready.');
   }
 
   async function handleSubmitAnswer() {
     if (!activeSession) return;
 
-    stopListening();
-    const normalizedAnswer = normalizeText(`${answerDraft} ${interimTranscript}`);
+    const transcribedText = await stopListening();
+    const normalizedAnswer = normalizeText(`${answerDraft} ${interimTranscript} ${transcribedText}`);
     if (!normalizedAnswer) return;
 
     const currentQuestion = activeSession.questions[activeSession.currentQuestionIndex];
@@ -614,6 +788,7 @@ export function MockInterviews({ applications = [] }) {
     const answeredCount = nextQaHistory.length;
     if (answeredCount >= activeSession.questionCount) {
       setEvaluating(true);
+      setMediaStatus('Interview complete. Generating your feedback.');
       const finalFeedback = await evaluateInterview(activeSession.target, nextQaHistory);
       const persistedHistory = saveInterviewFeedbackHistory([finalFeedback, ...feedbackHistory]);
       setFeedbackHistory(persistedHistory);
@@ -637,10 +812,11 @@ export function MockInterviews({ applications = [] }) {
     setAnswerDraft('');
     setInterimTranscript('');
     setLoadingNextQuestion(false);
+    setMediaStatus('Next question ready. Click start answer when you are ready to speak.');
   }
 
   function quitSession() {
-    stopListening();
+    void stopListening();
     window.speechSynthesis?.cancel();
     setActiveSession(null);
     setAnswerDraft('');
@@ -648,6 +824,7 @@ export function MockInterviews({ applications = [] }) {
     setPreparingSession(false);
     setLoadingNextQuestion(false);
     stopRecording();
+    setMediaStatus(mediaEnabled ? 'Camera is still connected. You can start another interview when ready.' : 'Interview stopped.');
   }
 
   return (
@@ -657,7 +834,7 @@ export function MockInterviews({ applications = [] }) {
           <div className="mb-2 flex w-fit items-center gap-2 rounded-full bg-primary/10 px-3 py-1">
             <span className="h-2 w-2 animate-pulse rounded-full bg-primary"></span>
             <span className="text-[10px] font-black uppercase tracking-widest text-primary">
-              {ai ? 'JD-Aware AI Interviewer' : 'Live Browser Interview Mode'}
+              {aiConfigured ? 'Server AI Interviewer' : 'Interview Room Setup'}
             </span>
           </div>
           <h2 className="text-4xl font-black tracking-tighter text-on-surface">AI Mock Interview</h2>
@@ -700,7 +877,8 @@ export function MockInterviews({ applications = [] }) {
             <div className="mt-3 space-y-2 text-sm text-slate-600">
               <p><span className="font-semibold text-slate-900">{dashboardStats.sessions}</span> completed sessions</p>
               <p><span className="font-semibold text-slate-900">{dashboardStats.averageScore}%</span> average score</p>
-              <p>{recognitionSupported ? 'Voice transcription supported in this browser.' : 'Voice transcription is not supported in this browser.'}</p>
+              <p>{recognitionSupported ? 'Live browser transcription is available, with AI audio fallback if it fails.' : 'Browser transcription is unavailable, so AI audio fallback will be used.'}</p>
+              <p>{mediaStatus}</p>
             </div>
           </Card>
         </div>
@@ -735,8 +913,9 @@ export function MockInterviews({ applications = [] }) {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
-            className="grid grid-cols-12 gap-8"
+            className="fixed inset-0 z-50 overflow-y-auto bg-slate-950 px-6 py-6 text-white md:px-10"
           >
+            <div className="mx-auto grid min-h-full w-full max-w-7xl grid-cols-12 gap-8">
             <div className="col-span-12 space-y-6 lg:col-span-7">
               <Card className="space-y-6 p-6 md:p-8">
                 <div className="flex items-center justify-between border-b border-slate-100 pb-4">
@@ -759,15 +938,17 @@ export function MockInterviews({ applications = [] }) {
                   <div className="mt-4 flex flex-wrap gap-3">
                     <button
                       onClick={() => speakQuestion(activeQuestion)}
+                      disabled={isTranscribingAnswer}
                       className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-slate-700 transition-colors hover:bg-slate-50"
                     >
                       Repeat question
                     </button>
                     <button
-                      onClick={stopListening}
+                      onClick={() => { void stopListening(); }}
+                      disabled={!isListening || isTranscribingAnswer}
                       className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-slate-700 transition-colors hover:bg-slate-50"
                     >
-                      Pause listening
+                      Stop answer
                     </button>
                   </div>
                 </div>
@@ -776,19 +957,28 @@ export function MockInterviews({ applications = [] }) {
                   <div className="flex items-center justify-between">
                     <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">Your spoken answer</p>
                     <div className="flex items-center gap-2">
+                      <span className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest ${
+                        isAiSpeaking
+                          ? 'bg-amber-100 text-amber-700'
+                          : isListening
+                            ? 'bg-primary/10 text-primary'
+                            : 'bg-slate-200 text-slate-600'
+                      }`}>
+                        {isAiSpeaking ? 'Interviewer speaking' : isListening ? 'Mic live' : 'Mic idle'}
+                      </span>
                       {isListening && (
                         <span className="text-[10px] font-black uppercase tracking-widest text-primary">
                           Listening - {answerSeconds}s
                         </span>
                       )}
                       <button
-                        onClick={isListening ? stopListening : startListening}
-                        disabled={!recognitionSupported || loadingNextQuestion}
+                        onClick={isListening ? () => { void stopListening(); } : startListening}
+                        disabled={loadingNextQuestion || isAiSpeaking || isTranscribingAnswer}
                         className={`rounded-xl px-4 py-2.5 text-xs font-bold uppercase tracking-wider transition-colors ${
                           isListening ? 'bg-danger text-white' : 'bg-primary text-white'
                         } disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500`}
                       >
-                        {isListening ? 'Stop answer' : 'Start answer'}
+                        {isTranscribingAnswer ? 'Transcribing...' : isListening ? 'Stop answer' : 'Start answer'}
                       </button>
                     </div>
                   </div>
@@ -807,6 +997,11 @@ export function MockInterviews({ applications = [] }) {
                       {interimTranscript || 'Interim speech transcription will appear here while you are answering.'}
                     </p>
                   </div>
+
+                  <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                    <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">Mic status</p>
+                    <p className="mt-2 text-sm text-slate-600">{mediaStatus}</p>
+                  </div>
                 </div>
 
                 <div className="flex items-center justify-between pt-2">
@@ -818,10 +1013,12 @@ export function MockInterviews({ applications = [] }) {
                   </button>
                   <button
                     onClick={handleSubmitAnswer}
-                    disabled={loadingNextQuestion || !normalizeText(`${answerDraft} ${interimTranscript}`)}
+                    disabled={loadingNextQuestion || isTranscribingAnswer || (!isListening && !normalizeText(`${answerDraft} ${interimTranscript}`))}
                     className="rounded-xl bg-primary px-6 py-2.5 text-xs font-black uppercase tracking-widest text-white shadow-lg shadow-primary/15 transition-all hover:shadow-primary/25 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
                   >
-                    {loadingNextQuestion
+                    {isTranscribingAnswer
+                      ? 'Transcribing...'
+                      : loadingNextQuestion
                       ? 'Generating follow-up...'
                       : activeSession.currentQuestionIndex === activeSession.questionCount - 1
                         ? 'Finish and analyze'
@@ -834,17 +1031,33 @@ export function MockInterviews({ applications = [] }) {
             <div className="col-span-12 space-y-6 lg:col-span-5">
               <Card className="overflow-hidden p-0">
                 <div className="border-b border-slate-100 bg-slate-900 px-5 py-4 text-white">
-                  <p className="text-sm font-bold">Live camera preview</p>
-                  <p className="mt-1 text-xs text-slate-300">Practice with the same camera presence and speaking rhythm you would use in a real interview.</p>
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-bold">Live interview room</p>
+                      <p className="mt-1 text-xs text-slate-300">Stay on camera, answer aloud, and let the AI interviewer drive the session like a real call.</p>
+                    </div>
+                    <span className="rounded-full bg-white/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-white">
+                      {activeSession.target.company}
+                    </span>
+                  </div>
                 </div>
                 <div className="relative aspect-[4/3] bg-black">
                   {mediaEnabled ? (
-                    <video ref={videoRef} autoPlay muted playsInline className="h-full w-full object-cover" />
+                    <video ref={videoRef} autoPlay muted playsInline className="h-full w-full object-cover [transform:scaleX(-1)]" />
                   ) : (
                     <div className="flex h-full items-center justify-center text-slate-400">Camera preview unavailable</div>
                   )}
-                  <div className="absolute right-4 top-4 rounded-full bg-white/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-white backdrop-blur">
-                    {recordingActive ? 'Recording live' : mediaEnabled ? 'Camera on' : 'Camera off'}
+                  <div className="absolute inset-x-0 top-0 flex items-center justify-between p-4">
+                    <div className="rounded-full bg-rose-500/90 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-white shadow-lg">
+                      Live interview
+                    </div>
+                    <div className="rounded-full bg-white/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-white backdrop-blur">
+                      {recordingActive ? 'Recording live' : mediaEnabled ? 'Camera on' : 'Camera off'}
+                    </div>
+                  </div>
+                  <div className="absolute bottom-4 left-4 rounded-2xl bg-black/55 px-4 py-3 text-xs font-semibold text-white backdrop-blur">
+                    <p>{activeSession.target.company}</p>
+                    <p className="mt-1 text-[11px] text-slate-300">{activeSession.target.title}</p>
                   </div>
                 </div>
               </Card>
@@ -876,12 +1089,13 @@ export function MockInterviews({ applications = [] }) {
               <Card className="overflow-hidden border-0 bg-primary p-6 text-white shadow-xl">
                 <h4 className="font-bold">Interview signals</h4>
                 <div className="mt-4 space-y-3 text-sm">
-                  <div className="rounded-xl bg-white/10 p-3">Mic: {recognitionSupported ? 'Speech recognition ready' : 'Browser speech recognition unavailable'}</div>
+                  <div className="rounded-xl bg-white/10 p-3">Mic: {recognitionSupported ? 'Live transcription plus AI fallback ready' : 'AI audio transcription fallback ready'}</div>
                   <div className="rounded-xl bg-white/10 p-3">Delivery: {isListening ? 'Capturing live answer' : 'Waiting for your response'}</div>
-                  <div className="rounded-xl bg-white/10 p-3">AI: {ai ? 'Job-aware questioning and evaluation enabled' : 'Fallback interview logic enabled'}</div>
+                  <div className="rounded-xl bg-white/10 p-3">AI: {aiConfigured ? 'Server-backed AI interviewer enabled' : 'AI interviewer not configured yet'}</div>
                   <div className="rounded-xl bg-white/10 p-3">Recording: {recordingActive ? 'Session is being recorded' : 'Recording idle'}</div>
                 </div>
               </Card>
+            </div>
             </div>
           </motion.div>
         ) : null}
@@ -1076,6 +1290,30 @@ export function MockInterviews({ applications = [] }) {
                     </button>
                   </div>
 
+                  <div className="mt-8 overflow-hidden rounded-3xl border border-slate-200 bg-slate-900">
+                    <div className="flex items-center justify-between border-b border-white/10 px-5 py-4 text-white">
+                      <div>
+                        <p className="text-sm font-bold">Camera and mic preview</p>
+                        <p className="mt-1 text-xs text-slate-300">Check your framing and permissions before the interview starts.</p>
+                      </div>
+                      <span className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest ${mediaEnabled ? 'bg-emerald-500/20 text-emerald-200' : 'bg-white/10 text-slate-200'}`}>
+                        {mediaEnabled ? 'Connected' : 'Not connected'}
+                      </span>
+                    </div>
+                    <div className="relative aspect-video bg-black">
+                      {mediaEnabled ? (
+                        <video ref={videoRef} autoPlay muted playsInline className="h-full w-full object-cover [transform:scaleX(-1)]" />
+                      ) : (
+                        <div className="flex h-full items-center justify-center px-6 text-center text-sm text-slate-400">
+                          Allow camera and microphone access to see your live preview here.
+                        </div>
+                      )}
+                      <div className="absolute bottom-4 left-4 rounded-full bg-black/50 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-white backdrop-blur">
+                        {mediaEnabled ? 'Preview live' : 'Preview unavailable'}
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="absolute left-10 top-10 flex items-center gap-3 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
                     <span className="material-symbols-outlined text-sm text-primary">mic</span>
                     <span className="text-[10px] font-bold uppercase tracking-widest text-slate-600">
@@ -1085,7 +1323,7 @@ export function MockInterviews({ applications = [] }) {
                   <div className="absolute bottom-10 right-10 flex items-center gap-3 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
                     <span className="material-symbols-outlined text-sm text-primary">smart_toy</span>
                     <span className="text-[10px] font-bold uppercase tracking-widest text-slate-600">
-                      {ai ? 'AI adaptive interviewer' : 'Fallback interviewer'}
+                      {aiConfigured ? 'AI adaptive interviewer' : 'AI not configured'}
                     </span>
                   </div>
                 </Card>

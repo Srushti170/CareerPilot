@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Card } from './ui/Card';
 import { cn } from '../lib/utils';
+import { createInterviewEvent, pushWorkflowNotification, sendWorkflowEmail } from '../lib/workflowActions';
 
 function getLogo(app) {
   return app.logo || `https://ui-avatars.com/api/?name=${encodeURIComponent(app.company)}&background=random&size=128`;
@@ -76,29 +77,74 @@ export function Applications({ applications = [], setApplications }) {
     if (setApplications) {
       setApplications(applications.filter((app) => app.id !== id));
     }
+    if (withdrawApp) {
+      pushWorkflowNotification(
+        'Application withdrawn',
+        `You withdrew your ${withdrawApp.role} application at ${withdrawApp.company}.`
+      );
+    }
     setWithdrawApp(null);
   };
 
-  const promoteToShortlisted = (app) => {
+  const promoteToShortlisted = async (app) => {
     updateApplication(app.id, (current) => ({ ...current, status: 'Reviewing' }));
     setActiveDetailsApp((current) => current ? { ...current, status: 'Reviewing' } : current);
+    pushWorkflowNotification('Application shortlisted', `${app.company} shortlisted you for ${app.role}.`);
+    await sendWorkflowEmail({
+      to: app.studentName || 'Candidate',
+      subject: `Shortlisted for ${app.role}`,
+      body: `Good news. ${app.company} shortlisted your application for ${app.role}. Open CareerPilot to review the latest status and interview options.`,
+    });
   };
 
-  const confirmInterviewSlot = (app, slot) => {
-    updateApplication(app.id, (current) => ({ ...current, status: 'Interview', selectedInterviewSlot: slot }));
-    setActiveDetailsApp((current) => current ? { ...current, status: 'Interview', selectedInterviewSlot: slot } : current);
+  const confirmInterviewSlot = async (app, slot) => {
+    updateApplication(app.id, (current) => ({
+      ...current,
+      status: 'Interview',
+      selectedInterviewSlot: slot,
+      availableInterviewSlots: [slot],
+    }));
+    setActiveDetailsApp((current) => current ? { ...current, status: 'Interview', selectedInterviewSlot: slot, availableInterviewSlots: [slot] } : current);
     setScheduleApp(null);
+    pushWorkflowNotification(
+      'Interview confirmed',
+      `You confirmed ${app.role} at ${app.company} for ${slot.label} at ${slot.time}.`
+    );
+    await Promise.all([
+      createInterviewEvent(app, slot, app.interviewType || 'Technical Round 1'),
+      sendWorkflowEmail({
+        to: app.company,
+        subject: `Candidate confirmed interview: ${app.role}`,
+        body: `${app.studentName || 'The candidate'} confirmed the ${app.role} interview slot for ${slot.label} at ${slot.time}.`,
+      }),
+    ]);
   };
 
-  const moveToOffer = (app) => {
+  const moveToOffer = async (app) => {
     updateApplication(app.id, (current) => ({ ...current, status: 'Offered' }));
     setActiveDetailsApp((current) => current ? { ...current, status: 'Offered' } : current);
+    pushWorkflowNotification('Offer received', `${app.company} moved your ${app.role} application to the offer stage.`);
+    await sendWorkflowEmail({
+      to: app.studentName || 'Candidate',
+      subject: `Offer stage: ${app.role}`,
+      body: `${app.company} has moved your ${app.role} application to the offer stage. Review the latest update in CareerPilot.`,
+    });
   };
 
-  const resolveOffer = (app, decision) => {
+  const resolveOffer = async (app, decision) => {
     const nextStatus = decision === 'accept' ? 'Accepted' : 'Declined';
+    const decisionLabel = decision === 'accept' ? 'accepted' : 'declined';
     updateApplication(app.id, (current) => ({ ...current, status: nextStatus, offerDecision: decision }));
     setActiveDetailsApp((current) => current ? { ...current, status: nextStatus, offerDecision: decision } : current);
+    pushWorkflowNotification(
+      decision === 'accept' ? 'Offer accepted' : 'Offer declined',
+      `You ${decisionLabel} the ${app.role} offer from ${app.company}.`
+    );
+    await sendWorkflowEmail({
+      to: app.company,
+      subject: `Offer ${decisionLabel}: ${app.role}`,
+      body: `${app.studentName || 'The candidate'} ${decisionLabel} the ${app.role} offer from ${app.company}.`,
+    });
   };
 
   return (

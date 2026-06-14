@@ -212,3 +212,59 @@ ${JSON.stringify(trimmedJobs, null, 2)}`,
       }))
     : [];
 }
+
+export async function reviewTailoredResumeForJobWithAI({ profile, job, tailoredResume, coverLetter = '' }) {
+  const client = getClient();
+  if (!client) {
+    throw new Error('AI client unavailable');
+  }
+
+  const response = await client.models.generateContent({
+    model: 'gemini-2.5-flash',
+    contents: `You are an AI recruiting assistant reviewing whether a student should apply now or improve the resume first.
+Review the tailored resume package against the target job.
+Return ONLY valid JSON in this shape:
+{
+  "atsScore": 74,
+  "matchScore": 69,
+  "readiness": "ready",
+  "missingKeywords": ["Docker"],
+  "requirementsToImprove": ["System design depth", "Production cloud exposure"],
+  "improvementTips": ["...", "..."],
+  "suggestedBullets": ["...", "..."],
+  "reasoning": "1-2 sentence explanation for the decision"
+}
+
+Rules:
+- readiness must be one of "ready", "needs-work", or "weak-fit"
+- scores must be integers from 0 to 100
+- do not invent experience
+- missingKeywords and requirementsToImprove must be job-relevant
+- if the role is a poor fit even after tailoring, say so clearly and explain what is missing
+- suggestedBullets must remain truthful to the provided profile and draft
+
+Student profile:
+${JSON.stringify(profile || {}, null, 2)}
+
+Target job:
+${JSON.stringify(job || {}, null, 2)}
+
+Tailored resume:
+${JSON.stringify(tailoredResume || {}, null, 2)}
+
+Cover letter:
+${coverLetter}`,
+  });
+
+  const parsed = JSON.parse(cleanJsonString(response.text || '{}'));
+  return {
+    atsScore: Math.max(0, Math.min(100, Number(parsed.atsScore || 0))),
+    matchScore: Math.max(0, Math.min(100, Number(parsed.matchScore || 0))),
+    readiness: ['ready', 'needs-work', 'weak-fit'].includes(parsed.readiness) ? parsed.readiness : 'needs-work',
+    missingKeywords: sanitizeStringList(parsed.missingKeywords),
+    requirementsToImprove: sanitizeStringList(parsed.requirementsToImprove),
+    improvementTips: sanitizeStringList(parsed.improvementTips),
+    suggestedBullets: sanitizeStringList(parsed.suggestedBullets),
+    reasoning: String(parsed.reasoning || '').trim(),
+  };
+}

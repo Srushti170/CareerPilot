@@ -42,14 +42,14 @@ export function PlacementDashboard() {
     window.addEventListener('careerpilot:students-updated', syncStudents);
     window.addEventListener('careerpilot:jobs-updated', syncJobs);
     window.addEventListener('careerpilot:announcements-updated', syncAnnouncements);
-    window.addEventListener('storage', syncApplications);
+    window.addEventListener('careerpilot:storage-updated:careerpilot_applications', syncApplications);
 
     return () => {
       window.removeEventListener('careerpilot:companies-updated', syncCompanies);
       window.removeEventListener('careerpilot:students-updated', syncStudents);
       window.removeEventListener('careerpilot:jobs-updated', syncJobs);
       window.removeEventListener('careerpilot:announcements-updated', syncAnnouncements);
-      window.removeEventListener('storage', syncApplications);
+      window.removeEventListener('careerpilot:storage-updated:careerpilot_applications', syncApplications);
     };
   }, []);
 

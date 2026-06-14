@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { getStudentProfile, saveStudentProfile } from '../lib/studentProfile';
+import { authApi } from '../lib/backendSync';
 
 const SETTINGS_KEY = 'careerpilot_settings';
 const NOTIFICATION_SETTINGS_KEY = 'careerpilot_notification_preferences';
@@ -83,7 +84,7 @@ export function Settings() {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(updated));
   };
 
-  const handleSaveProfile = (e) => {
+  const handleSaveProfile = async (e) => {
     e.preventDefault();
     setError('');
     setSuccess('');
@@ -97,7 +98,19 @@ export function Settings() {
       users[userIndex].name = name;
       users[userIndex].email = email;
 
-      const updatedUser = { ...currentUser, name, email };
+      let updatedUser = { ...currentUser, name, email };
+
+      try {
+        const response = await authApi.updateProfile({
+          currentEmail: currentUser.email,
+          name,
+          email,
+        });
+        updatedUser = response.user || updatedUser;
+      } catch (apiError) {
+        console.warn('Backend profile update unavailable, using local profile update fallback.', apiError);
+      }
+
       localStorage.setItem('careerpilot_users', JSON.stringify(users));
       localStorage.setItem('careerpilot_current_user', JSON.stringify(updatedUser));
 
@@ -129,7 +142,7 @@ export function Settings() {
     setTimeout(() => setSuccess(''), 2000);
   };
 
-  const handleSaveSecurity = (e) => {
+  const handleSaveSecurity = async (e) => {
     e.preventDefault();
     setError('');
     setSuccess('');
@@ -158,11 +171,18 @@ export function Settings() {
         return;
       }
 
+      try {
+        await authApi.updatePassword({
+          email: currentUser.email,
+          currentPassword: password,
+          newPassword,
+        });
+      } catch (apiError) {
+        console.warn('Backend password update unavailable, using local password update fallback.', apiError);
+      }
+
       users[userIndex].password = newPassword;
       localStorage.setItem('careerpilot_users', JSON.stringify(users));
-
-      const updatedUser = { ...currentUser, password: newPassword };
-      localStorage.setItem('careerpilot_current_user', JSON.stringify(updatedUser));
 
       setSuccess('Password updated successfully!');
       setPassword('');

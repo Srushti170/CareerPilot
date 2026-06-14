@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { TopBar } from './components/TopBar';
 import { StudentDashboard } from './components/StudentDashboard';
@@ -20,7 +20,7 @@ import { GlobalReports } from './components/GlobalReports';
 import { Card } from './components/ui/Card';
 import { motion, AnimatePresence } from 'motion/react';
 import { isStudentOnboardingComplete } from './lib/studentProfile';
-import { authApi } from './lib/backendSync';
+import { authApi, stateApi } from './lib/backendSync';
 
 export default function App() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -89,12 +89,89 @@ export default function App() {
   const updateApplications = (newApps) => {
     setApplications(newApps);
     localStorage.setItem('careerpilot_applications', JSON.stringify(newApps));
+    stateApi.saveApplications(newApps).catch((error) => {
+      console.error('Applications sync error:', error);
+    });
   };
 
   const updateNotifications = (newNotifs) => {
     setNotifications(newNotifs);
     localStorage.setItem('careerpilot_notifications', JSON.stringify(newNotifs));
+    stateApi.saveNotifications(newNotifs).catch((error) => {
+      console.error('Notifications sync error:', error);
+    });
   };
+
+  useEffect(() => {
+    const hydrateCoreState = async () => {
+      try {
+        const token = localStorage.getItem('careerpilot_session_token');
+        const [nextApplications, nextNotifications] = await Promise.all([
+          stateApi.getApplications(),
+          stateApi.getNotifications(),
+        ]);
+
+        if (token && !localStorage.getItem('careerpilot_current_user')) {
+          try {
+            const sessionUser = await authApi.me(token);
+            if (sessionUser?.user) {
+              localStorage.setItem('careerpilot_current_user', JSON.stringify(sessionUser.user));
+              setCurrentUser(sessionUser.user);
+              setIsAuthenticated(true);
+              setPersona(sessionUser.user.role || 'student');
+              setNeedsOnboarding(sessionUser.user.role === 'student' && !isStudentOnboardingComplete(sessionUser.user));
+            }
+          } catch (sessionError) {
+            console.warn('Session restore failed, clearing stale token.', sessionError);
+            localStorage.removeItem('careerpilot_session_token');
+          }
+        }
+
+        if (Array.isArray(nextApplications)) {
+          setApplications(nextApplications);
+          localStorage.setItem('careerpilot_applications', JSON.stringify(nextApplications));
+        }
+
+        if (Array.isArray(nextNotifications)) {
+          setNotifications(nextNotifications);
+          localStorage.setItem('careerpilot_notifications', JSON.stringify(nextNotifications));
+        }
+      } catch (error) {
+        console.warn('Core state hydrate fallback to local cache.', error);
+      }
+    };
+
+    hydrateCoreState();
+
+    const syncCurrentUser = () => {
+      const stored = localStorage.getItem('careerpilot_current_user');
+      const nextUser = stored ? JSON.parse(stored) : null;
+      setCurrentUser(nextUser);
+      setIsAuthenticated(nextUser !== null);
+      setPersona(nextUser?.role || 'student');
+      setNeedsOnboarding(nextUser ? nextUser.role === 'student' && !isStudentOnboardingComplete(nextUser) : false);
+    };
+
+    const syncApplications = () => {
+      const stored = localStorage.getItem('careerpilot_applications');
+      setApplications(stored ? JSON.parse(stored) : []);
+    };
+
+    const syncNotifications = () => {
+      const stored = localStorage.getItem('careerpilot_notifications');
+      setNotifications(stored ? JSON.parse(stored) : []);
+    };
+
+    window.addEventListener('careerpilot:storage-updated:careerpilot_current_user', syncCurrentUser);
+    window.addEventListener('careerpilot:storage-updated:careerpilot_applications', syncApplications);
+    window.addEventListener('careerpilot:storage-updated:careerpilot_notifications', syncNotifications);
+
+    return () => {
+      window.removeEventListener('careerpilot:storage-updated:careerpilot_current_user', syncCurrentUser);
+      window.removeEventListener('careerpilot:storage-updated:careerpilot_applications', syncApplications);
+      window.removeEventListener('careerpilot:storage-updated:careerpilot_notifications', syncNotifications);
+    };
+  }, []);
 
 
   const studentItems = [
@@ -154,9 +231,12 @@ export default function App() {
 
   const sidebarData = getSidebarData();
 
-  const handleLogin = (user, isNewUser = false) => {
+  const handleLogin = (user, isNewUser = false, sessionToken = null) => {
     const onboardingRequired = user.role === 'student' && !isStudentOnboardingComplete(user);
     localStorage.setItem('careerpilot_current_user', JSON.stringify(user));
+    if (sessionToken) {
+      localStorage.setItem('careerpilot_session_token', sessionToken);
+    }
     setCurrentUser(user);
     setPersona(user.role);
     setNeedsOnboarding(onboardingRequired);

@@ -2,13 +2,14 @@ import { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Card } from './ui/Card';
 import { buildCandidateFromApplication } from '../lib/recruiterData';
-import { integrationApi } from '../lib/backendSync';
+import { getApplicationContact, pushWorkflowNotification, sendWorkflowEmail } from '../lib/workflowActions';
 
 const inputClass = 'w-full rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none transition-colors focus:border-primary focus:ring-4 focus:ring-primary/10';
 
 function buildInterviewSession(app) {
   const candidate = buildCandidateFromApplication(app);
   const slot = app.selectedInterviewSlot;
+  const pendingSlots = app.availableInterviewSlots || [];
   const status = ['Offered', 'Accepted', 'Declined'].includes(app.status)
     ? 'Completed'
     : app.status === 'Interview' && slot
@@ -17,8 +18,8 @@ function buildInterviewSession(app) {
 
   return {
     ...candidate,
-    date: slot?.label || 'Awaiting student selection',
-    time: slot?.time || 'Slot not confirmed',
+    date: slot?.label || (pendingSlots.length ? `${pendingSlots.length} slot shared` : 'Awaiting student selection'),
+    time: slot?.time || (pendingSlots.length ? 'Waiting for candidate confirmation' : 'Slot not confirmed'),
     type: app.interviewType || 'Technical Round 1',
     status,
   };
@@ -46,22 +47,55 @@ export function InterviewDesk({ applications = [], setApplications }) {
 
   const availableCandidates = applications.filter((app) => ['Applied', 'Reviewing', 'Interview'].includes(app.status));
 
-  const handleAction = (id, action) => {
+  const handleAction = async (id, action) => {
     if (!setApplications) return;
+
+    const targetApplication = applications.find((app) => app.id === id);
+    if (!targetApplication) return;
+
+    if (action === 'reschedule') {
+      setSelectedApplicationId(id);
+      setType(targetApplication.interviewType || 'Technical Round 1');
+      setDate('');
+      setTime('');
+      setShowModal(true);
+      return;
+    }
 
     setApplications(applications.map((app) => {
       if (app.id !== id) return app;
-      if (action === 'reschedule') {
-        return { ...app, status: 'Reviewing', selectedInterviewSlot: null };
-      }
       if (action === 'cancel') {
-        return { ...app, status: 'Rejected', selectedInterviewSlot: null };
+        return { ...app, status: 'Rejected', selectedInterviewSlot: null, availableInterviewSlots: [] };
       }
       if (action === 'complete') {
         return { ...app, status: 'Offered' };
       }
       return app;
     }));
+
+    if (action === 'cancel') {
+      pushWorkflowNotification(
+        'Interview cancelled',
+        `${targetApplication.role} at ${targetApplication.company} has been closed by the recruiter.`
+      );
+      await sendWorkflowEmail({
+        to: getApplicationContact(targetApplication),
+        subject: `Interview update: ${targetApplication.role}`,
+        body: `Your interview process for ${targetApplication.role} at ${targetApplication.company} has been cancelled. Please check CareerPilot for the latest application status.`,
+      });
+    }
+
+    if (action === 'complete') {
+      pushWorkflowNotification(
+        'Moved to offer stage',
+        `${targetApplication.company} marked your ${targetApplication.role} interview as completed.`
+      );
+      await sendWorkflowEmail({
+        to: getApplicationContact(targetApplication),
+        subject: `Interview completed: ${targetApplication.role}`,
+        body: `Your interview for ${targetApplication.role} at ${targetApplication.company} has been completed and the application has moved to the offer stage.`,
+      });
+    }
   };
 
   const handleBookSlot = async (event) => {
@@ -76,22 +110,27 @@ export function InterviewDesk({ applications = [], setApplications }) {
 
     setApplications(applications.map((app) => (
       app.id === selectedApplicationId
-        ? { ...app, status: 'Interview', selectedInterviewSlot: slot, interviewType: type }
+        ? {
+            ...app,
+            status: 'Reviewing',
+            selectedInterviewSlot: null,
+            availableInterviewSlots: [slot],
+            interviewType: type,
+          }
         : app
     )));
 
     const selectedApplication = applications.find((app) => app.id === selectedApplicationId);
     if (selectedApplication) {
-      try {
-        await integrationApi.createCalendarEvent({
-          title: `${selectedApplication.role} interview with ${selectedApplication.company}`,
-          date: slot.label,
-          time: slot.time,
-          attendees: [selectedApplication.studentName || 'Student Candidate', selectedApplication.company],
-        });
-      } catch (error) {
-        console.error('Calendar sync error:', error);
-      }
+      pushWorkflowNotification(
+        'Interview slot shared',
+        `${selectedApplication.company} shared a ${type} slot for ${selectedApplication.role} on ${slot.label} at ${slot.time}.`
+      );
+      await sendWorkflowEmail({
+        to: getApplicationContact(selectedApplication),
+        subject: `Choose your interview slot for ${selectedApplication.role}`,
+        body: `A recruiter from ${selectedApplication.company} shared a ${type} slot for ${selectedApplication.role} on ${slot.label} at ${slot.time}. Open CareerPilot and confirm the interview slot from your applications view.`,
+      });
     }
 
     setSelectedApplicationId('');
@@ -129,7 +168,7 @@ export function InterviewDesk({ applications = [], setApplications }) {
           className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-on-primary transition-colors hover:bg-primary-hover focus:outline-none focus:ring-4 focus:ring-primary/10"
         >
           <span className="material-symbols-outlined text-base">add_circle</span>
-          Book new slot
+          Share interview slot
         </button>
       </header>
 
@@ -151,7 +190,7 @@ export function InterviewDesk({ applications = [], setApplications }) {
         <h3 className="text-lg font-semibold text-slate-900">Upcoming sessions</h3>
         <div className="grid gap-4">
           {interviewSessions.length === 0 ? (
-            <p className="py-12 text-center text-sm text-slate-400">No interviews scheduled yet. Click "Book new slot" to begin.</p>
+            <p className="py-12 text-center text-sm text-slate-400">No interviews scheduled yet. Click "Share interview slot" to begin.</p>
           ) : (
             interviewSessions.map((session) => (
               <Card key={session.id} className="p-5">
@@ -227,7 +266,7 @@ export function InterviewDesk({ applications = [], setApplications }) {
               className="w-full max-w-md space-y-6 rounded-2xl border border-slate-200 bg-white p-8 shadow-2xl"
             >
               <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-                <h3 className="text-lg font-headline font-semibold text-slate-900">Book interview slot</h3>
+                <h3 className="text-lg font-headline font-semibold text-slate-900">Share interview slot</h3>
                 <button onClick={() => setShowModal(false)} className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600">
                   <span className="material-symbols-outlined text-xl">close</span>
                 </button>
@@ -237,7 +276,7 @@ export function InterviewDesk({ applications = [], setApplications }) {
                 <div>
                   <label className="mb-1.5 block text-xs font-medium text-slate-600">Candidate application</label>
                   <select value={selectedApplicationId} onChange={(e) => setSelectedApplicationId(e.target.value)} required className={inputClass}>
-                    <option value="">Select a shortlisted candidate</option>
+                    <option value="">Select a candidate</option>
                     {availableCandidates.map((app) => {
                       const candidate = buildCandidateFromApplication(app);
                       return (
@@ -275,7 +314,7 @@ export function InterviewDesk({ applications = [], setApplications }) {
                     Cancel
                   </button>
                   <button type="submit" className="rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-on-primary transition-colors hover:bg-primary-hover">
-                    Confirm booking
+                    Share slot
                   </button>
                 </div>
               </form>

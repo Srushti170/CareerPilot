@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Card } from './ui/Card';
-import { integrationApi } from '../lib/backendSync';
 import {
   getApplicationStatsForJob,
   getDaysUntilDeadline,
@@ -106,17 +105,7 @@ export function JobManagement({ applications = [] }) {
 
     setJobs(saveStoredJobs(updatedJobs));
     if (!editingJob) {
-      try {
-        const order = await integrationApi.createPaymentOrder({
-          amount: nextJob.planTier === 'Premium' ? 499900 : nextJob.planTier === 'Pro' ? 249900 : 99900,
-          currency: 'INR',
-          description: `${nextJob.planTier} recruiter plan for ${nextJob.company} - ${nextJob.title}`,
-        });
-        setStatusMessage(`Recruiter plan order created: ${order.id}`);
-      } catch (error) {
-        console.error('Payment order creation error:', error);
-        setStatusMessage('Job saved, but payment order creation failed.');
-      }
+      setStatusMessage(`Job posted successfully for ${nextJob.company}.`);
       window.setTimeout(() => setStatusMessage(''), 2800);
     }
     setShowModal(false);
@@ -133,7 +122,7 @@ export function JobManagement({ applications = [] }) {
       <div className="flex items-end justify-between">
         <div>
           <h2 className="text-2xl font-headline font-semibold tracking-tight text-slate-900 md:text-3xl">Job management</h2>
-          <p className="mt-1 text-sm text-slate-500">Create recruiter-ready postings with eligibility, payout, and pipeline visibility.</p>
+          <p className="mt-1 text-sm text-slate-500">Create recruiter-ready postings with eligibility, visibility tier, and pipeline tracking.</p>
         </div>
         <button
           onClick={handleOpenNew}
@@ -282,7 +271,7 @@ export function JobManagement({ applications = [] }) {
                     </select>
                   </div>
                   <div>
-                    <label className="mb-1.5 block text-xs font-medium text-slate-600">Plan tier</label>
+                    <label className="mb-1.5 block text-xs font-medium text-slate-600">Visibility tier</label>
                     <select value={jobDraft.planTier} onChange={(e) => updateDraft('planTier', e.target.value)} className={inputClass}>
                       <option>Basic</option>
                       <option>Pro</option>
@@ -380,7 +369,7 @@ export function JobManagement({ applications = [] }) {
               <div className="mt-6 space-y-4">
                 <h4 className="text-xs font-semibold uppercase tracking-[0.06em] text-slate-400">Role details</h4>
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-                  <p><span className="font-semibold text-slate-900">Plan:</span> {analyticsJob.planTier}</p>
+                  <p><span className="font-semibold text-slate-900">Visibility Tier:</span> {analyticsJob.planTier}</p>
                   <p className="mt-2"><span className="font-semibold text-slate-900">Deadline:</span> {analyticsJob.deadline || 'Not set'}</p>
                   <p className="mt-2"><span className="font-semibold text-slate-900">Eligibility:</span> {analyticsJob.branchEligibility.length ? analyticsJob.branchEligibility.join(', ') : 'All branches'}</p>
                   <p className="mt-2"><span className="font-semibold text-slate-900">Requirements:</span> {(analyticsJob.requirements || []).join(', ') || 'To be added'}</p>

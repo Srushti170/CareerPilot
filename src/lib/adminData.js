@@ -1,4 +1,5 @@
 import { getStudentProfile } from './studentProfile';
+import { stateApi } from './backendSync';
 
 const COMPANIES_KEY = 'careerpilot_companies';
 const STUDENTS_KEY = 'careerpilot_students';
@@ -115,6 +116,9 @@ export function saveStoredCompanies(companies = []) {
   const normalized = companies.map(normalizeCompany);
   localStorage.setItem(COMPANIES_KEY, JSON.stringify(normalized));
   window.dispatchEvent(new CustomEvent('careerpilot:companies-updated', { detail: normalized }));
+  stateApi.saveCompanies(normalized).catch((error) => {
+    console.error('Companies sync error:', error);
+  });
   return normalized;
 }
 
@@ -151,6 +155,9 @@ export function saveStoredStudents(students = []) {
   const normalized = students.map(normalizeStudentRecord);
   localStorage.setItem(STUDENTS_KEY, JSON.stringify(normalized));
   window.dispatchEvent(new CustomEvent('careerpilot:students-updated', { detail: normalized }));
+  stateApi.saveStudents(normalized).catch((error) => {
+    console.error('Students sync error:', error);
+  });
   return normalized;
 }
 
@@ -174,6 +181,9 @@ export function getStoredAnnouncements() {
 export function saveStoredAnnouncements(announcements = []) {
   localStorage.setItem(ANNOUNCEMENTS_KEY, JSON.stringify(announcements));
   window.dispatchEvent(new CustomEvent('careerpilot:announcements-updated', { detail: announcements }));
+  stateApi.saveAnnouncements(announcements).catch((error) => {
+    console.error('Announcements sync error:', error);
+  });
   return announcements;
 }
 

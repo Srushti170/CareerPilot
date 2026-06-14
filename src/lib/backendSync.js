@@ -13,6 +13,18 @@ let syncTimer = null;
 const pendingEntries = new Map();
 const pendingDeletes = new Set();
 
+function emitStorageSyncEvent(key, value = null, action = 'set') {
+  window.dispatchEvent(new CustomEvent('careerpilot:storage-updated', {
+    detail: { key, value, action },
+  }));
+
+  if (key) {
+    window.dispatchEvent(new CustomEvent(`careerpilot:storage-updated:${key}`, {
+      detail: { key, value, action },
+    }));
+  }
+}
+
 async function request(path, options = {}) {
   const response = await fetch(`${API_BASE}${path}`, {
     headers: {
@@ -62,6 +74,7 @@ function patchLocalStorage() {
     rawLocalStorage.setItem(key, value);
     pendingDeletes.delete(key);
     pendingEntries.set(key, String(value));
+    emitStorageSyncEvent(key, String(value), 'set');
     scheduleSync();
   };
 
@@ -69,6 +82,7 @@ function patchLocalStorage() {
     rawLocalStorage.removeItem(key);
     pendingEntries.delete(key);
     pendingDeletes.add(key);
+    emitStorageSyncEvent(key, null, 'remove');
     scheduleSync();
   };
 
@@ -78,6 +92,7 @@ function patchLocalStorage() {
       rawLocalStorage.removeItem(key);
       pendingEntries.delete(key);
       pendingDeletes.add(key);
+      emitStorageSyncEvent(key, null, 'remove');
     });
     scheduleSync();
   };
@@ -124,6 +139,18 @@ export const authApi = {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
   },
+  async updateProfile(payload) {
+    return request('/auth/profile', {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
+  async updatePassword(payload) {
+    return request('/auth/password', {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
 };
 
 export const integrationApi = {
@@ -153,5 +180,98 @@ export const integrationApi = {
   },
   async getStatus() {
     return request('/integrations/status');
+  },
+};
+
+export const aiApi = {
+  async generateOpeningQuestion(target) {
+    return request('/ai/interview/opening', {
+      method: 'POST',
+      body: JSON.stringify({ target }),
+    });
+  },
+  async generateFollowUpQuestion(target, qaHistory) {
+    return request('/ai/interview/followup', {
+      method: 'POST',
+      body: JSON.stringify({ target, qaHistory }),
+    });
+  },
+  async evaluateInterview(target, qaHistory) {
+    return request('/ai/interview/evaluate', {
+      method: 'POST',
+      body: JSON.stringify({ target, qaHistory }),
+    });
+  },
+  async transcribeInterviewAudio(payload) {
+    return request('/ai/interview/transcribe', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+};
+
+export const stateApi = {
+  async getApplications() {
+    return request('/applications');
+  },
+  async saveApplications(applications) {
+    return request('/applications', {
+      method: 'PUT',
+      body: JSON.stringify({ applications }),
+    });
+  },
+  async getNotifications() {
+    return request('/notifications');
+  },
+  async saveNotifications(notifications) {
+    return request('/notifications', {
+      method: 'PUT',
+      body: JSON.stringify({ notifications }),
+    });
+  },
+  async getJobs() {
+    return request('/jobs');
+  },
+  async saveJobs(jobs) {
+    return request('/jobs', {
+      method: 'PUT',
+      body: JSON.stringify({ jobs }),
+    });
+  },
+  async getCompanies() {
+    return request('/companies');
+  },
+  async saveCompanies(companies) {
+    return request('/companies', {
+      method: 'PUT',
+      body: JSON.stringify({ companies }),
+    });
+  },
+  async getStudents() {
+    return request('/students');
+  },
+  async saveStudents(students) {
+    return request('/students', {
+      method: 'PUT',
+      body: JSON.stringify({ students }),
+    });
+  },
+  async getAnnouncements() {
+    return request('/announcements');
+  },
+  async saveAnnouncements(announcements) {
+    return request('/announcements', {
+      method: 'PUT',
+      body: JSON.stringify({ announcements }),
+    });
+  },
+  async getStudentProfile() {
+    return request('/student-profile');
+  },
+  async saveStudentProfile(profile) {
+    return request('/student-profile', {
+      method: 'PUT',
+      body: JSON.stringify({ profile }),
+    });
   },
 };

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Card } from './ui/Card';
 import { getStudentProfile, saveStudentProfile } from '../lib/studentProfile';
+import { authApi } from '../lib/backendSync';
 
 const inputClass = "w-full px-4 py-2.5 rounded-lg bg-white border border-slate-200 focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-colors text-sm";
 
@@ -47,7 +48,7 @@ export function Profile({ currentUser, setCurrentUser }) {
   const [editGraduation, setEditGraduation] = useState(profile.graduation);
   const [newSkillText, setNewSkillText] = useState('');
 
-  const saveProfile = (updated) => {
+  const saveProfile = async (updated) => {
     const normalized = saveStudentProfile(updated, currentUser);
     setProfile(normalized);
 
@@ -62,6 +63,16 @@ export function Profile({ currentUser, setCurrentUser }) {
         users[userIndex].name = normalized.name;
         users[userIndex].email = normalized.email;
         localStorage.setItem('careerpilot_users', JSON.stringify(users));
+      }
+
+      try {
+        await authApi.updateProfile({
+          currentEmail: currentUser.email,
+          name: normalized.name,
+          email: normalized.email,
+        });
+      } catch (error) {
+        console.error('Profile account sync error:', error);
       }
     }
   };
@@ -140,9 +151,9 @@ export function Profile({ currentUser, setCurrentUser }) {
 
   const strength = calculateProfileStrength();
 
-  const handleEditSubmit = (e) => {
+  const handleEditSubmit = async (e) => {
     e.preventDefault();
-    saveProfile({
+    await saveProfile({
       ...profile,
       name: editName,
       location: editLocation,

@@ -5,10 +5,14 @@ import { ResumeIntelligence } from './ResumeIntelligence';
 import { ResumeBuilder } from './ResumeBuilder';
 import { Button } from './ui/Button';
 import { Card } from './ui/Card';
-import { createApplicationRecord, generateCoverLetter, tailorResumeForJob } from '../lib/resumeTools';
+import { buildFallbackApplyReview, createApplicationRecord, generateCoverLetter, resumeDraftToText, tailorResumeForJob } from '../lib/resumeTools';
 import { getStudentProfile } from '../lib/studentProfile';
 import { getPublishedJobs } from '../lib/recruiterData';
-import { generateCoverLetterWithAI, isCareerAiAvailable, rankJobsForStudentWithAI, tailorResumeWithAI } from '../lib/aiCareerTools';
+import { generateCoverLetterWithAI, isCareerAiAvailable, rankJobsForStudentWithAI, reviewTailoredResumeForJobWithAI, tailorResumeWithAI } from '../lib/aiCareerTools';
+import { openResumePrintPreview, saveResumeVersion } from '../lib/resumeVersions';
+
+const APPLY_READY_ATS_SCORE = 70;
+const APPLY_READY_MATCH_SCORE = 65;
 
 export function JobSearch({ searchQuery = '', setSearchQuery, applications = [], setApplications, setActiveTab }) {
   const [activeSearchTab, setActiveSearchTab] = useState('listings');
@@ -16,6 +20,7 @@ export function JobSearch({ searchQuery = '', setSearchQuery, applications = [],
   const [selectedJob, setSelectedJob] = useState(null);
   const [applicationDraft, setApplicationDraft] = useState(null);
   const [applicationResumeDraft, setApplicationResumeDraft] = useState(null);
+  const [builderReviewContext, setBuilderReviewContext] = useState(null);
   const [isGeneratingApplyPackage, setIsGeneratingApplyPackage] = useState(false);
   const [isRefreshingMatches, setIsRefreshingMatches] = useState(false);
   const [aiJobInsights, setAiJobInsights] = useState({});
@@ -70,6 +75,11 @@ export function JobSearch({ searchQuery = '', setSearchQuery, applications = [],
       ? applicationResumeDraft
       : tailorResumeForJob(studentProfile, job);
     let coverLetter = generateCoverLetter(studentProfile, job, tailoredResume);
+    let applyReview = buildFallbackApplyReview({
+      draft: tailoredResume,
+      job,
+      profile: studentProfile,
+    });
 
     if (aiAvailable) {
       try {
@@ -96,17 +106,39 @@ export function JobSearch({ searchQuery = '', setSearchQuery, applications = [],
           job,
           tailoredResume,
         });
+
+        const aiReview = await reviewTailoredResumeForJobWithAI({
+          profile: studentProfile,
+          job,
+          tailoredResume,
+          coverLetter,
+        });
+
+        applyReview = {
+          ...applyReview,
+          ...aiReview,
+          missingKeywords: aiReview.missingKeywords.length > 0 ? aiReview.missingKeywords : applyReview.missingKeywords,
+          improvementTips: aiReview.improvementTips.length > 0 ? aiReview.improvementTips : applyReview.improvementTips,
+          suggestedBullets: aiReview.suggestedBullets.length > 0 ? aiReview.suggestedBullets : applyReview.suggestedBullets,
+        };
       } catch (error) {
         console.error('Gemini apply package error, using fallback:', error);
       }
     }
 
+    const isReadyToApply = applyReview.readiness === 'ready'
+      || (applyReview.atsScore >= APPLY_READY_ATS_SCORE && applyReview.matchScore >= APPLY_READY_MATCH_SCORE);
+
     setSelectedJob(job);
     setApplicationResumeDraft(tailoredResume);
+    saveResumeVersion({ draft: tailoredResume, job, source: 'one-click-apply-review' });
     setApplicationDraft({
       job,
       coverLetter,
       tailoredResume,
+      applyReview,
+      isReadyToApply,
+      resumeText: resumeDraftToText(tailoredResume),
     });
     setIsGeneratingApplyPackage(false);
   };
@@ -115,6 +147,7 @@ export function JobSearch({ searchQuery = '', setSearchQuery, applications = [],
     if (!applicationDraft) return;
     const newApp = createApplicationRecord(applicationDraft.job, studentProfile, applicationDraft.tailoredResume);
     newApp.coverLetter = applicationDraft.coverLetter;
+    saveResumeVersion({ draft: applicationDraft.tailoredResume, job: applicationDraft.job, source: 'application-submitted' });
     setApplications([newApp, ...applications]);
     setApplicationDraft(null);
   };
@@ -122,6 +155,7 @@ export function JobSearch({ searchQuery = '', setSearchQuery, applications = [],
   const handleTailorResume = (job) => {
     setSelectedJob(job);
     setApplicationResumeDraft(tailorResumeForJob(studentProfile, job));
+    setBuilderReviewContext(null);
     setActiveSearchTab('builder');
   };
 
@@ -371,6 +405,7 @@ export function JobSearch({ searchQuery = '', setSearchQuery, applications = [],
             <ResumeBuilder
               targetJob={selectedJob}
               setActiveTab={setActiveTab}
+              reviewContext={builderReviewContext}
               onUseForApply={(draft) => {
                 if (!selectedJob) return;
                 setApplicationResumeDraft(draft);
@@ -428,11 +463,25 @@ export function JobSearch({ searchQuery = '', setSearchQuery, applications = [],
                     </div>
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-[0.06em] text-slate-400">Resume Match</p>
-                      <p className="mt-1 text-slate-900">{applicationDraft.tailoredResume.matchScore}% match</p>
+                      <p className="mt-1 text-slate-900">
+                        {applicationDraft.applyReview?.matchScore || applicationDraft.tailoredResume.matchScore}% job match
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.06em] text-slate-400">ATS Readiness</p>
+                      <p className="mt-1 text-slate-900">{applicationDraft.applyReview?.atsScore || 0}/100 ATS score</p>
                     </div>
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-[0.06em] text-slate-400">Generation Mode</p>
                       <p className="mt-1 text-slate-900">{aiAvailable ? 'Gemini-assisted package' : 'Fallback local package'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.06em] text-slate-400">Apply Decision</p>
+                      <span className={`mt-2 inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                        applicationDraft.isReadyToApply ? 'bg-success-soft text-success' : 'bg-warning-soft text-warning'
+                      }`}>
+                        {applicationDraft.isReadyToApply ? 'Ready to apply' : 'Improve before applying'}
+                      </span>
                     </div>
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-[0.06em] text-slate-400">Skills Submitted</p>
@@ -452,33 +501,84 @@ export function JobSearch({ searchQuery = '', setSearchQuery, applications = [],
                         <p className="mt-1 leading-6 text-slate-700">{applicationDraft.tailoredResume.missingSkills.join(', ')}</p>
                       </div>
                     )}
+                    {applicationDraft.applyReview?.reasoning && (
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.06em] text-slate-400">AI Verdict</p>
+                        <p className="mt-1 leading-6 text-slate-700">{applicationDraft.applyReview.reasoning}</p>
+                      </div>
+                    )}
                   </div>
                 </Card>
 
                 <Card className="p-5">
                   <div className="flex items-center justify-between">
-                    <h4 className="text-sm font-semibold text-slate-900">AI Cover Letter</h4>
+                    <h4 className="text-sm font-semibold text-slate-900">
+                      {applicationDraft.isReadyToApply ? 'AI Cover Letter' : 'AI Improvement Plan'}
+                    </h4>
                     <Button variant="ghost" size="sm" onClick={() => setActiveSearchTab('builder')}>
                       Edit Resume
                     </Button>
                   </div>
-                  <textarea
-                    value={applicationDraft.coverLetter}
-                    onChange={(e) => setApplicationDraft({ ...applicationDraft, coverLetter: e.target.value })}
-                    rows="12"
-                    className="mt-4 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-700 outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10"
-                  />
+                  {applicationDraft.isReadyToApply ? (
+                    <textarea
+                      value={applicationDraft.coverLetter}
+                      onChange={(e) => setApplicationDraft({ ...applicationDraft, coverLetter: e.target.value })}
+                      rows="12"
+                      className="mt-4 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-700 outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10"
+                    />
+                  ) : (
+                    <div className="mt-4 space-y-4">
+                      <div className="rounded-xl border border-warning/20 bg-warning-soft/50 p-4">
+                        <p className="text-sm font-semibold text-warning">This role is not ready for one-click apply yet.</p>
+                        <p className="mt-1 text-sm leading-6 text-slate-700">
+                          The tailored resume still looks weak for this job after optimization. Improve the package first, then apply.
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.06em] text-slate-400">Missing keywords</p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {(applicationDraft.applyReview?.missingKeywords || []).map((keyword) => (
+                            <span key={keyword} className="rounded-full bg-warning-soft px-3 py-1 text-xs font-semibold text-warning">{keyword}</span>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.06em] text-slate-400">Requirements to strengthen</p>
+                        <ul className="mt-2 space-y-2 text-sm leading-6 text-slate-700">
+                          {(applicationDraft.applyReview?.requirementsToImprove || []).map((item) => <li key={item}>- {item}</li>)}
+                        </ul>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.06em] text-slate-400">Recommended improvements</p>
+                        <ul className="mt-2 space-y-2 text-sm leading-6 text-slate-700">
+                          {(applicationDraft.applyReview?.improvementTips || []).map((item) => <li key={item}>- {item}</li>)}
+                        </ul>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.06em] text-slate-400">Suggested bullet angles</p>
+                        <ul className="mt-2 space-y-2 text-sm leading-6 text-slate-700">
+                          {(applicationDraft.applyReview?.suggestedBullets || []).map((item) => <li key={item}>- {item}</li>)}
+                        </ul>
+                      </div>
+                    </div>
+                  )}
                 </Card>
               </div>
 
               <div className="mt-6 flex flex-wrap justify-end gap-3">
+                <Button variant="secondary" onClick={() => openResumePrintPreview(applicationDraft.tailoredResume)}>
+                  Download Tailored Resume
+                </Button>
                 <Button variant="secondary" onClick={() => {
                   setSelectedJob(applicationDraft.job);
+                  setBuilderReviewContext(applicationDraft.applyReview || null);
                   setActiveSearchTab('builder');
                 }}>
                   Tailor Resume More
                 </Button>
-                <Button onClick={handleConfirmApply}>Submit Application</Button>
+                <Button onClick={handleConfirmApply} disabled={!applicationDraft.isReadyToApply}>
+                  Submit Application
+                </Button>
               </div>
             </motion.div>
           </div>

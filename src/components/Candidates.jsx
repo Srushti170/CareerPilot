@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Card } from './ui/Card';
 import { cn } from '../lib/utils';
 import { buildCandidateFromApplication } from '../lib/recruiterData';
-import { integrationApi } from '../lib/backendSync';
+import { getApplicationContact, pushWorkflowNotification, sendWorkflowEmail } from '../lib/workflowActions';
 
 const selectClass = 'w-full cursor-pointer rounded-lg border border-slate-200 bg-white p-2.5 text-xs font-medium outline-none transition-colors focus:border-primary focus:ring-4 focus:ring-primary/10';
 
@@ -52,16 +52,19 @@ export function Candidates({ applications = [], setApplications }) {
     const targetApplication = applications.find((app) => app.id === id);
     setApplications(applications.map((app) => (app.id === id ? { ...app, status: newStatus } : app)));
 
-    if (targetApplication && ['Reviewing', 'Interview', 'Offered', 'Rejected'].includes(newStatus)) {
-      try {
-        await integrationApi.sendEmail({
-          to: targetApplication.studentName || targetApplication.company,
-          subject: `Application update: ${targetApplication.role}`,
-          body: `Your application for ${targetApplication.role} at ${targetApplication.company} is now marked as ${newStatus}.`,
-        });
-      } catch (error) {
-        console.error('Email delivery error:', error);
-      }
+    if (targetApplication) {
+      pushWorkflowNotification(
+        'Application status updated',
+        `${targetApplication.company} updated your ${targetApplication.role} application to ${newStatus}.`
+      );
+    }
+
+    if (targetApplication && ['Reviewing', 'Interview', 'Offered', 'Accepted', 'Declined', 'Rejected'].includes(newStatus)) {
+      await sendWorkflowEmail({
+        to: getApplicationContact(targetApplication),
+        subject: `Application update: ${targetApplication.role}`,
+        body: `Your application for ${targetApplication.role} at ${targetApplication.company} is now marked as ${newStatus}.`,
+      });
     }
   };
 

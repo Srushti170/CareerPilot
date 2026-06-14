@@ -28,10 +28,10 @@ export function StudentRecords() {
       setApplications(stored ? JSON.parse(stored) : []);
     };
     window.addEventListener('careerpilot:students-updated', syncStudents);
-    window.addEventListener('storage', syncApplications);
+    window.addEventListener('careerpilot:storage-updated:careerpilot_applications', syncApplications);
     return () => {
       window.removeEventListener('careerpilot:students-updated', syncStudents);
-      window.removeEventListener('storage', syncApplications);
+      window.removeEventListener('careerpilot:storage-updated:careerpilot_applications', syncApplications);
     };
   }, []);
 

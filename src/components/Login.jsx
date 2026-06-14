@@ -47,12 +47,18 @@ export function Login({ onLogin }) {
   const persistLocalUser = (user) => {
     const users = getStoredUsers();
     const existingIndex = users.findIndex((entry) => entry.email.toLowerCase() === user.email.toLowerCase());
+    const existingUser = existingIndex >= 0 ? users[existingIndex] : null;
+    const normalizedUser = {
+      ...existingUser,
+      ...user,
+      password: user.password || existingUser?.password || '',
+    };
     const updatedUsers = existingIndex >= 0
-      ? users.map((entry, index) => (index === existingIndex ? { ...entry, ...user } : entry))
-      : [...users, user];
+      ? users.map((entry, index) => (index === existingIndex ? normalizedUser : entry))
+      : [...users, normalizedUser];
 
     localStorage.setItem('careerpilot_users', JSON.stringify(updatedUsers));
-    return user;
+    return normalizedUser;
   };
 
   const handleAuth = async (e) => {
@@ -63,22 +69,23 @@ export function Login({ onLogin }) {
     const users = getStoredUsers();
 
     if (mode === 'signin') {
-      // Find user matching email, password AND role
+      try {
+        const { user: authenticatedUser, sessionToken } = await authApi.login({ email, password, role });
+        persistLocalUser({ ...authenticatedUser, password, role });
+        onLogin(authenticatedUser, false, sessionToken);
+        return;
+      } catch (apiError) {
+        console.warn('Backend login unavailable, using local auth fallback.', apiError);
+      }
+
       const user = users.find(
         (u) => u.email.toLowerCase() === email.toLowerCase() && u.password === password && u.role === role
       );
 
       if (user) {
-        try {
-          const { user: authenticatedUser } = await authApi.login({ email, password, role });
-          onLogin(authenticatedUser, false);
-        } catch (apiError) {
-          console.warn('Backend login unavailable, using local auth fallback.', apiError);
-          persistLocalUser(user);
-          onLogin(user, false);
-        }
+        persistLocalUser(user);
+        onLogin(user, false);
       } else {
-        // Double check if user exists with a different role to give a helpful hint
         const anyUserWithEmail = users.find((u) => u.email.toLowerCase() === email.toLowerCase());
         if (anyUserWithEmail && anyUserWithEmail.role !== role) {
           setError(`Account exists, but with the role: ${anyUserWithEmail.role.toUpperCase()}. Please switch roles above.`);
@@ -132,10 +139,10 @@ export function Login({ onLogin }) {
 
       setSuccess('Account created successfully! Logging you in...');
       try {
-        const { user: createdUser } = await authApi.register(newUser);
+        const { user: createdUser, sessionToken } = await authApi.register(newUser);
         persistLocalUser(createdUser);
         setTimeout(() => {
-          onLogin(createdUser, true);
+          onLogin(createdUser, true, sessionToken);
         }, 700);
       } catch (apiError) {
         console.warn('Backend register unavailable, using local auth fallback.', apiError);
