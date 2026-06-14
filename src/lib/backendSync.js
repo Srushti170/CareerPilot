@@ -1,3 +1,10 @@
+import {
+  generateInterviewFollowUpQuestionWithAI,
+  generateInterviewOpeningQuestionWithAI,
+  evaluateInterviewWithAI,
+  isCareerAiAvailable,
+  transcribeInterviewAudioWithAI,
+} from './aiCareerTools';
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 
 const rawLocalStorage = {
@@ -185,28 +192,48 @@ export const integrationApi = {
 
 export const aiApi = {
   async generateOpeningQuestion(target) {
-    return request('/ai/interview/opening', {
-      method: 'POST',
-      body: JSON.stringify({ target }),
-    });
+    try {
+      return await request('/ai/interview/opening', {
+        method: 'POST',
+        body: JSON.stringify({ target }),
+      });
+    } catch (error) {
+      if (!isCareerAiAvailable()) throw error;
+      return generateInterviewOpeningQuestionWithAI(target);
+    }
   },
   async generateFollowUpQuestion(target, qaHistory) {
-    return request('/ai/interview/followup', {
-      method: 'POST',
-      body: JSON.stringify({ target, qaHistory }),
-    });
+    try {
+      return await request('/ai/interview/followup', {
+        method: 'POST',
+        body: JSON.stringify({ target, qaHistory }),
+      });
+    } catch (error) {
+      if (!isCareerAiAvailable()) throw error;
+      return generateInterviewFollowUpQuestionWithAI(target, qaHistory);
+    }
   },
   async evaluateInterview(target, qaHistory) {
-    return request('/ai/interview/evaluate', {
-      method: 'POST',
-      body: JSON.stringify({ target, qaHistory }),
-    });
+    try {
+      return await request('/ai/interview/evaluate', {
+        method: 'POST',
+        body: JSON.stringify({ target, qaHistory }),
+      });
+    } catch (error) {
+      if (!isCareerAiAvailable()) throw error;
+      return evaluateInterviewWithAI(target, qaHistory);
+    }
   },
   async transcribeInterviewAudio(payload) {
-    return request('/ai/interview/transcribe', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
+    try {
+      return await request('/ai/interview/transcribe', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+    } catch (error) {
+      if (!isCareerAiAvailable()) throw error;
+      return transcribeInterviewAudioWithAI(payload);
+    }
   },
 };
 

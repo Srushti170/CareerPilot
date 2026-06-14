@@ -16,6 +16,7 @@ const reportsDir = path.join(rootDir, 'server', 'reports');
 const dbPath = path.join(dataDir, 'db.json');
 const port = Number(process.env.API_PORT || 8787);
 const geminiApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
+const geminiModel = process.env.GEMINI_MODEL || process.env.VITE_GEMINI_MODEL || 'gemini-2.5-flash';
 const serverAi = geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey }) : null;
 
 const DEFAULT_USERS = [
@@ -886,7 +887,7 @@ app.post('/api/ai/interview/opening', async (req, res) => {
 
   try {
     const response = await serverAi.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: geminiModel,
       contents: `You are conducting a live mock interview.
 
 Use the full role context below to ask exactly one opening interview question.
@@ -919,7 +920,7 @@ app.post('/api/ai/interview/followup', async (req, res) => {
 
   try {
     const response = await serverAi.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: geminiModel,
       contents: `You are conducting a live mock interview and need the next follow-up question.
 
 Rules:
@@ -953,7 +954,7 @@ app.post('/api/ai/interview/evaluate', async (req, res) => {
 
   try {
     const response = await serverAi.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: geminiModel,
       contents: `You are evaluating a completed mock interview.
 
 Assess the candidate on:
@@ -1007,7 +1008,7 @@ app.post('/api/ai/interview/transcribe', async (req, res) => {
 
   try {
     const response = await serverAi.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: geminiModel,
       contents: [
         {
           role: 'user',

@@ -8,6 +8,14 @@ function getApiKey() {
   return import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.GEMINI_API_KEY || '';
 }
 
+function getPreferredModel() {
+  return (
+    import.meta.env.VITE_GEMINI_MODEL ||
+    import.meta.env.GEMINI_MODEL ||
+    'gemini-2.5-flash'
+  );
+}
+
 export function isCareerAiAvailable() {
   return Boolean(getApiKey());
 }
@@ -17,21 +25,77 @@ function getClient() {
   return apiKey ? new GoogleGenAI({ apiKey }) : null;
 }
 
+async function generateWithCareerAi(contents) {
+  const client = getClient();
+  if (!client) {
+    throw new Error('AI client unavailable');
+  }
+
+  return client.models.generateContent({
+    model: getPreferredModel(),
+    contents,
+  });
+}
+
+export function getCareerAiErrorMessage(error) {
+  const status = Number(error?.status || error?.cause?.status || 0);
+  const rawMessage = String(error?.message || error || '');
+
+  if (status === 429 || /quota|resource_exhausted|rate limit/i.test(rawMessage)) {
+    return 'The configured Gemini AI quota is exhausted right now. Update the API key or wait for quota reset to continue AI interview transcription.';
+  }
+
+  if (status === 401 || status === 403 || /api key|permission|unauthorized|forbidden/i.test(rawMessage)) {
+    return 'The configured Gemini API key is invalid or does not have permission for this request.';
+  }
+
+  return 'The AI provider could not complete this request right now.';
+}
+
 function sanitizeStringList(value, fallback = []) {
   return Array.isArray(value)
     ? value.map((item) => String(item).trim()).filter(Boolean)
     : fallback;
 }
 
-export async function analyzeResumeWithAI({ jobDescription, resumeText, studentProfile }) {
-  const client = getClient();
-  if (!client) {
-    throw new Error('AI client unavailable');
+function normalizeText(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+function sentenceList(values = []) {
+  return values.map((item) => `- ${item}`).join('\n');
+}
+
+function buildInterviewJobContext(target = {}) {
+  const job = target.job || {};
+  const candidate = target.candidate || null;
+  const parts = [
+    `Company: ${job.company || target.company || 'Unknown company'}`,
+    `Role: ${job.title || target.title || 'Unknown role'}`,
+    `Location: ${job.location || 'Not shared'}`,
+    `Role type: ${job.type || 'Not shared'}`,
+    `Experience level: ${job.experience || 'Not shared'}`,
+    `Short description: ${job.shortDescription || 'Not shared'}`,
+    `Requirements:\n${sentenceList(job.requirements || []) || '- Not shared'}`,
+    `Responsibilities:\n${sentenceList(job.description || []) || '- Not shared'}`,
+    `Tags:\n${sentenceList(job.tags || []) || '- Not shared'}`,
+  ];
+
+  if (candidate) {
+    parts.push(
+      `Candidate summary: ${candidate.summary || 'Not shared'}`,
+      `Candidate skills:\n${sentenceList(candidate.skills || []) || '- Not shared'}`,
+      `Candidate projects:\n${sentenceList(candidate.projects || []) || '- Not shared'}`,
+      `Candidate experience:\n${sentenceList(candidate.experience || []) || '- Not shared'}`,
+      `Potential skill gaps:\n${sentenceList(candidate.missingSkills || []) || '- None identified'}`
+    );
   }
 
-  const response = await client.models.generateContent({
-    model: 'gemini-2.5-flash',
-    contents: `You are an ATS and recruiter resume reviewer.
+  return parts.join('\n\n');
+}
+
+export async function analyzeResumeWithAI({ jobDescription, resumeText, studentProfile }) {
+  const response = await generateWithCareerAi(`You are an ATS and recruiter resume reviewer.
 Analyze the student's resume against the target job description.
 Return ONLY valid JSON in this shape:
 {
@@ -60,8 +124,7 @@ Job description:
 ${jobDescription}
 
 Resume text:
-${resumeText}`,
-  });
+${resumeText}`);
 
   const parsed = JSON.parse(cleanJsonString(response.text || '{}'));
   return {
@@ -82,14 +145,7 @@ ${resumeText}`,
 }
 
 export async function tailorResumeWithAI({ profile, job, currentDraft }) {
-  const client = getClient();
-  if (!client) {
-    throw new Error('AI client unavailable');
-  }
-
-  const response = await client.models.generateContent({
-    model: 'gemini-2.5-flash',
-    contents: `You are an expert resume coach.
+  const response = await generateWithCareerAi(`You are an expert resume coach.
 Tailor this student's existing resume draft to the target job without inventing new experience.
 Return ONLY valid JSON in this shape:
 {
@@ -116,8 +172,7 @@ Target job:
 ${JSON.stringify(job || {}, null, 2)}
 
 Current resume draft:
-${JSON.stringify(currentDraft || {}, null, 2)}`,
-  });
+${JSON.stringify(currentDraft || {}, null, 2)}`);
 
   const parsed = JSON.parse(cleanJsonString(response.text || '{}'));
   return {
@@ -132,14 +187,7 @@ ${JSON.stringify(currentDraft || {}, null, 2)}`,
 }
 
 export async function generateCoverLetterWithAI({ profile, job, tailoredResume }) {
-  const client = getClient();
-  if (!client) {
-    throw new Error('AI client unavailable');
-  }
-
-  const response = await client.models.generateContent({
-    model: 'gemini-2.5-flash',
-    contents: `Write a concise, professional cover letter for this student and target job.
+  const response = await generateWithCareerAi(`Write a concise, professional cover letter for this student and target job.
 Use only the evidence present in the profile and resume package.
 Do not invent experience.
 Return plain text only, no markdown, no JSON.
@@ -151,18 +199,12 @@ Target job:
 ${JSON.stringify(job || {}, null, 2)}
 
 Tailored resume package:
-${JSON.stringify(tailoredResume || {}, null, 2)}`,
-  });
+${JSON.stringify(tailoredResume || {}, null, 2)}`);
 
   return String(response.text || '').trim();
 }
 
 export async function rankJobsForStudentWithAI({ profile, jobs }) {
-  const client = getClient();
-  if (!client) {
-    throw new Error('AI client unavailable');
-  }
-
   const trimmedJobs = (jobs || []).slice(0, 12).map((job) => ({
     company: job.company,
     title: job.title,
@@ -174,9 +216,7 @@ export async function rankJobsForStudentWithAI({ profile, jobs }) {
     description: job.description,
   }));
 
-  const response = await client.models.generateContent({
-    model: 'gemini-2.5-flash',
-    contents: `You are a job matching assistant.
+  const response = await generateWithCareerAi(`You are a job matching assistant.
 Rank these jobs for the student profile and return ONLY valid JSON as an array:
 [
   {
@@ -198,8 +238,7 @@ Student profile:
 ${JSON.stringify(profile || {}, null, 2)}
 
 Jobs:
-${JSON.stringify(trimmedJobs, null, 2)}`,
-  });
+${JSON.stringify(trimmedJobs, null, 2)}`);
 
   const parsed = JSON.parse(cleanJsonString(response.text || '[]'));
   return Array.isArray(parsed)
@@ -214,14 +253,7 @@ ${JSON.stringify(trimmedJobs, null, 2)}`,
 }
 
 export async function reviewTailoredResumeForJobWithAI({ profile, job, tailoredResume, coverLetter = '' }) {
-  const client = getClient();
-  if (!client) {
-    throw new Error('AI client unavailable');
-  }
-
-  const response = await client.models.generateContent({
-    model: 'gemini-2.5-flash',
-    contents: `You are an AI recruiting assistant reviewing whether a student should apply now or improve the resume first.
+  const response = await generateWithCareerAi(`You are an AI recruiting assistant reviewing whether a student should apply now or improve the resume first.
 Review the tailored resume package against the target job.
 Return ONLY valid JSON in this shape:
 {
@@ -253,8 +285,7 @@ Tailored resume:
 ${JSON.stringify(tailoredResume || {}, null, 2)}
 
 Cover letter:
-${coverLetter}`,
-  });
+${coverLetter}`);
 
   const parsed = JSON.parse(cleanJsonString(response.text || '{}'));
   return {
@@ -266,5 +297,111 @@ ${coverLetter}`,
     improvementTips: sanitizeStringList(parsed.improvementTips),
     suggestedBullets: sanitizeStringList(parsed.suggestedBullets),
     reasoning: String(parsed.reasoning || '').trim(),
+  };
+}
+
+export async function generateInterviewOpeningQuestionWithAI(target) {
+  const response = await generateWithCareerAi(`You are an experienced technical interviewer.
+Create the opening interview question for this candidate and job.
+Return ONLY valid JSON:
+{
+  "question": "string"
+}
+
+Rules:
+- Ask exactly one question.
+- Make it realistic, specific to the job description, and strong for a live interview opener.
+- Keep it under 55 words.
+- Do not add commentary outside the JSON.
+
+Interview context:
+${buildInterviewJobContext(target)}`);
+
+  const parsed = JSON.parse(cleanJsonString(response.text || '{}'));
+  return {
+    question: normalizeText(parsed.question || ''),
+  };
+}
+
+export async function generateInterviewFollowUpQuestionWithAI(target, qaHistory = []) {
+  const response = await generateWithCareerAi(`You are an experienced live interviewer.
+Generate the next best follow-up interview question based on the job and the candidate's previous answers.
+Return ONLY valid JSON:
+{
+  "question": "string"
+}
+
+Rules:
+- Ask exactly one question.
+- Do not repeat a previous question.
+- Push for depth, evidence, or job-specific relevance.
+- Keep it under 55 words.
+
+Interview context:
+${buildInterviewJobContext(target)}
+
+Recent question and answer history:
+${JSON.stringify(qaHistory || [], null, 2)}`);
+
+  const parsed = JSON.parse(cleanJsonString(response.text || '{}'));
+  return {
+    question: normalizeText(parsed.question || ''),
+  };
+}
+
+export async function evaluateInterviewWithAI(target, qaHistory = []) {
+  const response = await generateWithCareerAi(`You are an expert interview evaluator.
+Evaluate this mock interview and return ONLY valid JSON:
+{
+  "score": 82,
+  "summary": "string",
+  "strengths": ["string", "string", "string"],
+  "weakAreas": ["string", "string", "string"]
+}
+
+Rules:
+- score must be an integer from 0 to 100
+- summary should be 2 to 3 sentences
+- strengths should have up to 3 concise items
+- weakAreas should have up to 3 concise, actionable items
+- ground the evaluation in the actual answers and the job requirements
+
+Interview context:
+${buildInterviewJobContext(target)}
+
+Question and answer history:
+${JSON.stringify(qaHistory || [], null, 2)}`);
+
+  const parsed = JSON.parse(cleanJsonString(response.text || '{}'));
+  return {
+    score: Math.max(0, Math.min(100, Number(parsed.score || 0))),
+    summary: normalizeText(parsed.summary || ''),
+    strengths: sanitizeStringList(parsed.strengths).slice(0, 3),
+    weakAreas: sanitizeStringList(parsed.weakAreas).slice(0, 3),
+  };
+}
+
+export async function transcribeInterviewAudioWithAI({ mimeType = 'audio/webm', data }) {
+  if (!data) {
+    throw new Error('Audio data is required for transcription.');
+  }
+
+  const response = await generateWithCareerAi([
+    {
+      role: 'user',
+      parts: [
+        { text: 'Transcribe this interview answer accurately. Return only the plain spoken transcript with no commentary.' },
+        {
+          inlineData: {
+            mimeType,
+            data,
+          },
+        },
+      ],
+    },
+  ]);
+
+  return {
+    transcript: normalizeText(response.text || ''),
   };
 }

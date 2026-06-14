@@ -8,6 +8,7 @@ import {
 } from '../lib/interviewInsights';
 import { getPublishedJobs } from '../lib/recruiterData';
 import { aiApi, integrationApi } from '../lib/backendSync';
+import { getCareerAiErrorMessage, isCareerAiAvailable } from '../lib/aiCareerTools';
 const MAX_CONTEXT_ANSWERS = 3;
 
 function cleanJsonString(str) {
@@ -29,6 +30,84 @@ function blobToBase64(blob) {
     reader.onerror = () => reject(reader.error || new Error('Failed to read audio blob.'));
     reader.readAsDataURL(blob);
   });
+}
+
+function downsampleBuffer(buffer, inputSampleRate, outputSampleRate) {
+  if (outputSampleRate >= inputSampleRate) {
+    return buffer;
+  }
+
+  const sampleRateRatio = inputSampleRate / outputSampleRate;
+  const newLength = Math.round(buffer.length / sampleRateRatio);
+  const result = new Float32Array(newLength);
+  let offsetResult = 0;
+  let offsetBuffer = 0;
+
+  while (offsetResult < result.length) {
+    const nextOffsetBuffer = Math.round((offsetResult + 1) * sampleRateRatio);
+    let accum = 0;
+    let count = 0;
+
+    for (let index = offsetBuffer; index < nextOffsetBuffer && index < buffer.length; index += 1) {
+      accum += buffer[index];
+      count += 1;
+    }
+
+    result[offsetResult] = count ? accum / count : 0;
+    offsetResult += 1;
+    offsetBuffer = nextOffsetBuffer;
+  }
+
+  return result;
+}
+
+function encodeWavFromFloat32(samples, sampleRate = 16000) {
+  const bytesPerSample = 2;
+  const dataLength = samples.length * bytesPerSample;
+  const buffer = new ArrayBuffer(44 + dataLength);
+  const view = new DataView(buffer);
+
+  function writeString(offset, value) {
+    for (let index = 0; index < value.length; index += 1) {
+      view.setUint8(offset + index, value.charCodeAt(index));
+    }
+  }
+
+  writeString(0, 'RIFF');
+  view.setUint32(4, 36 + dataLength, true);
+  writeString(8, 'WAVE');
+  writeString(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * bytesPerSample, true);
+  view.setUint16(32, bytesPerSample, true);
+  view.setUint16(34, 16, true);
+  writeString(36, 'data');
+  view.setUint32(40, dataLength, true);
+
+  let offset = 44;
+  for (let index = 0; index < samples.length; index += 1) {
+    const sample = Math.max(-1, Math.min(1, samples[index]));
+    view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
+    offset += 2;
+  }
+
+  return new Blob([buffer], { type: 'audio/wav' });
+}
+
+function mergeFloat32Chunks(chunks = []) {
+  const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+  const merged = new Float32Array(totalLength);
+  let offset = 0;
+
+  chunks.forEach((chunk) => {
+    merged.set(chunk, offset);
+    offset += chunk.length;
+  });
+
+  return merged;
 }
 
 function slugify(value) {
@@ -283,13 +362,14 @@ async function transcribeAnswerAudio(audioBlob) {
     return normalizeText(response.transcript || '');
   } catch (error) {
     console.error('Audio transcription error:', error);
-    return '';
+    throw new Error(getCareerAiErrorMessage(error));
   }
 }
 
 export function MockInterviews({ applications = [] }) {
   const videoRef = useRef(null);
   const recognitionRef = useRef(null);
+  const shouldKeepRecognizingRef = useRef(false);
   const mediaStreamRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const recordedChunksRef = useRef([]);
@@ -298,6 +378,13 @@ export function MockInterviews({ applications = [] }) {
   const answerChunksRef = useRef([]);
   const answerCaptureActiveRef = useRef(false);
   const needsAudioTranscriptionRef = useRef(false);
+  const answerAudioContextRef = useRef(null);
+  const answerAudioSourceRef = useRef(null);
+  const answerAudioProcessorRef = useRef(null);
+  const answerAudioGainRef = useRef(null);
+  const answerDraftRef = useRef('');
+  const interimTranscriptRef = useRef('');
+  const answerTurnRef = useRef(0);
 
   const [selectedTargetId, setSelectedTargetId] = useState('');
   const [questionCount, setQuestionCount] = useState(4);
@@ -333,6 +420,7 @@ export function MockInterviews({ applications = [] }) {
   const dashboardStats = useMemo(() => getInterviewDashboardStats(feedbackHistory), [feedbackHistory]);
   const recognitionSupported = typeof window !== 'undefined' && Boolean(getSpeechRecognitionCtor());
   const activeQuestion = activeSession?.questions?.[activeSession.currentQuestionIndex] || '';
+  const liveAnswerText = normalizeText(`${answerDraft} ${interimTranscript}`);
 
   useEffect(() => {
     if (!selectedTargetId && interviewTargets[0]) {
@@ -344,9 +432,10 @@ export function MockInterviews({ applications = [] }) {
     const loadProviderStatus = async () => {
       try {
         const providers = await integrationApi.getStatus();
-        setAiConfigured(providers?.ai?.provider === 'gemini-server');
+        setAiConfigured(providers?.ai?.provider === 'gemini-server' || isCareerAiAvailable());
       } catch (error) {
         console.warn('Unable to fetch AI provider status.', error);
+        setAiConfigured(isCareerAiAvailable());
       }
     };
 
@@ -356,6 +445,14 @@ export function MockInterviews({ applications = [] }) {
   useEffect(() => {
     attachStreamToPreview();
   }, [mediaEnabled]);
+
+  useEffect(() => {
+    answerDraftRef.current = answerDraft;
+  }, [answerDraft]);
+
+  useEffect(() => {
+    interimTranscriptRef.current = interimTranscript;
+  }, [interimTranscript]);
 
   useEffect(() => {
     let timer;
@@ -414,7 +511,7 @@ export function MockInterviews({ applications = [] }) {
   }
 
   function stopMedia() {
-    if (answerRecorderRef.current && answerRecorderRef.current.state !== 'inactive') {
+    if (answerRecorderRef.current?.stop) {
       answerRecorderRef.current.stop();
     }
     answerRecorderRef.current = null;
@@ -470,8 +567,8 @@ export function MockInterviews({ applications = [] }) {
   }
 
   function startAnswerCapture(stream) {
-    if (typeof MediaRecorder === 'undefined' || !stream) return false;
-    if (answerRecorderRef.current?.state === 'recording') return true;
+    if (!stream) return false;
+    if (answerCaptureActiveRef.current) return true;
 
     const audioTracks = stream.getAudioTracks();
     if (!audioTracks.length) {
@@ -481,23 +578,57 @@ export function MockInterviews({ applications = [] }) {
 
     try {
       answerChunksRef.current = [];
-      const audioStream = new MediaStream(audioTracks);
-      const preferredMimeTypes = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'];
-      const mimeType = preferredMimeTypes.find((type) => MediaRecorder.isTypeSupported?.(type)) || '';
-      const recorder = mimeType ? new MediaRecorder(audioStream, { mimeType }) : new MediaRecorder(audioStream);
-      recorder.ondataavailable = (event) => {
-        if (event.data && event.data.size > 0) {
-          answerChunksRef.current.push(event.data);
-        }
+      const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextCtor) {
+        setPermissionError('This browser does not support live audio capture for transcription.');
+        return false;
+      }
+
+      const audioContext = new AudioContextCtor();
+      const source = audioContext.createMediaStreamSource(new MediaStream(audioTracks));
+      const processor = audioContext.createScriptProcessor(4096, 1, 1);
+      const mutedGain = audioContext.createGain();
+      mutedGain.gain.value = 0;
+
+      processor.onaudioprocess = (event) => {
+        const channelData = event.inputBuffer.getChannelData(0);
+        answerChunksRef.current.push(new Float32Array(channelData));
       };
-      recorder.onstart = () => {
-        answerCaptureActiveRef.current = true;
+
+      source.connect(processor);
+      processor.connect(mutedGain);
+      mutedGain.connect(audioContext.destination);
+
+      answerAudioContextRef.current = audioContext;
+      answerAudioSourceRef.current = source;
+      answerAudioProcessorRef.current = processor;
+      answerAudioGainRef.current = mutedGain;
+      answerRecorderRef.current = {
+        stop: async () => {
+          try {
+            processor.disconnect();
+            source.disconnect();
+            mutedGain.disconnect();
+          } catch (error) {
+            console.error('Answer audio node disconnect error:', error);
+          }
+
+          answerAudioProcessorRef.current = null;
+          answerAudioSourceRef.current = null;
+          answerAudioGainRef.current = null;
+
+          try {
+            await audioContext.close();
+          } catch (error) {
+            console.error('Answer audio context close error:', error);
+          }
+
+          if (answerAudioContextRef.current === audioContext) {
+            answerAudioContextRef.current = null;
+          }
+        },
       };
-      recorder.onstop = () => {
-        answerCaptureActiveRef.current = false;
-      };
-      recorder.start();
-      answerRecorderRef.current = recorder;
+      answerCaptureActiveRef.current = true;
       return true;
     } catch (error) {
       console.error('Answer capture start error:', error);
@@ -508,31 +639,29 @@ export function MockInterviews({ applications = [] }) {
 
   async function stopAnswerCapture() {
     if (!answerRecorderRef.current) {
-      return answerChunksRef.current.length
-        ? new Blob(answerChunksRef.current, { type: answerChunksRef.current[0]?.type || 'audio/webm' })
-        : null;
+      if (!answerChunksRef.current.length) return null;
+      const audioContext = answerAudioContextRef.current;
+      const sampleRate = audioContext?.sampleRate || 48000;
+      const merged = mergeFloat32Chunks(answerChunksRef.current);
+      const downsampled = downsampleBuffer(merged, sampleRate, 16000);
+      return encodeWavFromFloat32(downsampled, 16000);
     }
 
     const recorder = answerRecorderRef.current;
+    const audioContext = answerAudioContextRef.current;
+    const sampleRate = audioContext?.sampleRate || 48000;
 
-    if (recorder.state === 'inactive') {
-      answerRecorderRef.current = null;
-      return answerChunksRef.current.length
-        ? new Blob(answerChunksRef.current, { type: answerChunksRef.current[0]?.type || recorder.mimeType || 'audio/webm' })
-        : null;
+    await recorder.stop();
+    answerCaptureActiveRef.current = false;
+    answerRecorderRef.current = null;
+
+    if (!answerChunksRef.current.length) {
+      return null;
     }
 
-    return new Promise((resolve) => {
-      recorder.onstop = () => {
-        answerCaptureActiveRef.current = false;
-        const blob = answerChunksRef.current.length
-          ? new Blob(answerChunksRef.current, { type: answerChunksRef.current[0]?.type || recorder.mimeType || 'audio/webm' })
-          : null;
-        answerRecorderRef.current = null;
-        resolve(blob);
-      };
-      recorder.stop();
-    });
+    const merged = mergeFloat32Chunks(answerChunksRef.current);
+    const downsampled = downsampleBuffer(merged, sampleRate, 16000);
+    return encodeWavFromFloat32(downsampled, 16000);
   }
 
   async function requestMediaAccess() {
@@ -581,6 +710,123 @@ export function MockInterviews({ applications = [] }) {
     window.speechSynthesis.speak(utterance);
   }
 
+  function resetCurrentAnswerState() {
+    answerTurnRef.current += 1;
+    answerDraftRef.current = '';
+    interimTranscriptRef.current = '';
+    setAnswerDraft('');
+    setInterimTranscript('');
+  }
+
+  function createRecognitionInstance(answerTurnId) {
+    const RecognitionCtor = getSpeechRecognitionCtor();
+    if (!RecognitionCtor) return null;
+
+    const recognition = new RecognitionCtor();
+    recognition.lang = 'en-US';
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => {
+      setMediaStatus('Microphone is live. Speak naturally and your answer will appear below.');
+    };
+
+    recognition.onresult = (event) => {
+      if (answerTurnRef.current !== answerTurnId) return;
+
+      let finalText = '';
+      let interimText = '';
+
+      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+        const transcript = event.results[index][0].transcript;
+        if (event.results[index].isFinal) {
+          finalText += `${transcript} `;
+        } else {
+          interimText += transcript;
+        }
+      }
+
+      if (finalText) {
+        setAnswerDraft((prev) => normalizeText(`${prev} ${finalText}`));
+      }
+      setInterimTranscript(interimText.trim());
+    };
+
+    recognition.onerror = (event) => {
+      console.error('Speech recognition error:', event.error);
+      recognitionRef.current = null;
+
+      if (event.error === 'network') {
+        shouldKeepRecognizingRef.current = false;
+      }
+
+      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+        needsAudioTranscriptionRef.current = true;
+        setPermissionError('Microphone transcription permission was blocked by the browser. Please allow mic access and try again.');
+        setMediaStatus('Live transcription was blocked. Keep speaking and the answer will be transcribed after you stop.');
+      } else if (event.error === 'audio-capture') {
+        needsAudioTranscriptionRef.current = true;
+        setPermissionError('No microphone input was detected. Please check your mic and browser device settings.');
+        setMediaStatus('Microphone input was not detected.');
+      } else if (event.error === 'no-speech') {
+        needsAudioTranscriptionRef.current = true;
+        setPermissionError('No speech was detected yet. Keep speaking clearly and the system will continue listening.');
+        setMediaStatus('Waiting for speech. Keep speaking naturally into your microphone.');
+      } else if (event.error === 'network') {
+        if (aiConfigured) {
+          needsAudioTranscriptionRef.current = true;
+          setPermissionError('Browser speech recognition hit a network error. Your answer is still being recorded and will be transcribed after you stop.');
+          setMediaStatus('Using AI audio transcription fallback. Keep speaking, then stop to continue.');
+        } else {
+          setPermissionError('Browser speech recognition hit a network error and the server AI fallback is not configured. Please retry or type your answer manually.');
+          setMediaStatus('Live transcription failed and no AI fallback is available.');
+        }
+      } else if (event.error === 'aborted') {
+        if (answerCaptureActiveRef.current) {
+          needsAudioTranscriptionRef.current = true;
+          setMediaStatus('Live transcription paused. Audio capture is still running.');
+        } else {
+          setMediaStatus('Microphone stopped.');
+        }
+      } else {
+        needsAudioTranscriptionRef.current = true;
+        setPermissionError('Speech recognition stopped unexpectedly. We will use audio transcription for this answer.');
+        setMediaStatus('Speech recognition stopped unexpectedly. Audio transcription fallback is active.');
+      }
+    };
+
+    recognition.onend = () => {
+      recognitionRef.current = null;
+
+      if (shouldKeepRecognizingRef.current && answerCaptureActiveRef.current) {
+        window.setTimeout(() => {
+          if (!shouldKeepRecognizingRef.current || !answerCaptureActiveRef.current || answerTurnRef.current !== answerTurnId) return;
+          const nextRecognition = createRecognitionInstance(answerTurnId);
+          if (!nextRecognition) return;
+          recognitionRef.current = nextRecognition;
+          try {
+            nextRecognition.start();
+          } catch (error) {
+            console.error('Speech recognition restart error:', error);
+            recognitionRef.current = null;
+            needsAudioTranscriptionRef.current = true;
+            shouldKeepRecognizingRef.current = false;
+            setMediaStatus('Live transcript stopped, but answer audio is still being recorded for AI transcription.');
+          }
+        }, 150);
+        return;
+      }
+
+      if (!answerCaptureActiveRef.current) {
+        setIsListening(false);
+        setMediaStatus('Microphone stopped. You can review the transcript or start speaking again.');
+      }
+    };
+
+    return recognition;
+  }
+
   function startListening() {
     if (isListening || loadingNextQuestion || evaluating || isTranscribingAnswer) return;
     if (isAiSpeaking) {
@@ -600,91 +846,26 @@ export function MockInterviews({ applications = [] }) {
       return;
     }
 
+    const answerTurnId = answerTurnRef.current + 1;
+    answerTurnRef.current = answerTurnId;
     needsAudioTranscriptionRef.current = !recognitionSupported;
     setPermissionError('');
     setInterimTranscript('');
     setIsListening(true);
+    shouldKeepRecognizingRef.current = recognitionSupported;
 
     if (!recognitionSupported) {
       setMediaStatus('Recording answer audio. Transcription will be generated after you stop speaking.');
       return;
     }
 
-    const RecognitionCtor = getSpeechRecognitionCtor();
-    const recognition = new RecognitionCtor();
-    recognition.lang = 'en-US';
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.maxAlternatives = 1;
-
-    recognition.onstart = () => {
-      setMediaStatus('Microphone is live. Speak naturally and your answer will appear below.');
-    };
-
-    recognition.onresult = (event) => {
-      let finalText = '';
-      let interimText = '';
-
-      for (let index = event.resultIndex; index < event.results.length; index += 1) {
-        const transcript = event.results[index][0].transcript;
-        if (event.results[index].isFinal) {
-          finalText += `${transcript} `;
-        } else {
-          interimText += transcript;
-        }
-      }
-
-      if (finalText) {
-        setAnswerDraft((prev) => `${prev} ${finalText}`.trim());
-      }
-      setInterimTranscript(interimText.trim());
-    };
-
-    recognition.onerror = (event) => {
-      console.error('Speech recognition error:', event.error);
-      recognitionRef.current = null;
-      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
-        needsAudioTranscriptionRef.current = true;
-        setPermissionError('Microphone transcription permission was blocked by the browser. Please allow mic access and try again.');
-        setMediaStatus('Live transcription was blocked. Keep speaking and the answer will be transcribed after you stop.');
-      } else if (event.error === 'audio-capture') {
-        needsAudioTranscriptionRef.current = true;
-        setPermissionError('No microphone input was detected. Please check your mic and browser device settings.');
-        setMediaStatus('Microphone input was not detected.');
-      } else if (event.error === 'no-speech') {
-        needsAudioTranscriptionRef.current = true;
-        setPermissionError('No speech was detected. Click start answer again and speak clearly after the mic opens.');
-        setMediaStatus('No live transcript detected yet. Keep speaking or try again.');
-      } else if (event.error === 'network') {
-        if (aiConfigured) {
-          needsAudioTranscriptionRef.current = true;
-          setPermissionError('Browser speech recognition hit a network error. Your answer is still being recorded and will be transcribed after you stop.');
-          setMediaStatus('Using AI audio transcription fallback. Keep speaking, then click stop answer.');
-        } else {
-          setPermissionError('Browser speech recognition hit a network error and the server AI fallback is not configured. Please retry or type your answer manually.');
-          setMediaStatus('Live transcription failed and no AI fallback is available.');
-        }
-      } else if (event.error === 'aborted') {
-        if (answerCaptureActiveRef.current) {
-          needsAudioTranscriptionRef.current = true;
-          setMediaStatus('Live transcription stopped. Audio capture is still running.');
-        } else {
-          setMediaStatus('Microphone stopped.');
-        }
-      } else {
-        needsAudioTranscriptionRef.current = true;
-        setPermissionError('Speech recognition stopped unexpectedly. We will use audio transcription for this answer.');
-        setMediaStatus('Speech recognition stopped unexpectedly. Audio transcription fallback is active.');
-      }
-    };
-
-    recognition.onend = () => {
-      recognitionRef.current = null;
-      if (!answerCaptureActiveRef.current) {
-        setIsListening(false);
-        setMediaStatus('Microphone stopped. You can review the transcript or start speaking again.');
-      }
-    };
+    const recognition = createRecognitionInstance(answerTurnId);
+    if (!recognition) {
+      setIsListening(false);
+      shouldKeepRecognizingRef.current = false;
+      setPermissionError('Speech recognition is unavailable in this browser.');
+      return;
+    }
 
     recognitionRef.current = recognition;
     try {
@@ -693,20 +874,23 @@ export function MockInterviews({ applications = [] }) {
       console.error('Speech recognition start error:', error);
       recognitionRef.current = null;
       setIsListening(false);
+      shouldKeepRecognizingRef.current = false;
       setPermissionError('The browser could not start speech recognition. Please try again.');
       setMediaStatus('Speech recognition could not start.');
     }
   }
 
   async function stopListening() {
+    const answerTurnId = answerTurnRef.current;
+    shouldKeepRecognizingRef.current = false;
     if (recognitionRef.current) {
       recognitionRef.current.stop();
       recognitionRef.current = null;
     }
 
     const audioBlob = await stopAnswerCapture();
-    const draftSnapshot = normalizeText(answerDraft);
-    const interimSnapshot = normalizeText(interimTranscript);
+    const draftSnapshot = normalizeText(answerDraftRef.current);
+    const interimSnapshot = normalizeText(interimTranscriptRef.current);
     const needsTranscription = Boolean(
       audioBlob &&
       (needsAudioTranscriptionRef.current || !draftSnapshot && !interimSnapshot)
@@ -716,15 +900,19 @@ export function MockInterviews({ applications = [] }) {
     if (needsTranscription) {
       setIsTranscribingAnswer(true);
       setMediaStatus('Transcribing your spoken answer...');
-      transcribedText = await transcribeAnswerAudio(audioBlob);
+      try {
+        transcribedText = await transcribeAnswerAudio(audioBlob);
+      } catch (error) {
+        setPermissionError(String(error?.message || error));
+      }
       setIsTranscribingAnswer(false);
 
-      if (transcribedText) {
+      if (transcribedText && answerTurnRef.current === answerTurnId) {
         setAnswerDraft((prev) => normalizeText(`${prev} ${transcribedText}`));
         setInterimTranscript('');
         setMediaStatus('Answer transcribed successfully. Review it and continue.');
-      } else {
-        setMediaStatus('Audio was captured, but transcription could not be generated. You can type or retry.');
+      } else if (!transcribedText) {
+        setMediaStatus('Audio was captured, but the AI transcription provider could not generate text for this answer.');
       }
     } else {
       setMediaStatus('Microphone stopped. You can review the transcript or start speaking again.');
@@ -732,7 +920,7 @@ export function MockInterviews({ applications = [] }) {
 
     needsAudioTranscriptionRef.current = false;
     setIsListening(false);
-    return transcribedText;
+    return normalizeText(`${draftSnapshot} ${interimSnapshot} ${transcribedText}`);
   }
 
   async function handleInitializeSession() {
@@ -772,8 +960,7 @@ export function MockInterviews({ applications = [] }) {
   async function handleSubmitAnswer() {
     if (!activeSession) return;
 
-    const transcribedText = await stopListening();
-    const normalizedAnswer = normalizeText(`${answerDraft} ${interimTranscript} ${transcribedText}`);
+    const normalizedAnswer = await stopListening();
     if (!normalizedAnswer) return;
 
     const currentQuestion = activeSession.questions[activeSession.currentQuestionIndex];
@@ -789,19 +976,20 @@ export function MockInterviews({ applications = [] }) {
     if (answeredCount >= activeSession.questionCount) {
       setEvaluating(true);
       setMediaStatus('Interview complete. Generating your feedback.');
+      resetCurrentAnswerState();
       const finalFeedback = await evaluateInterview(activeSession.target, nextQaHistory);
       const persistedHistory = saveInterviewFeedbackHistory([finalFeedback, ...feedbackHistory]);
       setFeedbackHistory(persistedHistory);
       setSessionCompleted(finalFeedback);
       setEvaluating(false);
       setActiveSession(null);
-      setAnswerDraft('');
-      setInterimTranscript('');
       stopRecording();
       return;
     }
 
     setLoadingNextQuestion(true);
+    resetCurrentAnswerState();
+    setMediaStatus('Answer saved. Generating the next interview question.');
     const nextQuestion = await generateFollowUpQuestion(activeSession.target, nextQaHistory);
     setActiveSession({
       ...activeSession,
@@ -809,18 +997,22 @@ export function MockInterviews({ applications = [] }) {
       questions: [...activeSession.questions, nextQuestion],
       qaHistory: nextQaHistory,
     });
-    setAnswerDraft('');
-    setInterimTranscript('');
     setLoadingNextQuestion(false);
     setMediaStatus('Next question ready. Click start answer when you are ready to speak.');
+  }
+
+  function handleAnswerTextChange(event) {
+    answerDraftRef.current = event.target.value;
+    interimTranscriptRef.current = '';
+    setAnswerDraft(event.target.value);
+    setInterimTranscript('');
   }
 
   function quitSession() {
     void stopListening();
     window.speechSynthesis?.cancel();
     setActiveSession(null);
-    setAnswerDraft('');
-    setInterimTranscript('');
+    resetCurrentAnswerState();
     setPreparingSession(false);
     setLoadingNextQuestion(false);
     stopRecording();
@@ -944,11 +1136,11 @@ export function MockInterviews({ applications = [] }) {
                       Repeat question
                     </button>
                     <button
-                      onClick={() => { void stopListening(); }}
-                      disabled={!isListening || isTranscribingAnswer}
+                      onClick={() => { void handleSubmitAnswer(); }}
+                      disabled={loadingNextQuestion || isTranscribingAnswer || (!isListening && !liveAnswerText)}
                       className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-slate-700 transition-colors hover:bg-slate-50"
                     >
-                      Stop answer
+                      {activeSession.currentQuestionIndex === activeSession.questionCount - 1 ? 'Stop and finish' : 'Stop and continue'}
                     </button>
                   </div>
                 </div>
@@ -972,22 +1164,22 @@ export function MockInterviews({ applications = [] }) {
                         </span>
                       )}
                       <button
-                        onClick={isListening ? () => { void stopListening(); } : startListening}
+                        onClick={isListening ? () => { void handleSubmitAnswer(); } : startListening}
                         disabled={loadingNextQuestion || isAiSpeaking || isTranscribingAnswer}
                         className={`rounded-xl px-4 py-2.5 text-xs font-bold uppercase tracking-wider transition-colors ${
                           isListening ? 'bg-danger text-white' : 'bg-primary text-white'
                         } disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500`}
                       >
-                        {isTranscribingAnswer ? 'Transcribing...' : isListening ? 'Stop answer' : 'Start answer'}
+                        {isTranscribingAnswer ? 'Transcribing...' : isListening ? 'Stop and continue' : 'Start answer'}
                       </button>
                     </div>
                   </div>
 
                   <textarea
                     rows="10"
-                    value={answerDraft}
-                    onChange={(event) => setAnswerDraft(event.target.value)}
-                    placeholder="Your spoken answer will appear here. You can refine the transcript before moving on."
+                    value={isListening ? liveAnswerText : answerDraft}
+                    onChange={handleAnswerTextChange}
+                    placeholder="Your spoken answer will appear here continuously. You can refine the transcript before moving on."
                     className="w-full resize-none rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-primary/20"
                   />
 
@@ -1013,7 +1205,7 @@ export function MockInterviews({ applications = [] }) {
                   </button>
                   <button
                     onClick={handleSubmitAnswer}
-                    disabled={loadingNextQuestion || isTranscribingAnswer || (!isListening && !normalizeText(`${answerDraft} ${interimTranscript}`))}
+                    disabled={loadingNextQuestion || isTranscribingAnswer || (!isListening && !liveAnswerText)}
                     className="rounded-xl bg-primary px-6 py-2.5 text-xs font-black uppercase tracking-widest text-white shadow-lg shadow-primary/15 transition-all hover:shadow-primary/25 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
                   >
                     {isTranscribingAnswer
