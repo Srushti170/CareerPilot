@@ -123,6 +123,27 @@ function getSpeechRecognitionCtor() {
   return window.SpeechRecognition || window.webkitSpeechRecognition || null;
 }
 
+async function requestBrowserMedia(constraints) {
+  if (navigator.mediaDevices?.getUserMedia) {
+    return navigator.mediaDevices.getUserMedia(constraints);
+  }
+
+  const legacyGetUserMedia = (
+    navigator.getUserMedia
+    || navigator.webkitGetUserMedia
+    || navigator.mozGetUserMedia
+    || navigator.msGetUserMedia
+  );
+
+  if (!legacyGetUserMedia) {
+    throw new Error('MEDIA_APIS_UNAVAILABLE');
+  }
+
+  return new Promise((resolve, reject) => {
+    legacyGetUserMedia.call(navigator, constraints, resolve, reject);
+  });
+}
+
 function getRoleTrack(job = {}) {
   const raw = `${job.title || ''} ${job.tags?.join(' ') || ''} ${job.requirements?.join(' ') || ''}`.toLowerCase();
   if (/frontend|react|ui|javascript|typescript/.test(raw)) return 'Frontend Engineer';
@@ -163,8 +184,14 @@ function buildCandidateSummary(application = {}) {
   };
 }
 
+const INTERVIEW_ELIGIBLE_STATUSES = new Set(['Reviewing', 'Interview', 'Offered', 'Accepted', 'Declined']);
+
 function buildInterviewTargets(applications = [], publishedJobs = []) {
-  const applicationTargets = applications.map((application) => {
+  const eligibleApplications = applications.filter((application) => (
+    INTERVIEW_ELIGIBLE_STATUSES.has(application.status || 'Applied')
+  ));
+
+  return eligibleApplications.map((application) => {
     const matchedJob = matchJobFromApplication(application, publishedJobs);
     const fallbackJob = {
       id: `app-job-${application.id}`,
@@ -201,28 +228,6 @@ function buildInterviewTargets(applications = [], publishedJobs = []) {
       candidate: buildCandidateSummary(application),
     };
   });
-
-  const existingJobKeys = new Set(applicationTargets.map((target) => `${slugify(target.company)}::${slugify(target.title)}`));
-
-  const practiceTargets = publishedJobs
-    .filter((job) => !existingJobKeys.has(`${slugify(job.company)}::${slugify(job.title)}`))
-    .slice(0, 6)
-    .map((job) => ({
-      id: `job-${job.id}`,
-      type: 'practice',
-      badge: job.status || 'Active',
-      sourceLabel: 'Practice job',
-      roleTrack: getRoleTrack(job),
-      company: job.company,
-      title: job.title,
-      subtitle: `${job.location} - ${job.type}`,
-      matchScore: Number(job.match || 0),
-      job,
-      application: null,
-      candidate: null,
-    }));
-
-  return [...applicationTargets, ...practiceTargets];
 }
 
 function buildJobContext(target) {
@@ -367,7 +372,8 @@ async function transcribeAnswerAudio(audioBlob) {
 }
 
 export function MockInterviews({ applications = [] }) {
-  const videoRef = useRef(null);
+  const previewVideoRef = useRef(null);
+  const liveVideoRef = useRef(null);
   const recognitionRef = useRef(null);
   const shouldKeepRecognizingRef = useRef(false);
   const mediaStreamRef = useRef(null);
@@ -387,7 +393,8 @@ export function MockInterviews({ applications = [] }) {
   const answerTurnRef = useRef(0);
 
   const [selectedTargetId, setSelectedTargetId] = useState('');
-  const [questionCount, setQuestionCount] = useState(4);
+  const [setupTargetId, setSetupTargetId] = useState('');
+  const [questionCount] = useState(4);
   const [preparingSession, setPreparingSession] = useState(false);
   const [loadingNextQuestion, setLoadingNextQuestion] = useState(false);
   const [evaluating, setEvaluating] = useState(false);
@@ -417,6 +424,10 @@ export function MockInterviews({ applications = [] }) {
     () => interviewTargets.find((target) => target.id === selectedTargetId) || interviewTargets[0] || null,
     [interviewTargets, selectedTargetId]
   );
+  const setupTarget = useMemo(
+    () => interviewTargets.find((target) => target.id === setupTargetId) || null,
+    [interviewTargets, setupTargetId]
+  );
   const dashboardStats = useMemo(() => getInterviewDashboardStats(feedbackHistory), [feedbackHistory]);
   const recognitionSupported = typeof window !== 'undefined' && Boolean(getSpeechRecognitionCtor());
   const activeQuestion = activeSession?.questions?.[activeSession.currentQuestionIndex] || '';
@@ -427,6 +438,12 @@ export function MockInterviews({ applications = [] }) {
       setSelectedTargetId(interviewTargets[0].id);
     }
   }, [interviewTargets, selectedTargetId]);
+
+  useEffect(() => {
+    if (setupTargetId && !interviewTargets.some((target) => target.id === setupTargetId)) {
+      setSetupTargetId('');
+    }
+  }, [interviewTargets, setupTargetId]);
 
   useEffect(() => {
     const loadProviderStatus = async () => {
@@ -443,8 +460,9 @@ export function MockInterviews({ applications = [] }) {
   }, []);
 
   useEffect(() => {
-    attachStreamToPreview();
-  }, [mediaEnabled]);
+    attachStreamToPreview(previewVideoRef.current);
+    attachStreamToPreview(liveVideoRef.current);
+  }, [mediaEnabled, setupTargetId, activeSession]);
 
   useEffect(() => {
     answerDraftRef.current = answerDraft;
@@ -487,10 +505,9 @@ export function MockInterviews({ applications = [] }) {
     speechUtteranceRef.current = null;
   }, []);
 
-  function attachStreamToPreview() {
-    if (!videoRef.current || !mediaStreamRef.current) return;
+  function attachStreamToPreview(video) {
+    if (!video || !mediaStreamRef.current) return;
 
-    const video = videoRef.current;
     if (video.srcObject !== mediaStreamRef.current) {
       video.srcObject = mediaStreamRef.current;
     }
@@ -671,7 +688,12 @@ export function MockInterviews({ applications = [] }) {
         mediaStreamRef.current.getTracks().forEach((track) => track.stop());
       }
 
-      const stream = await navigator.mediaDevices.getUserMedia({
+      const isLocalHost = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+      if (!window.isSecureContext && !isLocalHost) {
+        throw new Error('INSECURE_CONTEXT');
+      }
+
+      const stream = await requestBrowserMedia({
         video: {
           facingMode: 'user',
           width: { ideal: 1280 },
@@ -686,11 +708,20 @@ export function MockInterviews({ applications = [] }) {
       mediaStreamRef.current = stream;
       setMediaEnabled(true);
       setMediaStatus('Camera and microphone connected successfully.');
-      window.setTimeout(() => attachStreamToPreview(), 0);
+      window.setTimeout(() => {
+        attachStreamToPreview(previewVideoRef.current);
+        attachStreamToPreview(liveVideoRef.current);
+      }, 0);
       return true;
     } catch (error) {
       console.error('Media permission error:', error);
-      setPermissionError('Camera and microphone access are required for the live mock interview experience.');
+      if (error?.message === 'INSECURE_CONTEXT') {
+        setPermissionError('Open CareerPilot on localhost or HTTPS. Camera and microphone access is blocked on insecure page URLs.');
+      } else if (error?.message === 'MEDIA_APIS_UNAVAILABLE') {
+        setPermissionError('This browser view does not expose camera or microphone APIs. Open CareerPilot in a supported browser on localhost or HTTPS.');
+      } else {
+        setPermissionError('Camera and microphone access are required for the live mock interview experience.');
+      }
       setMediaStatus('Camera and microphone access was denied or unavailable.');
       return false;
     }
@@ -1019,6 +1050,20 @@ export function MockInterviews({ applications = [] }) {
     setMediaStatus(mediaEnabled ? 'Camera is still connected. You can start another interview when ready.' : 'Interview stopped.');
   }
 
+  function openSetupPanel(targetId) {
+    setSelectedTargetId(targetId);
+    setSetupTargetId(targetId);
+    setPermissionError('');
+  }
+
+  function closeSetupPanel() {
+    setSetupTargetId('');
+    setPermissionError('');
+    if (!activeSession) {
+      setMediaStatus(mediaEnabled ? 'Camera and microphone connected successfully.' : 'Camera and microphone not connected yet.');
+    }
+  }
+
   return (
     <div className="mx-auto max-w-6xl space-y-10 px-8 pb-12 pt-24">
       <header className="mb-12 flex flex-col items-start justify-between gap-6 md:flex-row md:items-end">
@@ -1036,45 +1081,6 @@ export function MockInterviews({ applications = [] }) {
           </p>
         </div>
       </header>
-
-      {!activeSession && !preparingSession && !evaluating && (
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_0.9fr_0.9fr]">
-          <Card className="p-5">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400">Interview target</p>
-            <p className="mt-2 text-sm text-slate-600">
-              {interviewTargets.filter((item) => item.type === 'application').length} applied roles and{' '}
-              {interviewTargets.filter((item) => item.type === 'practice').length} practice jobs ready.
-            </p>
-          </Card>
-
-          <Card className="p-5">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400">Question count</p>
-            <div className="mt-3 flex gap-2">
-              {[4, 6].map((count) => (
-                <button
-                  key={count}
-                  onClick={() => setQuestionCount(count)}
-                  className={`flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors ${
-                    questionCount === count ? 'bg-primary text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  {count} questions
-                </button>
-              ))}
-            </div>
-          </Card>
-
-          <Card className="p-5">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400">Readiness</p>
-            <div className="mt-3 space-y-2 text-sm text-slate-600">
-              <p><span className="font-semibold text-slate-900">{dashboardStats.sessions}</span> completed sessions</p>
-              <p><span className="font-semibold text-slate-900">{dashboardStats.averageScore}%</span> average score</p>
-              <p>{recognitionSupported ? 'Live browser transcription is available, with AI audio fallback if it fails.' : 'Browser transcription is unavailable, so AI audio fallback will be used.'}</p>
-              <p>{mediaStatus}</p>
-            </div>
-          </Card>
-        </div>
-      )}
 
       {permissionError && (
         <div className="rounded-2xl border border-danger/20 bg-danger-soft px-4 py-3 text-sm font-medium text-danger">
@@ -1235,7 +1241,7 @@ export function MockInterviews({ applications = [] }) {
                 </div>
                 <div className="relative aspect-[4/3] bg-black">
                   {mediaEnabled ? (
-                    <video ref={videoRef} autoPlay muted playsInline className="h-full w-full object-cover [transform:scaleX(-1)]" />
+                    <video ref={liveVideoRef} autoPlay muted playsInline className="h-full w-full object-cover [transform:scaleX(-1)]" />
                   ) : (
                     <div className="flex h-full items-center justify-center text-slate-400">Camera preview unavailable</div>
                   )}
@@ -1251,30 +1257,6 @@ export function MockInterviews({ applications = [] }) {
                     <p>{activeSession.target.company}</p>
                     <p className="mt-1 text-[11px] text-slate-300">{activeSession.target.title}</p>
                   </div>
-                </div>
-              </Card>
-
-              <Card className="p-6">
-                <h4 className="font-bold text-on-surface">Target role context</h4>
-                <div className="mt-4 space-y-3 text-sm text-slate-600">
-                  <div className="rounded-xl bg-slate-50 p-3">
-                    <p className="font-semibold text-slate-900">{activeSession.target.company} - {activeSession.target.title}</p>
-                    <p className="mt-1">{activeSession.target.subtitle}</p>
-                  </div>
-                  <div className="rounded-xl bg-slate-50 p-3">
-                    <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">Core skills</p>
-                    <p className="mt-2">
-                      {(activeSession.target.job.requirements || activeSession.target.job.tags || []).slice(0, 6).join(', ') || 'Skills not provided'}
-                    </p>
-                  </div>
-                  {activeSession.target.candidate && (
-                    <div className="rounded-xl bg-slate-50 p-3">
-                      <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">Resume fit</p>
-                      <p className="mt-2">
-                        {activeSession.target.candidate.matchScore || activeSession.target.matchScore}% match with candidate profile
-                      </p>
-                    </div>
-                  )}
                 </div>
               </Card>
 
@@ -1361,24 +1343,21 @@ export function MockInterviews({ applications = [] }) {
 
         {!activeSession && !sessionCompleted && !preparingSession && !evaluating && (
           <motion.div
-            key={selectedTarget?.id || 'none'}
+            key={setupTarget?.id || 'role-list'}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="mt-12 grid grid-cols-12 gap-8"
+            className="mt-12"
           >
-            <div className="col-span-12 space-y-6 lg:col-span-8">
+            {!setupTarget ? (
+              <div className="grid grid-cols-12 gap-8">
+                <div className="col-span-12 space-y-6 lg:col-span-8">
               <Card className="p-6">
                 <div className="mb-6 flex items-center justify-between">
                   <div>
                     <h4 className="text-xl font-black text-on-surface">Choose a job for your interview</h4>
-                    <p className="mt-1 text-sm text-slate-500">Applied roles appear first so you can practice for real opportunities in your pipeline.</p>
+                    <p className="mt-1 text-sm text-slate-500">Only applications that have been shortlisted for interview practice appear here.</p>
                   </div>
-                  <button
-                    onClick={requestMediaAccess}
-                    className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50"
-                  >
-                    Allow camera and mic
-                  </button>
+                 
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-2">
@@ -1387,7 +1366,7 @@ export function MockInterviews({ applications = [] }) {
                     return (
                       <button
                         key={target.id}
-                        onClick={() => setSelectedTargetId(target.id)}
+                        onClick={() => openSetupPanel(target.id)}
                         className={`rounded-3xl border p-5 text-left transition-all ${
                           isSelected
                             ? 'border-primary bg-primary/5 shadow-lg shadow-primary/10'
@@ -1427,107 +1406,19 @@ export function MockInterviews({ applications = [] }) {
                     );
                   })}
                 </div>
-              </Card>
 
-              {selectedTarget ? (
-                <Card className="relative flex min-h-[420px] flex-col justify-between border-2 border-dashed border-slate-200 bg-slate-50 p-8">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-3">
-                      <span className="rounded-full bg-primary/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-primary">
-                        {selectedTarget.company} - {selectedTarget.title}
-                      </span>
-                      <span className="rounded-full bg-slate-200 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-slate-600">
-                        {selectedTarget.roleTrack}
-                      </span>
-                    </div>
-
-                    <h4 className="mt-6 text-3xl font-black leading-tight text-on-surface">
-                      Ready to start a live interview for this job?
-                    </h4>
-                    <p className="mt-4 max-w-2xl text-sm font-medium leading-6 text-slate-500">
-                      The system will analyze the job description, generate an opening question, ask adaptive follow-ups,
-                      capture your voice, and record the full camera-plus-mic session for review.
+                {interviewTargets.length === 0 && (
+                  <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 px-6 py-10 text-center">
+                    <p className="text-sm font-bold text-slate-700">No shortlisted interviews yet</p>
+                    <p className="mt-2 text-sm text-slate-500">
+                      Once an application moves to the shortlisted or interview stage, it will appear here for mock practice.
                     </p>
-
-                    <div className="mt-6 grid gap-4 md:grid-cols-2">
-                      <div className="rounded-2xl border border-slate-100 bg-white p-4">
-                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Job requirements</p>
-                        <p className="mt-2 text-sm leading-6 text-slate-700">
-                          {(selectedTarget.job.requirements || []).slice(0, 6).join(', ') || 'No structured requirements available'}
-                        </p>
-                      </div>
-                      <div className="rounded-2xl border border-slate-100 bg-white p-4">
-                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Candidate context</p>
-                        <p className="mt-2 text-sm leading-6 text-slate-700">
-                          {selectedTarget.candidate
-                            ? `${selectedTarget.candidate.name} with ${selectedTarget.candidate.skills.slice(0, 5).join(', ') || 'profile data'}`
-                            : 'This is practice mode using the job description only.'}
-                        </p>
-                      </div>
-                    </div>
                   </div>
-
-                  <div className="mt-8 flex flex-wrap gap-3">
-                    <button
-                      onClick={handleInitializeSession}
-                      className="rounded-2xl bg-primary px-10 py-4 text-xs font-black uppercase tracking-widest text-white shadow-xl shadow-primary/20 transition-all hover:scale-105 active:scale-95"
-                    >
-                      Start live interview
-                    </button>
-                    <button
-                      onClick={requestMediaAccess}
-                      className="rounded-2xl border border-slate-300 bg-white px-6 py-3 text-xs font-black uppercase tracking-widest text-slate-700 hover:bg-slate-50"
-                    >
-                      Test camera and mic
-                    </button>
-                  </div>
-
-                  <div className="mt-8 overflow-hidden rounded-3xl border border-slate-200 bg-slate-900">
-                    <div className="flex items-center justify-between border-b border-white/10 px-5 py-4 text-white">
-                      <div>
-                        <p className="text-sm font-bold">Camera and mic preview</p>
-                        <p className="mt-1 text-xs text-slate-300">Check your framing and permissions before the interview starts.</p>
-                      </div>
-                      <span className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest ${mediaEnabled ? 'bg-emerald-500/20 text-emerald-200' : 'bg-white/10 text-slate-200'}`}>
-                        {mediaEnabled ? 'Connected' : 'Not connected'}
-                      </span>
-                    </div>
-                    <div className="relative aspect-video bg-black">
-                      {mediaEnabled ? (
-                        <video ref={videoRef} autoPlay muted playsInline className="h-full w-full object-cover [transform:scaleX(-1)]" />
-                      ) : (
-                        <div className="flex h-full items-center justify-center px-6 text-center text-sm text-slate-400">
-                          Allow camera and microphone access to see your live preview here.
-                        </div>
-                      )}
-                      <div className="absolute bottom-4 left-4 rounded-full bg-black/50 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-white backdrop-blur">
-                        {mediaEnabled ? 'Preview live' : 'Preview unavailable'}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="absolute left-10 top-10 flex items-center gap-3 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
-                    <span className="material-symbols-outlined text-sm text-primary">mic</span>
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-600">
-                      {recognitionSupported ? 'Voice input ready' : 'Voice input unsupported'}
-                    </span>
-                  </div>
-                  <div className="absolute bottom-10 right-10 flex items-center gap-3 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
-                    <span className="material-symbols-outlined text-sm text-primary">smart_toy</span>
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-600">
-                      {aiConfigured ? 'AI adaptive interviewer' : 'AI not configured'}
-                    </span>
-                  </div>
-                </Card>
-              ) : (
-                <div className="flex min-h-[400px] flex-col items-center justify-center gap-4 rounded-3xl border-2 border-dashed border-slate-200 bg-surface-container-low/30 p-20 text-center">
-                  <span className="material-symbols-outlined animate-bounce text-6xl text-slate-200">work_history</span>
-                  <h4 className="text-xl font-bold text-slate-400">Add or publish a job to unlock live interview practice</h4>
+                )}
+              </Card>
                 </div>
-              )}
-            </div>
 
-            <div className="col-span-12 space-y-6 lg:col-span-4">
+                <div className="col-span-12 space-y-6 lg:col-span-4">
               <Card className="p-6">
                 <h4 className="mb-6 flex items-center justify-between font-bold text-on-surface">
                   Recent Feedback
@@ -1563,7 +1454,95 @@ export function MockInterviews({ applications = [] }) {
                 </div>
                 <span className="material-symbols-outlined absolute -bottom-10 -right-10 rotate-12 text-[160px] opacity-10">emoji_events</span>
               </Card>
-            </div>
+                </div>
+              </div>
+            ) : (
+              <div className="mx-auto max-w-5xl">
+                <Card className="relative flex min-h-[420px] flex-col justify-between border-2 border-dashed border-slate-200 bg-slate-50 p-8">
+                  <div>
+                    <div className="flex flex-wrap items-center justify-between gap-4">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <span className="rounded-full bg-primary/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-primary">
+                          {setupTarget.company} - {setupTarget.title}
+                        </span>
+                        <span className="rounded-full bg-slate-200 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-slate-600">
+                          {setupTarget.roleTrack}
+                        </span>
+                      </div>
+                      <button
+                        onClick={closeSetupPanel}
+                        className="rounded-2xl border border-slate-300 bg-white px-5 py-2.5 text-xs font-black uppercase tracking-widest text-slate-700 transition-colors hover:bg-slate-50"
+                      >
+                        Back to roles
+                      </button>
+                    </div>
+
+                    <h4 className="mt-6 text-3xl font-black leading-tight text-on-surface">
+                      Ready to start a live interview for this job role?
+                    </h4>
+                    <p className="mt-4 max-w-2xl text-sm font-medium leading-6 text-slate-500">
+                      Review the role details, test your camera and microphone, and then start the live interview room for this selected opportunity.
+                    </p>
+
+                    <div className="mt-6 grid gap-4 md:grid-cols-2">
+                      <div className="rounded-2xl border border-slate-100 bg-white p-4">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Job requirements</p>
+                        <p className="mt-2 text-sm leading-6 text-slate-700">
+                          {(setupTarget.job.requirements || []).slice(0, 6).join(', ') || 'No structured requirements available'}
+                        </p>
+                      </div>
+                      <div className="rounded-2xl border border-slate-100 bg-white p-4">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Candidate context</p>
+                        <p className="mt-2 text-sm leading-6 text-slate-700">
+                          {setupTarget.candidate
+                            ? `${setupTarget.candidate.name} with ${setupTarget.candidate.skills.slice(0, 5).join(', ') || 'profile data'}`
+                            : 'This is practice mode using the job description only.'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-8 flex flex-wrap gap-3">
+                    <button
+                      onClick={handleInitializeSession}
+                      className="rounded-2xl bg-primary px-10 py-4 text-xs font-black uppercase tracking-widest text-white shadow-xl shadow-primary/20 transition-all hover:scale-105 active:scale-95"
+                    >
+                      Start live interview
+                    </button>
+                    <button
+                      onClick={requestMediaAccess}
+                      className="rounded-2xl border border-slate-300 bg-white px-6 py-3 text-xs font-black uppercase tracking-widest text-slate-700 hover:bg-slate-50"
+                    >
+                      Test camera and mic
+                    </button>
+                  </div>
+
+                  <div className="mt-8 overflow-hidden rounded-3xl border border-slate-200 bg-slate-900">
+                    <div className="flex items-center justify-between border-b border-white/10 px-5 py-4 text-white">
+                      <div>
+                        <p className="text-sm font-bold">Camera and mic preview</p>
+                        <p className="mt-1 text-xs text-slate-300">Check your framing and permissions before the interview starts.</p>
+                      </div>
+                      <span className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest ${mediaEnabled ? 'bg-emerald-500/20 text-emerald-200' : 'bg-white/10 text-slate-200'}`}>
+                        {mediaEnabled ? 'Connected' : 'Not connected'}
+                      </span>
+                    </div>
+                    <div className="relative aspect-video bg-black">
+                      {mediaEnabled ? (
+                        <video ref={previewVideoRef} autoPlay muted playsInline className="h-full w-full object-cover [transform:scaleX(-1)]" />
+                      ) : (
+                        <div className="flex h-full items-center justify-center px-6 text-center text-sm text-slate-400">
+                          Allow camera and microphone access to see your live preview here.
+                        </div>
+                      )}
+                      <div className="absolute bottom-4 left-4 rounded-full bg-black/50 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-white backdrop-blur">
+                        {mediaEnabled ? 'Preview live' : 'Preview unavailable'}
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
