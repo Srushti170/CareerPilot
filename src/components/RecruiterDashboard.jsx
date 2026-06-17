@@ -89,10 +89,10 @@ export function RecruiterDashboard({ setActiveTab, applications = [] }) {
   return (
     <div className="mx-auto max-w-7xl space-y-10 px-8 pb-12 pt-24">
       <section className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-        <MetricCard label="Total Applicants" value={totalApplicants.toString()} subtext="Shared from one-click apply" color="primary" icon="person_add" />
-        <MetricCard label="Shortlisted" value={shortlisted.toString()} subtext="Passed resume screen" color="secondary" icon="verified" />
-        <MetricCard label="Active Jobs" value={activeJobs.toString()} icon="work" />
-        <MetricCard label="Interviews" value={interviews.toString()} icon="event_note" />
+        <MetricCard compact label="Total Applicants" value={totalApplicants.toString()} subtext="Shared from one-click apply" color="primary" icon="person_add" />
+        <MetricCard compact label="Shortlisted" value={shortlisted.toString()} subtext="Passed resume screen" color="secondary" icon="verified" />
+        <MetricCard compact label="Active Jobs" value={activeJobs.toString()} icon="work" />
+        <MetricCard compact label="Interviews" value={interviews.toString()} icon="event_note" />
       </section>
 
       <div className="flex flex-col gap-8 lg:flex-row">

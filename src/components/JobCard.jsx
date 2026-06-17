@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Button } from './ui/Button';
 import { Badge } from './ui/Badge';
+import { CompanyLogo } from './ui/CompanyLogo';
 
 export function JobCard({ job, onApply, onTailorResume, applied, ...rest }) {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -35,8 +36,14 @@ export function JobCard({ job, onApply, onTailorResume, applied, ...rest }) {
     >
       <div className="mb-5 flex flex-col gap-4">
         <div className="flex items-center gap-4">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
-            <img src={logo} alt={company} className="h-8 w-8 object-contain" />
+          <div className="rounded-lg border border-slate-200">
+            <CompanyLogo
+              company={company}
+              src={logo}
+              className="h-12 w-12 shrink-0"
+              imageClassName="h-8 w-8 object-contain"
+              labelClassName="text-base"
+            />
           </div>
           <div className="min-w-0">
             <h4 className="truncate text-base font-semibold text-slate-900">{title}</h4>

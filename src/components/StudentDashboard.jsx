@@ -4,6 +4,7 @@ import { JobCard } from './JobCard';
 import { SectionHeader } from './ui/SectionHeader';
 import { Button } from './ui/Button';
 import { Badge } from './ui/Badge';
+import { CompanyLogo } from './ui/CompanyLogo';
 import { motion } from 'motion/react';
 import { getStudentProfile } from '../lib/studentProfile';
 import { getInterviewDashboardStats, getInterviewFeedbackHistory } from '../lib/interviewInsights';
@@ -253,11 +254,13 @@ export function StudentDashboard({ applications = [], setApplications, setActive
           <div className="rounded-xl border border-slate-200 bg-white p-8 elev-sm">
             <div className="mb-10 flex flex-col items-center justify-between gap-4 md:flex-row">
               <div className="flex items-center gap-4">
-                <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-slate-50 p-2">
-                  <img
-                    src={currentTracker.logo || `https://ui-avatars.com/api/?name=${encodeURIComponent(currentTracker.company)}&background=random`}
-                    className="h-7 w-7 object-contain"
-                    alt={currentTracker.company}
+                <div className="rounded-lg border border-slate-200">
+                  <CompanyLogo
+                    company={currentTracker.company}
+                    src={currentTracker.logo || ''}
+                    className="h-11 w-11"
+                    imageClassName="h-7 w-7 object-contain"
+                    labelClassName="text-sm"
                   />
                 </div>
                 <div>

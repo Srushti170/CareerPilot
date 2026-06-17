@@ -3,27 +3,12 @@ import { motion } from 'motion/react';
 import { saveStudentProfile } from '../lib/studentProfile';
 import { authApi } from '../lib/backendSync';
 
-// Default pre-seeded users for demo & testing
-const DEFAULT_USERS = [
-  {
-    name: 'Alex Rivera',
-    email: 'student@university.edu',
-    password: 'password',
-    role: 'student'
-  },
-  {
-    name: 'Sarah Jenkins',
-    email: 'hr@company.com',
-    password: 'password',
-    role: 'recruiter'
-  },
-  {
-    name: 'Dr. Elena Rodriguez',
-    email: 'admin@university.edu',
-    password: 'password',
-    role: 'admin'
-  }
-];
+const DEFAULT_USERS = [];
+const LEGACY_DEMO_EMAILS = new Set([
+  'student@university.edu',
+  'hr@company.com',
+  'admin@university.edu',
+]);
 
 export function Login({ onLogin }) {
   const [mode, setMode] = useState('signin'); // 'signin' or 'signup'
@@ -41,7 +26,11 @@ export function Login({ onLogin }) {
       localStorage.setItem('careerpilot_users', JSON.stringify(DEFAULT_USERS));
       return DEFAULT_USERS;
     }
-    return JSON.parse(stored);
+    const parsed = JSON.parse(stored).filter(
+      (user) => !LEGACY_DEMO_EMAILS.has(String(user?.email || '').toLowerCase())
+    );
+    localStorage.setItem('careerpilot_users', JSON.stringify(parsed));
+    return parsed;
   };
 
   const persistLocalUser = (user) => {
@@ -90,7 +79,7 @@ export function Login({ onLogin }) {
         if (anyUserWithEmail && anyUserWithEmail.role !== role) {
           setError(`Account exists, but with the role: ${anyUserWithEmail.role.toUpperCase()}. Please switch roles above.`);
         } else {
-          setError('Invalid email or password. Hint: Use default password "password".');
+          setError('Invalid email or password.');
         }
       }
     } else {
@@ -225,14 +214,14 @@ export function Login({ onLogin }) {
 
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Email address</label>
-            <input 
-              type="email" 
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              placeholder={role === 'student' ? 'student@university.edu' : role === 'recruiter' ? 'hr@company.com' : 'admin@university.edu'}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none transition focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10"
-            />
+              <input 
+                type="email" 
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                placeholder={role === 'student' ? 'Enter your student email' : role === 'recruiter' ? 'Enter your recruiter email' : 'Enter your placement email'}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none transition focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10"
+              />
           </div>
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -269,7 +258,7 @@ export function Login({ onLogin }) {
                 <input type="checkbox" className="rounded border-slate-300 text-primary focus:ring-primary" />
                 Remember me
               </label>
-              <a href="#" onClick={(e) => { e.preventDefault(); setError('Demo mode: Please use standard login.'); }} className="text-sm font-medium text-primary hover:text-primary-hover">Forgot password?</a>
+              <a href="#" onClick={(e) => { e.preventDefault(); setError('Password reset is not configured yet.'); }} className="text-sm font-medium text-primary hover:text-primary-hover">Forgot password?</a>
             </div>
           )}
 

@@ -5,6 +5,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI } from '@google/genai';
+import { MongoClient } from 'mongodb';
 
 dotenv.config();
 
@@ -15,15 +16,61 @@ const dataDir = path.join(rootDir, 'server', 'data');
 const reportsDir = path.join(rootDir, 'server', 'reports');
 const dbPath = path.join(dataDir, 'db.json');
 const port = Number(process.env.API_PORT || 8787);
+const mongoUri = process.env.MONGODB_URI || '';
+const mongoDbName = process.env.MONGODB_DB_NAME || 'careerpilot';
 const geminiApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
 const geminiModel = process.env.GEMINI_MODEL || process.env.VITE_GEMINI_MODEL || 'gemini-2.5-flash';
 const serverAi = geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey }) : null;
+let mongoClientPromise = null;
+let mongoConnectionState = mongoUri ? 'pending' : 'disabled';
+const PROFILE_DOCUMENT_ID = 'primary';
 
-const DEFAULT_USERS = [
-  { id: 'user-student-1', name: 'Alex Rivera', email: 'student@university.edu', password: 'password', role: 'student' },
-  { id: 'user-recruiter-1', name: 'Sarah Jenkins', email: 'hr@company.com', password: 'password', role: 'recruiter' },
-  { id: 'user-admin-1', name: 'Dr. Elena Rodriguez', email: 'admin@university.edu', password: 'password', role: 'admin' },
-];
+const COLLECTIONS = {
+  storage: 'app_storage',
+  users: 'users',
+  sessions: 'sessions',
+  applications: 'applications',
+  notifications: 'notifications',
+  jobs: 'jobs',
+  companies: 'companies',
+  students: 'students',
+  announcements: 'announcements',
+  studentProfiles: 'student_profiles',
+  payments: 'payments',
+  emails: 'emails',
+  calendarEvents: 'calendar_events',
+  reports: 'reports',
+};
+
+const COLLECTION_STORAGE_KEY_MAP = {
+  careerpilot_applications: 'applications',
+  careerpilot_notifications: 'notifications',
+  careerpilot_jobs: 'jobs',
+  careerpilot_companies: 'companies',
+  careerpilot_students: 'students',
+  careerpilot_announcements: 'announcements',
+  careerpilot_student_profile: 'studentProfile',
+  careerpilot_users: 'users',
+};
+
+const DERIVED_STORAGE_KEYS = new Set([
+  'careerpilot_users',
+  'careerpilot_applications',
+  'careerpilot_notifications',
+  'careerpilot_jobs',
+  'careerpilot_companies',
+  'careerpilot_students',
+  'careerpilot_announcements',
+  'careerpilot_student_profile',
+  'careerpilot_student_onboarding_complete',
+]);
+
+const DEFAULT_USERS = [];
+const LEGACY_DEMO_EMAILS = new Set([
+  'student@university.edu',
+  'hr@company.com',
+  'admin@university.edu',
+]);
 
 const DEFAULT_STORAGE = {
   careerpilot_users: JSON.stringify(DEFAULT_USERS),
@@ -257,6 +304,7 @@ const DEFAULT_STUDENT_PROFILE = {
 
 function createDefaultDb() {
   return {
+    users: DEFAULT_USERS.map(normalizeStoredUser),
     storage: DEFAULT_STORAGE,
     sessions: [],
     applications: DEFAULT_APPLICATIONS,
@@ -276,9 +324,143 @@ function createDefaultDb() {
   };
 }
 
-async function ensureDb() {
+function getStorageProvider() {
+  return mongoConnectionState === 'connected' ? 'mongodb' : 'json-file';
+}
+
+async function getMongoCollection() {
+  if (!mongoUri) return null;
+
+  if (!mongoClientPromise) {
+    mongoClientPromise = MongoClient.connect(mongoUri, {
+      maxPoolSize: 10,
+    }).catch((error) => {
+      mongoConnectionState = 'disabled';
+      mongoClientPromise = null;
+      console.error('MongoDB connection failed, using JSON fallback:', error.message);
+      return null;
+    });
+  }
+
+  const client = await mongoClientPromise;
+  if (!client) return null;
+  mongoConnectionState = 'connected';
+  return client.db(mongoDbName);
+}
+
+function stripMongoMeta(document = {}) {
+  const { _id, createdAt, updatedAt, ...rest } = document || {};
+  return rest;
+}
+
+async function ensureMongoIndexes(db) {
+  await Promise.all([
+    db.collection(COLLECTIONS.storage).createIndex({ key: 1 }, { unique: true }),
+    db.collection(COLLECTIONS.users).createIndex({ email: 1 }, { unique: true }),
+    db.collection(COLLECTIONS.sessions).createIndex({ token: 1 }, { unique: true }),
+    db.collection(COLLECTIONS.sessions).createIndex({ userId: 1 }),
+  ]);
+}
+
+async function readFileSeedDb() {
   await fs.mkdir(dataDir, { recursive: true });
+  try {
+    const raw = await fs.readFile(dbPath, 'utf8');
+    return JSON.parse(raw);
+  } catch {
+    return createDefaultDb();
+  }
+}
+
+function getPersistedStorageEntries(storage = {}) {
+  return Object.entries(storage)
+    .filter(([key]) => !DERIVED_STORAGE_KEYS.has(key))
+    .map(([key, value]) => ({
+      key,
+      value: typeof value === 'string' ? value : JSON.stringify(value),
+    }));
+}
+
+async function replaceMongoCollection(db, name, docs = []) {
+  const collection = db.collection(COLLECTIONS[name]);
+  await collection.deleteMany({});
+  if (docs.length > 0) {
+    await collection.insertMany(docs);
+  }
+}
+
+async function replaceMongoSingleton(db, name, document = {}) {
+  await db.collection(COLLECTIONS[name]).replaceOne(
+    { _id: PROFILE_DOCUMENT_ID },
+    { _id: PROFILE_DOCUMENT_ID, ...document },
+    { upsert: true }
+  );
+}
+
+async function replaceMongoStorage(db, storage = {}) {
+  const collection = db.collection(COLLECTIONS.storage);
+  await collection.deleteMany({});
+  const entries = getPersistedStorageEntries(storage);
+  if (entries.length > 0) {
+    await collection.insertMany(entries);
+  }
+}
+
+async function seedMongoDatabase(db, seedState = createDefaultDb()) {
+  const normalized = {
+    ...createDefaultDb(),
+    ...seedState,
+    users: Array.isArray(seedState.users)
+      ? seedState.users.map(normalizeStoredUser)
+      : parseUsersFromStorage(seedState.storage || DEFAULT_STORAGE),
+  };
+
+  await replaceMongoCollection(db, 'users', normalized.users);
+  await replaceMongoCollection(db, 'sessions', normalized.sessions || []);
+  await replaceMongoCollection(db, 'applications', normalized.applications || []);
+  await replaceMongoCollection(db, 'notifications', normalized.notifications || []);
+  await replaceMongoCollection(db, 'jobs', normalized.jobs || []);
+  await replaceMongoCollection(db, 'companies', normalized.companies || []);
+  await replaceMongoCollection(db, 'students', normalized.students || []);
+  await replaceMongoCollection(db, 'announcements', normalized.announcements || []);
+  await replaceMongoCollection(db, 'payments', normalized.payments || []);
+  await replaceMongoCollection(db, 'emails', normalized.emails || []);
+  await replaceMongoCollection(db, 'calendarEvents', normalized.calendarEvents || []);
+  await replaceMongoCollection(db, 'reports', normalized.reports || []);
+  await replaceMongoSingleton(db, 'studentProfiles', normalized.studentProfile || DEFAULT_STUDENT_PROFILE);
+  await replaceMongoStorage(db, normalized.storage || {});
+}
+
+async function readMongoCollectionDocs(db, name) {
+  return db.collection(COLLECTIONS[name]).find({}).toArray();
+}
+
+async function readMongoStorage(db) {
+  const entries = await db.collection(COLLECTIONS.storage).find({}).toArray();
+  return entries.reduce((acc, entry) => {
+    if (entry?.key) {
+      acc[entry.key] = typeof entry.value === 'string' ? entry.value : JSON.stringify(entry.value);
+    }
+    return acc;
+  }, {});
+}
+
+async function ensureDb() {
   await fs.mkdir(reportsDir, { recursive: true });
+  if (mongoUri) {
+    const mongoDb = await getMongoCollection();
+    if (mongoDb) {
+      await ensureMongoIndexes(mongoDb);
+      const hasUsers = await mongoDb.collection(COLLECTIONS.users).countDocuments({}, { limit: 1 });
+      if (!hasUsers) {
+        const seedDb = await readFileSeedDb();
+        await seedMongoDatabase(mongoDb, seedDb);
+      }
+      return;
+    }
+  }
+
+  await fs.mkdir(dataDir, { recursive: true });
   try {
     await fs.access(dbPath);
   } catch {
@@ -288,12 +470,70 @@ async function ensureDb() {
 
 async function readDb() {
   await ensureDb();
-  const raw = await fs.readFile(dbPath, 'utf8');
-  const parsed = JSON.parse(raw);
+  let parsed;
+  if (mongoUri) {
+    const mongoDb = await getMongoCollection();
+    if (mongoDb) {
+      const [
+        storage,
+        users,
+        sessions,
+        applications,
+        notifications,
+        jobs,
+        companies,
+        students,
+        announcements,
+        payments,
+        emails,
+        calendarEvents,
+        reports,
+        studentProfiles,
+      ] = await Promise.all([
+        readMongoStorage(mongoDb),
+        readMongoCollectionDocs(mongoDb, 'users'),
+        readMongoCollectionDocs(mongoDb, 'sessions'),
+        readMongoCollectionDocs(mongoDb, 'applications'),
+        readMongoCollectionDocs(mongoDb, 'notifications'),
+        readMongoCollectionDocs(mongoDb, 'jobs'),
+        readMongoCollectionDocs(mongoDb, 'companies'),
+        readMongoCollectionDocs(mongoDb, 'students'),
+        readMongoCollectionDocs(mongoDb, 'announcements'),
+        readMongoCollectionDocs(mongoDb, 'payments'),
+        readMongoCollectionDocs(mongoDb, 'emails'),
+        readMongoCollectionDocs(mongoDb, 'calendarEvents'),
+        readMongoCollectionDocs(mongoDb, 'reports'),
+        readMongoCollectionDocs(mongoDb, 'studentProfiles'),
+      ]);
+
+      parsed = {
+        storage,
+        users: users.map(stripMongoMeta).map(normalizeStoredUser),
+        sessions: sessions.map(stripMongoMeta),
+        applications: applications.map(stripMongoMeta),
+        notifications: notifications.map(stripMongoMeta),
+        jobs: jobs.map(stripMongoMeta),
+        companies: companies.map(stripMongoMeta),
+        students: students.map(stripMongoMeta),
+        announcements: announcements.map(stripMongoMeta),
+        payments: payments.map(stripMongoMeta),
+        emails: emails.map(stripMongoMeta),
+        calendarEvents: calendarEvents.map(stripMongoMeta),
+        reports: reports.map(stripMongoMeta),
+        studentProfile: stripMongoMeta(studentProfiles[0] || DEFAULT_STUDENT_PROFILE),
+      };
+    }
+  }
+
+  if (!parsed) {
+    const raw = await fs.readFile(dbPath, 'utf8');
+    parsed = JSON.parse(raw);
+  }
   const db = {
     ...createDefaultDb(),
     ...parsed,
     storage: { ...DEFAULT_STORAGE, ...(parsed.storage || {}) },
+    users: Array.isArray(parsed.users) ? parsed.users.map(normalizeStoredUser) : parseUsersFromStorage(parsed.storage || DEFAULT_STORAGE),
     applications: Array.isArray(parsed.applications) ? parsed.applications : DEFAULT_APPLICATIONS,
     notifications: Array.isArray(parsed.notifications) ? parsed.notifications : DEFAULT_NOTIFICATIONS,
     jobs: Array.isArray(parsed.jobs) ? parsed.jobs : DEFAULT_JOBS,
@@ -302,13 +542,35 @@ async function readDb() {
     announcements: Array.isArray(parsed.announcements) ? parsed.announcements : DEFAULT_ANNOUNCEMENTS,
     studentProfile: parsed.studentProfile || DEFAULT_STUDENT_PROFILE,
   };
-  syncUsersToStorage(db, parseUsersFromStorage(db.storage));
+  syncUsersToStorage(db, db.users);
+  syncCollectionStorage(db);
   sanitizeAuthStorage(db);
   return db;
 }
 
 async function writeDb(db) {
   await ensureDb();
+  if (mongoUri) {
+    const mongoDb = await getMongoCollection();
+    if (mongoDb) {
+      await replaceMongoCollection(mongoDb, 'users', (db.users || []).map(normalizeStoredUser));
+      await replaceMongoCollection(mongoDb, 'sessions', db.sessions || []);
+      await replaceMongoCollection(mongoDb, 'applications', db.applications || []);
+      await replaceMongoCollection(mongoDb, 'notifications', db.notifications || []);
+      await replaceMongoCollection(mongoDb, 'jobs', db.jobs || []);
+      await replaceMongoCollection(mongoDb, 'companies', db.companies || []);
+      await replaceMongoCollection(mongoDb, 'students', db.students || []);
+      await replaceMongoCollection(mongoDb, 'announcements', db.announcements || []);
+      await replaceMongoCollection(mongoDb, 'payments', db.payments || []);
+      await replaceMongoCollection(mongoDb, 'emails', db.emails || []);
+      await replaceMongoCollection(mongoDb, 'calendarEvents', db.calendarEvents || []);
+      await replaceMongoCollection(mongoDb, 'reports', db.reports || []);
+      await replaceMongoSingleton(mongoDb, 'studentProfiles', db.studentProfile || DEFAULT_STUDENT_PROFILE);
+      await replaceMongoStorage(mongoDb, db.storage || {});
+      return db;
+    }
+  }
+
   await fs.writeFile(dbPath, JSON.stringify(db, null, 2), 'utf8');
   return db;
 }
@@ -359,18 +621,21 @@ function parseUsersFromStorage(storage = {}) {
   const raw = storage.careerpilot_users;
   if (!raw) return DEFAULT_USERS.map(normalizeStoredUser);
   try {
-    return JSON.parse(raw).map(normalizeStoredUser);
+    return JSON.parse(raw)
+      .filter((user) => !LEGACY_DEMO_EMAILS.has(String(user?.email || '').toLowerCase()))
+      .map(normalizeStoredUser);
   } catch {
     return DEFAULT_USERS.map(normalizeStoredUser);
   }
 }
 
 function syncUsersToStorage(db, users) {
-  db.storage.careerpilot_users = JSON.stringify(users.map(normalizeStoredUser));
+  db.users = users.map(normalizeStoredUser);
+  db.storage.careerpilot_users = JSON.stringify(db.users);
 }
 
 function updateUserInStorage(db, previousEmail, nextUser) {
-  const users = parseUsersFromStorage(db.storage);
+  const users = Array.isArray(db.users) ? db.users : parseUsersFromStorage(db.storage);
   const updatedUsers = users.map((entry) => (
     entry.email.toLowerCase() === String(previousEmail || nextUser.email).toLowerCase()
       ? { ...entry, ...nextUser }
@@ -378,6 +643,70 @@ function updateUserInStorage(db, previousEmail, nextUser) {
   ));
   syncUsersToStorage(db, updatedUsers);
   return updatedUsers;
+}
+
+function parseStoredJsonValue(value, fallback) {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+}
+
+function applyStorageValue(db, key, incomingValue) {
+  const value = typeof incomingValue === 'string' ? incomingValue : JSON.stringify(incomingValue);
+  db.storage[key] = value;
+
+  switch (COLLECTION_STORAGE_KEY_MAP[key]) {
+    case 'users':
+      db.users = parseStoredJsonValue(value, []).map(normalizeStoredUser);
+      break;
+    case 'applications':
+    case 'notifications':
+    case 'jobs':
+    case 'companies':
+    case 'students':
+    case 'announcements':
+      db[COLLECTION_STORAGE_KEY_MAP[key]] = Array.isArray(parseStoredJsonValue(value, []))
+        ? parseStoredJsonValue(value, [])
+        : [];
+      break;
+    case 'studentProfile':
+      db.studentProfile = parseStoredJsonValue(value, DEFAULT_STUDENT_PROFILE) || DEFAULT_STUDENT_PROFILE;
+      break;
+    default:
+      break;
+  }
+
+  if (key === 'careerpilot_student_onboarding_complete') {
+    db.studentProfile = {
+      ...(db.studentProfile || DEFAULT_STUDENT_PROFILE),
+      onboardingComplete: Boolean(parseStoredJsonValue(value, false)),
+    };
+  }
+}
+
+function removeStorageValue(db, key) {
+  delete db.storage[key];
+
+  switch (COLLECTION_STORAGE_KEY_MAP[key]) {
+    case 'users':
+      db.users = [];
+      break;
+    case 'applications':
+    case 'notifications':
+    case 'jobs':
+    case 'companies':
+    case 'students':
+    case 'announcements':
+      db[COLLECTION_STORAGE_KEY_MAP[key]] = [];
+      break;
+    case 'studentProfile':
+      db.studentProfile = DEFAULT_STUDENT_PROFILE;
+      break;
+    default:
+      break;
+  }
 }
 
 function sanitizeAuthStorage(db) {
@@ -404,6 +733,11 @@ function syncCollectionStorage(db) {
 
 function buildProviderStatus(db) {
   return {
+    storage: {
+      provider: getStorageProvider(),
+      database: mongoUri ? mongoDbName : path.basename(dbPath),
+      collection: mongoUri ? 'multiple-collections' : null,
+    },
     auth: {
       local: true,
       googleOAuthConfigured: db.oauth.googleConfigured,
@@ -562,14 +896,14 @@ app.get('/api/health', async (_req, res) => {
 
 app.get('/api/bootstrap', async (_req, res) => {
   const db = await readDb();
-  syncCollectionStorage(db);
-  await writeDb(db);
   res.json({ storage: db.storage, providers: buildProviderStatus(db) });
 });
 
 app.put('/api/storage/:key', async (req, res) => {
   const db = await readDb();
-  db.storage[req.params.key] = typeof req.body.value === 'string' ? req.body.value : JSON.stringify(req.body.value);
+  applyStorageValue(db, req.params.key, req.body.value);
+  syncUsersToStorage(db, db.users || parseUsersFromStorage(db.storage));
+  syncCollectionStorage(db);
   await writeDb(db);
   res.json({ ok: true });
 });
@@ -578,15 +912,19 @@ app.post('/api/storage/bulk', async (req, res) => {
   const db = await readDb();
   const entries = req.body.entries || {};
   Object.entries(entries).forEach(([key, value]) => {
-    db.storage[key] = typeof value === 'string' ? value : JSON.stringify(value);
+    applyStorageValue(db, key, value);
   });
+  syncUsersToStorage(db, db.users || parseUsersFromStorage(db.storage));
+  syncCollectionStorage(db);
   await writeDb(db);
   res.json({ ok: true, updated: Object.keys(entries).length });
 });
 
 app.delete('/api/storage/:key', async (req, res) => {
   const db = await readDb();
-  delete db.storage[req.params.key];
+  removeStorageValue(db, req.params.key);
+  syncUsersToStorage(db, db.users || parseUsersFromStorage(db.storage));
+  syncCollectionStorage(db);
   await writeDb(db);
   res.json({ ok: true });
 });
@@ -684,7 +1022,7 @@ app.put('/api/student-profile', async (req, res) => {
 
 app.post('/api/auth/login', async (req, res) => {
   const db = await readDb();
-  const users = parseUsersFromStorage(db.storage);
+  const users = db.users || parseUsersFromStorage(db.storage);
   const { email, password, role } = req.body;
   const user = users.find(
     (entry) =>
@@ -707,7 +1045,7 @@ app.post('/api/auth/login', async (req, res) => {
 
 app.post('/api/auth/register', async (req, res) => {
   const db = await readDb();
-  const users = parseUsersFromStorage(db.storage);
+  const users = db.users || parseUsersFromStorage(db.storage);
   const { name, email, password, role } = req.body;
   const normalizedEmail = String(email || '').trim().toLowerCase();
 
@@ -739,7 +1077,7 @@ app.get('/api/auth/me', async (req, res) => {
   if (!session) {
     return res.status(401).json({ error: 'No active session.' });
   }
-  const user = parseUsersFromStorage(db.storage).find((entry) => entry.id === session.userId);
+  const user = (db.users || parseUsersFromStorage(db.storage)).find((entry) => entry.id === session.userId);
   if (!user) {
     return res.status(404).json({ error: 'User not found.' });
   }
@@ -749,7 +1087,7 @@ app.get('/api/auth/me', async (req, res) => {
 app.put('/api/auth/profile', async (req, res) => {
   const db = await readDb();
   const { currentEmail, name, email } = req.body;
-  const users = parseUsersFromStorage(db.storage);
+  const users = db.users || parseUsersFromStorage(db.storage);
   const existingUser = users.find((entry) => entry.email.toLowerCase() === String(currentEmail || '').toLowerCase());
 
   if (!existingUser) {
@@ -790,7 +1128,7 @@ app.put('/api/auth/profile', async (req, res) => {
 app.put('/api/auth/password', async (req, res) => {
   const db = await readDb();
   const { email, currentPassword, newPassword } = req.body;
-  const users = parseUsersFromStorage(db.storage);
+  const users = db.users || parseUsersFromStorage(db.storage);
   const existingUser = users.find((entry) => entry.email.toLowerCase() === String(email || '').toLowerCase());
 
   if (!existingUser) {
@@ -1063,6 +1401,25 @@ app.get('/api/integrations/status', async (_req, res) => {
   res.json(buildProviderStatus(db));
 });
 
-app.listen(port, () => {
-  console.log(`CareerPilot API listening on http://localhost:${port}`);
-});
+async function startServer() {
+  try {
+    await ensureDb();
+
+    if (getStorageProvider() === 'mongodb') {
+      console.log(`MongoDB connected successfully to database "${mongoDbName}"`);
+    } else if (mongoUri) {
+      console.warn(`MongoDB connection unavailable. Falling back to local JSON storage at ${dbPath}`);
+    } else {
+      console.log(`MongoDB not configured. Using local JSON storage at ${dbPath}`);
+    }
+
+    app.listen(port, () => {
+      console.log(`CareerPilot API listening on http://localhost:${port}`);
+    });
+  } catch (error) {
+    console.error('Failed to start CareerPilot API:', error);
+    process.exit(1);
+  }
+}
+
+startServer();
