@@ -1355,7 +1355,7 @@ export function MockInterviews({ applications = [] }) {
                 <div className="mb-6 flex items-center justify-between">
                   <div>
                      <h2 className="text-2xl md:text-2xl font-headline font-semibold text-slate-900 tracking-tight">Choose a job for your interview</h2>
-                    {/* <h4 className="text-xl font-black text-on-surface">Choose a job for your interview</h4> */}
+                    
                     <p className="mt-1 text-sm text-slate-500">Only applications that have been shortlisted for interview practice appear here.</p>
                   </div>
                  
