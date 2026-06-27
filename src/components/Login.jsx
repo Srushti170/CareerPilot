@@ -151,15 +151,15 @@ export function Login({ onLogin }) {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-surface px-4 py-12">
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.25, ease: 'easeOut' }}
         className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 elev-md md:p-10"
       >
         <div className="mb-6 text-center">
-          <div className="mb-4 flex justify-center">
-            <img src="/logo.png" alt="CareerPilot Logo" className="h-12 object-contain" />
+          <div className="mb-2 flex justify-center">
+            <img src="/logo.png" alt="CareerPilot Logo" className="h-30 object-contain" />
           </div>
           <h1 className="mb-1 text-2xl font-headline font-bold tracking-tight text-slate-900">
             {mode === 'signin' ? 'Welcome back' : 'Create account'}
@@ -201,8 +201,8 @@ export function Login({ onLogin }) {
           {mode === 'signup' && (
             <div>
               <label className="mb-1.5 block text-sm font-medium text-slate-700">Full name</label>
-              <input 
-                type="text" 
+              <input
+                type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
@@ -214,21 +214,21 @@ export function Login({ onLogin }) {
 
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Email address</label>
-              <input 
-                type="email" 
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                placeholder={role === 'student' ? 'Enter your student email' : role === 'recruiter' ? 'Enter your recruiter email' : 'Enter your placement email'}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none transition focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10"
-              />
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              placeholder={role === 'student' ? 'Enter your student email' : role === 'recruiter' ? 'Enter your recruiter email' : 'Enter your placement email'}
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none transition focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10"
+            />
           </div>
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className={mode === 'signup' ? '' : 'col-span-2'}>
               <label className="mb-1.5 block text-sm font-medium text-slate-700">Password</label>
-              <input 
-                type="password" 
+              <input
+                type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
@@ -240,8 +240,8 @@ export function Login({ onLogin }) {
             {mode === 'signup' && (
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-slate-700">Confirm password</label>
-                <input 
-                  type="password" 
+                <input
+                  type="password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   required
@@ -251,7 +251,7 @@ export function Login({ onLogin }) {
               </div>
             )}
           </div>
-          
+
           {mode === 'signin' && (
             <div className="flex items-center justify-between pb-2 pt-1">
               <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-600">
@@ -262,7 +262,7 @@ export function Login({ onLogin }) {
             </div>
           )}
 
-          <button 
+          <button
             type="submit"
             className="mt-2 w-full rounded-xl bg-primary py-3 text-sm font-semibold text-on-primary transition-colors hover:bg-primary-hover focus:outline-none focus:ring-4 focus:ring-primary/10"
           >
@@ -274,9 +274,9 @@ export function Login({ onLogin }) {
           {mode === 'signin' ? (
             <>
               Don't have an account?{' '}
-              <a 
-                href="#" 
-                onClick={(e) => { e.preventDefault(); setMode('signup'); setError(''); }} 
+              <a
+                href="#"
+                onClick={(e) => { e.preventDefault(); setMode('signup'); setError(''); }}
                 className="font-semibold text-primary hover:text-primary-hover"
               >
                 Sign up
@@ -285,9 +285,9 @@ export function Login({ onLogin }) {
           ) : (
             <>
               Already have an account?{' '}
-              <a 
-                href="#" 
-                onClick={(e) => { e.preventDefault(); setMode('signin'); setError(''); }} 
+              <a
+                href="#"
+                onClick={(e) => { e.preventDefault(); setMode('signin'); setError(''); }}
                 className="font-semibold text-primary hover:text-primary-hover"
               >
                 Sign in
