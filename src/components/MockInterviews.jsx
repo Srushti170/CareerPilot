@@ -1065,7 +1065,7 @@ export function MockInterviews({ applications = [] }) {
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-10 px-8 pb-12 pt-24">
+    <div className="mx-auto max-w-7xl space-y-10 px-8 pb-12 pt-24">
       <header className="mb-12 flex flex-col items-start justify-between gap-6 md:flex-row md:items-end">
         <div>
           <div className="mb-2 flex w-fit items-center gap-2 rounded-full bg-primary/10 px-3 py-1">

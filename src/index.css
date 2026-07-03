@@ -1,14 +1,54 @@
 @import "tailwindcss";
 
+@variant dark (&:where(.dark, .dark *));
+
+:root {
+  --color-primary-custom: #0f766e;
+  --color-primary-hover-custom: #0b625c;
+  --color-primary-soft-custom: #e6f4f1;
+  --color-on-primary-custom: #ffffff;
+  
+  --color-surface-custom: #e2e8f0;
+  --color-surface-container-low-custom: #cbd5e1;
+  --color-surface-container-lowest-custom: #ffffff;
+  --color-surface-container-high-custom: #94a3b8;
+  --color-surface-container-highest-custom: #64748b;
+  --color-on-surface-custom: #000000;
+  --color-on-surface-variant-custom: #000000;
+  --color-outline-variant-custom: #cbd5e1;
+}
+
+html.dark {
+  color-scheme: dark;
+  
+  /* Primary teal color with white text as requested */
+  --color-primary-custom: #14b8a6;
+  --color-primary-hover-custom: #0d9488;
+  --color-primary-soft-custom: #115e59;
+  --color-on-primary-custom: #ffffff;
+
+  /* Use a dark grey shade instead of black */
+  --color-surface-custom: #0f172a; /* slate-900 (dark grey page bg) */
+  --color-surface-container-low-custom: #1e293b; /* slate-800 (slightly lighter dark grey) */
+  --color-surface-container-lowest-custom: #1e293b; /* slate-800 (card bg) */
+  --color-surface-container-high-custom: #334155; /* slate-700 */
+  --color-surface-container-highest-custom: #475569; /* slate-600 */
+  
+  --color-on-surface-custom: #ffffff;
+  --color-on-surface-variant-custom: #e2e8f0;
+  --color-outline-variant-custom: #334155;
+}
+
 @theme {
-  --font-headline: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --variant-dark: class;
+  --font-headline: "Poppins", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Poppins", ui-sans-serif, system-ui, sans-serif;
 
   /* Brand (refined teal) — the single accent color of the new system */
-  --color-primary: #0f766e;
-  --color-primary-hover: #0b625c;
-  --color-primary-soft: #e6f4f1;
-  --color-on-primary: #ffffff;
+  --color-primary: var(--color-primary-custom);
+  --color-primary-hover: var(--color-primary-hover-custom);
+  --color-primary-soft: var(--color-primary-soft-custom);
+  --color-on-primary: var(--color-on-primary-custom);
 
   /* Semantic status colors (soft = tinted background) */
   --color-success: #157f3d;
@@ -24,14 +64,14 @@
   --color-secondary-container: #99efe5;
   --color-tertiary: #9b4426;
   --color-tertiary-container: #f38764;
-  --color-surface: #f7f9fb;
-  --color-surface-container-low: #f2f4f6;
-  --color-surface-container-lowest: #ffffff;
-  --color-surface-container-high: #e6e8ea;
-  --color-surface-container-highest: #e0e3e5;
-  --color-on-surface: #191c1e;
-  --color-on-surface-variant: #3c4947;
-  --color-outline-variant: #bbcac6;
+  --color-surface: var(--color-surface-custom);
+  --color-surface-container-low: var(--color-surface-container-low-custom);
+  --color-surface-container-lowest: var(--color-surface-container-lowest-custom);
+  --color-surface-container-high: var(--color-surface-container-high-custom);
+  --color-surface-container-highest: var(--color-surface-container-highest-custom);
+  --color-on-surface: var(--color-on-surface-custom);
+  --color-on-surface-variant: var(--color-on-surface-variant-custom);
+  --color-outline-variant: var(--color-outline-variant-custom);
 }
 
 @layer base {
@@ -45,6 +85,72 @@
 
   h1, h2, h3, h4, h5, h6 {
     @apply font-headline;
+  }
+
+  *:not(.material-symbols-outlined) {
+    font-family: 'Poppins', sans-serif !important;
+  }
+
+  /* Override gray text colors in light mode only */
+  html:not(.dark) [class*="text-slate-500"],
+  html:not(.dark) [class*="text-slate-600"],
+  html:not(.dark) [class*="text-slate-700"],
+  html:not(.dark) [class*="text-slate-800"],
+  html:not(.dark) [class*="text-slate-900"],
+  html:not(.dark) [class*="text-slate-950"],
+  html:not(.dark) [class*="text-gray-500"],
+  html:not(.dark) [class*="text-gray-600"],
+  html:not(.dark) [class*="text-gray-700"],
+  html:not(.dark) [class*="text-gray-800"],
+  html:not(.dark) [class*="text-gray-900"],
+  html:not(.dark) [class*="text-zinc-500"],
+  html:not(.dark) [class*="text-zinc-600"],
+  html:not(.dark) [class*="text-zinc-700"],
+  html:not(.dark) [class*="text-zinc-800"],
+  html:not(.dark) [class*="text-zinc-900"],
+  html:not(.dark) [class*="text-on-surface-variant"],
+  html:not(.dark) .text-on-surface-variant {
+    color: #000000 !important;
+  }
+
+  /* In dark mode, map them all to white/light grey */
+  html.dark [class*="text-slate-"],
+  html.dark [class*="text-gray-"],
+  html.dark [class*="text-zinc-"],
+  html.dark [class*="text-neutral-"],
+  html.dark [class*="text-on-surface-variant"],
+  html.dark .text-on-surface-variant {
+    color: #ffffff !important;
+  }
+
+  /* Dark mode overrides for cards, panels, borders & inputs */
+  html.dark .bg-white,
+  html.dark .bg-surface-container-lowest {
+    background-color: #1e293b !important;
+  }
+
+  html.dark .bg-slate-50,
+  html.dark .bg-surface-container-low {
+    background-color: #192436 !important;
+  }
+
+  html.dark .bg-slate-100,
+  html.dark .bg-slate-200 {
+    background-color: #0f172a !important;
+  }
+
+  html.dark .border-slate-200,
+  html.dark .border-outline-variant,
+  html.dark .border-slate-100 {
+    border-color: #334155 !important;
+  }
+
+  html.dark input,
+  html.dark select,
+  html.dark textarea {
+    background-color: #0f172a !important;
+    color: #ffffff !important;
+    border-color: #334155 !important;
   }
 }
 

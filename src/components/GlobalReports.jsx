@@ -59,7 +59,7 @@ export function GlobalReports() {
   };
 
   return (
-    <div className="mx-auto max-w-5xl space-y-8 px-8 pb-12 pt-24">
+    <div className="mx-auto max-w-7xl space-y-8 px-8 pb-12 pt-24">
       <header className="flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
         <div>
           <h2 className="text-2xl font-headline font-semibold tracking-tight text-slate-900 md:text-3xl">Global reports</h2>

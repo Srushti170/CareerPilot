@@ -191,7 +191,7 @@ export function JobSearch({ searchQuery = '', setSearchQuery, applications = [],
     `px-5 py-2 rounded-lg text-sm font-semibold transition-colors ${active ? 'bg-white elev-sm text-primary' : 'text-slate-500 hover:text-slate-900'}`;
 
   return (
-    <div className="pt-24 px-8 pb-12 max-w-7xl mx-auto space-y-8">
+    <div className="mx-auto max-w-7xl space-y-8 px-8 pb-12 pt-24">
       <header className="space-y-6">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <h2 className="text-2xl md:text-3xl font-headline font-semibold text-slate-900 tracking-tight">Opportunities</h2>
@@ -220,18 +220,6 @@ export function JobSearch({ searchQuery = '', setSearchQuery, applications = [],
                 className="w-full bg-white pl-12 pr-6 py-3 rounded-xl border border-slate-200 focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-colors text-slate-900"
               />
             </div>
-            <button
-              onClick={refreshAiMatches}
-              disabled={!aiAvailable || isRefreshingMatches}
-              className="px-5 bg-white rounded-xl border border-slate-300 flex items-center gap-2 font-semibold text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50"
-            >
-              <span className="material-symbols-outlined">auto_awesome</span>
-              {isRefreshingMatches ? 'Refreshing...' : 'AI match'}
-            </button>
-            <button className="px-5 bg-white rounded-xl border border-slate-300 flex items-center gap-2 font-semibold text-slate-700 hover:bg-slate-50 transition-colors">
-              <span className="material-symbols-outlined">tune</span>
-              Filters
-            </button>
           </div>
         )}
       </header>

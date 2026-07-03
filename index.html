@@ -27,11 +27,11 @@
         extend: {
           "colors": {
             "tertiary-fixed-dim": "#ffb59e",
-            "on-primary": "#ffffff",
+            "on-primary": "var(--color-on-primary-custom)",
             "tertiary-fixed": "#ffdbd0",
             "error": "#ba1a1a",
             "secondary": "#006a63",
-            "on-surface": "#191c1e",
+            "on-surface": "var(--color-on-surface-custom)",
             "on-secondary-fixed-variant": "#00504a",
             "secondary-fixed-dim": "#80d5cb",
             "on-secondary": "#ffffff",
@@ -44,23 +44,23 @@
             "on-primary-fixed-variant": "#005048",
             "on-primary-container": "#00423b",
             "inverse-primary": "#4fdbc8",
-            "surface": "#f7f9fb",
+            "surface": "var(--color-surface-custom)",
             "on-primary-fixed": "#00201c",
             "surface-variant": "#e0e3e5",
             "secondary-fixed": "#9cf2e8",
             "tertiary-container": "#f38764",
             "primary-fixed": "#71f8e4",
             "secondary-container": "#99efe5",
-            "background": "#f7f9fb",
-            "primary": "#07584e",
+            "background": "var(--color-surface-custom)",
+            "primary": "var(--color-primary-custom)",
             "surface-dim": "#d8dadc",
-            "surface-container-low": "#f2f4f6",
+            "surface-container-low": "var(--color-surface-container-low-custom)",
             "on-tertiary-fixed-variant": "#7c2d11",
             "on-secondary-container": "#006f67",
-            "on-surface-variant": "#3c4947",
+            "on-surface-variant": "var(--color-on-surface-variant-custom)",
             "tertiary": "#9b4426",
             "inverse-surface": "#2d3133",
-            "surface-bright": "#f7f9fb",
+            "surface-bright": "var(--color-surface-custom)",
             "on-error": "#ffffff",
             "on-error-container": "#93000a",
             "primary-fixed-dim": "#4fdbc8",
@@ -70,8 +70,8 @@
             "outline": "#6c7a77",
             "on-tertiary": "#ffffff",
             "outline-variant": "#bbcac6",
-            "surface-container": "#eceef0",
-            "surface-container-lowest": "#ffffff"
+            "surface-container": "var(--color-surface-container-low-custom)",
+            "surface-container-lowest": "var(--color-surface-container-lowest-custom)"
           },
           "borderRadius": {
             "DEFAULT": "0.25rem",
@@ -90,12 +90,97 @@
     }
   </script>
   <style>
+    :root {
+      --color-primary-custom: #0f766e;
+      --color-primary-hover-custom: #0b625c;
+      --color-primary-soft-custom: #e6f4f1;
+      --color-on-primary-custom: #ffffff;
+      
+      --color-surface-custom: #e2e8f0;
+      --color-surface-container-low-custom: #cbd5e1;
+      --color-surface-container-lowest-custom: #ffffff;
+      --color-surface-container-high-custom: #94a3b8;
+      --color-surface-container-highest-custom: #64748b;
+      --color-on-surface-custom: #000000;
+      --color-on-surface-variant-custom: #000000;
+      --color-outline-variant-custom: #cbd5e1;
+    }
+
+    html.dark {
+      color-scheme: dark;
+      
+      /* Primary teal color with white text as requested */
+      --color-primary-custom: #14b8a6;
+      --color-primary-hover-custom: #0d9488;
+      --color-primary-soft-custom: #115e59;
+      --color-on-primary-custom: #ffffff;
+
+      /* Use a dark grey shade instead of black */
+      --color-surface-custom: #0f172a; /* slate-900 (dark grey page bg) */
+      --color-surface-container-low-custom: #1e293b; /* slate-800 (slightly lighter dark grey) */
+      --color-surface-container-lowest-custom: #1e293b; /* slate-800 (card bg) */
+      --color-surface-container-high-custom: #334155; /* slate-700 */
+      --color-surface-container-highest-custom: #475569; /* slate-600 */
+      
+      --color-on-surface-custom: #ffffff;
+      --color-on-surface-variant-custom: #e2e8f0;
+      --color-outline-variant-custom: #334155;
+    }
+
+    *:not(.material-symbols-outlined) {
+      font-family: 'Poppins', sans-serif !important;
+    }
+
+    /* Override gray text colors in light mode only */
+    html:not(.dark) [class*="text-slate-500"],
+    html:not(.dark) [class*="text-slate-600"],
+    html:not(.dark) [class*="text-slate-700"],
+    html:not(.dark) [class*="text-slate-800"],
+    html:not(.dark) [class*="text-slate-900"],
+    html:not(.dark) [class*="text-slate-950"],
+    html:not(.dark) [class*="text-gray-500"],
+    html:not(.dark) [class*="text-gray-600"],
+    html:not(.dark) [class*="text-gray-700"],
+    html:not(.dark) [class*="text-gray-800"],
+    html:not(.dark) [class*="text-gray-900"],
+    html:not(.dark) [class*="text-zinc-500"],
+    html:not(.dark) [class*="text-zinc-600"],
+    html:not(.dark) [class*="text-zinc-700"],
+    html:not(.dark) [class*="text-zinc-800"],
+    html:not(.dark) [class*="text-zinc-900"],
+    html:not(.dark) [class*="text-on-surface-variant"],
+    html:not(.dark) .text-on-surface-variant {
+      color: #000000 !important;
+    }
+
+    /* In dark mode, map them all to white/light grey */
+    html.dark [class*="text-slate-"],
+    html.dark [class*="text-gray-"],
+    html.dark [class*="text-zinc-"],
+    html.dark [class*="text-neutral-"],
+    html.dark [class*="text-on-surface-variant"],
+    html.dark .text-on-surface-variant {
+      color: #ffffff !important;
+    }
+
+    /* Dark mode overrides for cards, panels, borders & inputs */
+    html.dark .bg-white,
+    html.dark .bg-surface-container-lowest {
+      background-color: #1e293b !important;
+    }
+
+    html.dark .border-slate-200,
+    html.dark .border-outline-variant,
+    html.dark .border-slate-100 {
+      border-color: #334155 !important;
+    }
+
     .material-symbols-outlined {
       font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
     }
 
     .editorial-gradient {
-      background: linear-gradient(135deg, #07584e 0%, #14b8a6 100%);
+      background: linear-gradient(135deg, var(--color-primary-custom) 0%, #14b8a6 100%);
     }
 
     .glass-panel {
@@ -146,6 +231,14 @@
           href="#intelligence">Intelligence</a>
       </div>
       <div class="flex items-center space-x-6">
+        <!-- Theme Toggle Button -->
+        <button
+          id="theme-toggle"
+          class="text-slate-600 dark:text-slate-400 hover:opacity-90 font-bold transition-all p-2 rounded flex items-center justify-center"
+          aria-label="Toggle dark mode"
+        >
+          <span class="material-symbols-outlined text-[22px]" id="theme-toggle-icon">dark_mode</span>
+        </button>
         <!-- Mobile menu button -->
         <button
           class="md:hidden text-slate-600 dark:text-slate-400 hover:opacity-90 font-bold transition-all p-2 rounded"
@@ -474,6 +567,33 @@
         } else {
           mobileMenuButton.setAttribute('aria-label', 'Open main menu');
           mobileMenuButton.innerHTML = '<span class="material-symbols-outlined">menu</span>';
+        }
+      });
+    }
+
+    // Theme toggle logic for landing page
+    const themeToggleBtn = document.getElementById('theme-toggle');
+    const themeToggleIcon = document.getElementById('theme-toggle-icon');
+    
+    // Check initial theme from localStorage
+    const savedTheme = localStorage.getItem('careerpilot_theme') || 'light';
+    if (savedTheme === 'dark') {
+      document.documentElement.classList.add('dark');
+      document.documentElement.classList.remove('light');
+      if (themeToggleIcon) themeToggleIcon.textContent = 'light_mode';
+    } else {
+      document.documentElement.classList.remove('dark');
+      document.documentElement.classList.add('light');
+      if (themeToggleIcon) themeToggleIcon.textContent = 'dark_mode';
+    }
+
+    if (themeToggleBtn) {
+      themeToggleBtn.addEventListener('click', () => {
+        const isDark = document.documentElement.classList.toggle('dark');
+        document.documentElement.classList.toggle('light', !isDark);
+        localStorage.setItem('careerpilot_theme', isDark ? 'dark' : 'light');
+        if (themeToggleIcon) {
+          themeToggleIcon.textContent = isDark ? 'light_mode' : 'dark_mode';
         }
       });
     }

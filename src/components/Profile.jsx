@@ -199,7 +199,7 @@ export function Profile({ currentUser, setCurrentUser }) {
   };
 
   return (
-    <div className="pt-24 px-8 pb-12 max-w-5xl mx-auto space-y-10">
+    <div className="mx-auto max-w-7xl space-y-10 px-8 pb-12 pt-24">
       <header className="flex flex-col md:flex-row gap-8 items-start md:items-center">
         <div className="relative">
           <div className="w-28 h-28 rounded-2xl overflow-hidden border border-slate-200 elev-sm">

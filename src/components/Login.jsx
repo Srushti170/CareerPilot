@@ -313,6 +313,8 @@ export function Login({ onLogin }) {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const getStoredUsers = () => {
     const stored = localStorage.getItem('careerpilot_users');
@@ -585,14 +587,25 @@ export function Login({ onLogin }) {
               <div className={`grid gap-4 ${mode === 'signup' ? 'grid-cols-2' : 'grid-cols-1'}`}>
                 <div>
                   <label className="mb-1.5 block text-sm font-medium text-on-surface">Password</label>
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    placeholder="••••••••"
-                    className="w-full rounded-xl border border-outline-variant bg-surface-container-low px-4 py-2.5 text-sm outline-none transition focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10"
-                  />
+                  <div className="relative">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                      placeholder="••••••••"
+                      className="w-full rounded-xl border border-outline-variant bg-surface-container-low pl-4 pr-10 py-2.5 text-sm outline-none transition focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-500 hover:text-slate-700"
+                    >
+                      <span className="material-symbols-outlined text-xl select-none">
+                        {showPassword ? 'visibility_off' : 'visibility'}
+                      </span>
+                    </button>
+                  </div>
                 </div>
                 <AnimatePresence>
                   {mode === 'signup' && (
@@ -602,14 +615,25 @@ export function Login({ onLogin }) {
                       exit={{ opacity: 0 }}
                     >
                       <label className="mb-1.5 block text-sm font-medium text-on-surface">Confirm password</label>
-                      <input
-                        type="password"
-                        value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
-                        required
-                        placeholder="••••••••"
-                        className="w-full rounded-xl border border-outline-variant bg-surface-container-low px-4 py-2.5 text-sm outline-none transition focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10"
-                      />
+                      <div className="relative">
+                        <input
+                          type={showConfirmPassword ? 'text' : 'password'}
+                          value={confirmPassword}
+                          onChange={(e) => setConfirmPassword(e.target.value)}
+                          required
+                          placeholder="••••••••"
+                          className="w-full rounded-xl border border-outline-variant bg-surface-container-low pl-4 pr-10 py-2.5 text-sm outline-none transition focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                          className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-500 hover:text-slate-700"
+                        >
+                          <span className="material-symbols-outlined text-xl select-none">
+                            {showConfirmPassword ? 'visibility_off' : 'visibility'}
+                          </span>
+                        </button>
+                      </div>
                     </motion.div>
                   )}
                 </AnimatePresence>
@@ -648,7 +672,7 @@ export function Login({ onLogin }) {
                   Don't have an account?{' '}
                   <a
                     href="#"
-                    onClick={(e) => { e.preventDefault(); setMode('signup'); setError(''); }}
+                    onClick={(e) => { e.preventDefault(); setMode('signup'); setError(''); setShowPassword(false); setShowConfirmPassword(false); }}
                     className="font-bold text-primary hover:opacity-80"
                   >
                     Sign up
@@ -659,7 +683,7 @@ export function Login({ onLogin }) {
                   Already have an account?{' '}
                   <a
                     href="#"
-                    onClick={(e) => { e.preventDefault(); setMode('signin'); setError(''); }}
+                    onClick={(e) => { e.preventDefault(); setMode('signin'); setError(''); setShowPassword(false); setShowConfirmPassword(false); }}
                     className="font-bold text-primary hover:opacity-80"
                   >
                     Sign in

@@ -17,6 +17,24 @@ export function TopBar({
   const [showNotifications, setShowNotifications] = useState(false);
   const [inputValue, setInputValue] = useState(searchQuery);
   const notificationRef = useRef(null);
+  const [theme, setTheme] = useState(() => {
+    return localStorage.getItem('careerpilot_theme') || 'light';
+  });
+
+  useEffect(() => {
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark');
+      document.documentElement.classList.remove('light');
+    } else {
+      document.documentElement.classList.remove('dark');
+      document.documentElement.classList.add('light');
+    }
+    localStorage.setItem('careerpilot_theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prev => prev === 'light' ? 'dark' : 'light');
+  };
 
   // Sync input value with external query
   useEffect(() => {
@@ -57,29 +75,29 @@ export function TopBar({
 
   return (
     <header className={cn(
-      "fixed top-0 right-0 z-30 flex h-16 items-center justify-between border-b border-slate-200 px-8 transition-all duration-300",
-      "bg-white/85 backdrop-blur supports-[backdrop-filter]:bg-white/70",
+      "fixed top-0 right-0 z-30 flex h-16 items-center justify-between border-b border-outline-variant/35 px-8 transition-all duration-300",
+      "bg-surface-container-lowest/85 backdrop-blur supports-[backdrop-filter]:bg-surface-container-lowest/70",
       isSidebarCollapsed ? "left-20" : "left-64"
     )}>
-      <div className="flex w-1/3 items-center">
-        <form onSubmit={handleSearchSubmit} className="group relative w-full max-w-md">
-          <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[18px] text-slate-400 transition-colors group-focus-within:text-primary">search</span>
-          <input
-            type="text"
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10"
-            placeholder={placeholder}
-          />
-        </form>
-      </div>
+      <div className="flex w-1/3 items-center" />
 
       <div className="relative flex shrink-0 items-center gap-2">
+        {/* Theme Toggle Button */}
+        <button
+          onClick={toggleTheme}
+          className="flex h-10 w-10 items-center justify-center rounded-xl text-on-surface-variant transition-colors hover:bg-surface-container-low hover:text-on-surface"
+          title="Toggle theme"
+        >
+          <span className="material-symbols-outlined text-[22px]">
+            {theme === 'light' ? 'dark_mode' : 'light_mode'}
+          </span>
+        </button>
+
         {/* Notifications Icon & Panel */}
         <div className="relative" ref={notificationRef}>
           <button
             onClick={() => setShowNotifications(!showNotifications)}
-            className="relative flex h-10 w-10 items-center justify-center rounded-xl text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900"
+            className="relative flex h-10 w-10 items-center justify-center rounded-xl text-on-surface-variant transition-colors hover:bg-surface-container-low hover:text-on-surface"
           >
             <span className="material-symbols-outlined text-[22px]">notifications</span>
             {unreadCount > 0 && (
@@ -96,10 +114,10 @@ export function TopBar({
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 8, scale: 0.98 }}
                 transition={{ duration: 0.15 }}
-                className="absolute right-0 z-50 mt-2 w-80 overflow-hidden rounded-2xl border border-slate-200 bg-white elev-md"
+                className="absolute right-0 z-50 mt-2 w-80 overflow-hidden rounded-2xl border border-outline-variant/50 bg-surface-container-lowest elev-md"
               >
-                <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3">
-                  <h4 className="text-sm font-semibold text-slate-900">Notifications</h4>
+                <div className="flex items-center justify-between border-b border-outline-variant/50 bg-surface-container-low px-4 py-3">
+                  <h4 className="text-sm font-semibold text-on-surface">Notifications</h4>
                   {unreadCount > 0 && (
                     <button
                       onClick={markAllAsRead}
@@ -110,9 +128,9 @@ export function TopBar({
                   )}
                 </div>
 
-                <div className="max-h-64 divide-y divide-slate-100 overflow-y-auto">
+                <div className="max-h-64 divide-y divide-outline-variant/30 overflow-y-auto">
                   {notifications.length === 0 ? (
-                    <div className="p-6 text-center text-sm text-slate-400">
+                    <div className="p-6 text-center text-sm text-on-surface-variant">
                       No notifications yet
                     </div>
                   ) : (
@@ -120,7 +138,7 @@ export function TopBar({
                       <div
                         key={notif.id}
                         className={cn(
-                          "group relative flex gap-3 px-4 py-3 transition-colors hover:bg-slate-50",
+                          "group relative flex gap-3 px-4 py-3 transition-colors hover:bg-surface-container-low",
                           !notif.read ? "bg-primary-soft/40" : ""
                         )}
                       >
@@ -129,13 +147,13 @@ export function TopBar({
                           !notif.read ? "bg-primary" : "bg-transparent"
                         )} />
                         <div className="min-w-0 flex-1">
-                          <p className="text-sm font-semibold leading-tight text-slate-900">{notif.title}</p>
-                          <p className="mt-0.5 text-xs leading-normal text-slate-500">{notif.desc}</p>
-                          <span className="mt-1 block text-[11px] text-slate-400">{notif.time}</span>
+                          <p className="text-sm font-semibold leading-tight text-on-surface">{notif.title}</p>
+                          <p className="mt-0.5 text-xs leading-normal text-on-surface-variant/80">{notif.desc}</p>
+                          <span className="mt-1 block text-[11px] text-on-surface-variant/60">{notif.time}</span>
                         </div>
                         <button
                           onClick={() => clearNotification(notif.id)}
-                          className="text-slate-300 opacity-0 transition-opacity hover:text-slate-500 group-hover:opacity-100"
+                          className="text-on-surface-variant/40 opacity-0 transition-opacity hover:text-on-surface group-hover:opacity-100"
                         >
                           <span className="material-symbols-outlined text-base">close</span>
                         </button>
@@ -151,12 +169,12 @@ export function TopBar({
         {/* Settings button */}
         <button
           onClick={onNavigateSettings}
-          className="flex h-10 w-10 items-center justify-center rounded-xl text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900"
+          className="flex h-10 w-10 items-center justify-center rounded-xl text-on-surface-variant transition-colors hover:bg-surface-container-low hover:text-on-surface"
         >
           <span className="material-symbols-outlined text-[22px]">settings</span>
         </button>
 
-        <div className="mx-2 h-8 w-px bg-slate-200"></div>
+        <div className="mx-2 h-8 w-px bg-outline-variant/50"></div>
 
         <div className="group flex cursor-pointer items-center gap-3">
           <div className="text-right">

@@ -48,8 +48,8 @@ export function StudentDashboard({ applications = [], setApplications, setActive
 
   const handleApply = (job) => {
     const isAlreadyApplied = applications.some(
-      app => app.company.toLowerCase() === job.company.toLowerCase() && 
-             app.role.toLowerCase() === job.title.toLowerCase()
+      app => app.company.toLowerCase() === job.company.toLowerCase() &&
+        app.role.toLowerCase() === job.title.toLowerCase()
     );
     if (isAlreadyApplied) return;
 
@@ -68,29 +68,29 @@ export function StudentDashboard({ applications = [], setApplications, setActive
   const getStepsForStatus = (status, date) => {
     return [
       { label: "Applied", date: date, active: true, done: true, icon: "check" },
-      { 
-        label: "Shortlisted", 
-        date: status !== 'Applied' ? "Completed" : "In Progress", 
-        active: status !== 'Applied', 
-        done: ['Interview', 'Offered', 'Accepted', 'Declined', 'Rejected'].includes(status), 
+      {
+        label: "Shortlisted",
+        date: status !== 'Applied' ? "Completed" : "In Progress",
+        active: status !== 'Applied',
+        done: ['Interview', 'Offered', 'Accepted', 'Declined', 'Rejected'].includes(status),
         current: status === 'Reviewing',
-        icon: status === 'Reviewing' ? "schedule" : "check" 
+        icon: status === 'Reviewing' ? "schedule" : "check"
       },
-      { 
-        label: "Interview", 
-        date: status === 'Interview' ? "Scheduled" : (['Offered', 'Accepted', 'Declined', 'Rejected'].includes(status) ? "Completed" : "Pending"), 
-        active: ['Interview', 'Offered', 'Accepted', 'Declined', 'Rejected'].includes(status), 
-        done: ['Offered', 'Accepted', 'Declined', 'Rejected'].includes(status), 
+      {
+        label: "Interview",
+        date: status === 'Interview' ? "Scheduled" : (['Offered', 'Accepted', 'Declined', 'Rejected'].includes(status) ? "Completed" : "Pending"),
+        active: ['Interview', 'Offered', 'Accepted', 'Declined', 'Rejected'].includes(status),
+        done: ['Offered', 'Accepted', 'Declined', 'Rejected'].includes(status),
         current: status === 'Interview',
-        icon: status === 'Interview' ? "schedule" : "check" 
+        icon: status === 'Interview' ? "schedule" : "check"
       },
-      { 
-        label: status === 'Rejected' ? "Closed" : status === 'Accepted' ? "Accepted" : status === 'Declined' ? "Declined" : "Offer", 
-        date: status === 'Offered' ? "Received" : status === 'Accepted' ? "Joined" : status === 'Declined' ? "Closed" : (status === 'Rejected' ? "Not Selected" : "Pending"), 
-        active: ['Offered', 'Accepted', 'Declined', 'Rejected'].includes(status), 
-        done: ['Offered', 'Accepted', 'Declined', 'Rejected'].includes(status), 
-        current: false, 
-        icon: status === 'Rejected' || status === 'Declined' ? "cancel" : "celebration" 
+      {
+        label: status === 'Rejected' ? "Closed" : status === 'Accepted' ? "Accepted" : status === 'Declined' ? "Declined" : "Offer",
+        date: status === 'Offered' ? "Received" : status === 'Accepted' ? "Joined" : status === 'Declined' ? "Closed" : (status === 'Rejected' ? "Not Selected" : "Pending"),
+        active: ['Offered', 'Accepted', 'Declined', 'Rejected'].includes(status),
+        done: ['Offered', 'Accepted', 'Declined', 'Rejected'].includes(status),
+        current: false,
+        icon: status === 'Rejected' || status === 'Declined' ? "cancel" : "celebration"
       }
     ];
   };
@@ -113,12 +113,12 @@ export function StudentDashboard({ applications = [], setApplications, setActive
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.25, ease: 'easeOut' }}
-          className="rounded-2xl border border-slate-200 bg-[linear-gradient(135deg,#ffffff_0%,#f8faf9_55%,#eef7f5_100%)] p-8 elev-sm"
+          className="rounded-2xl border border-outline-variant bg-[linear-gradient(135deg,#ffffff_0%,#f8faf9_55%,#eef7f5_100%)] dark:bg-[linear-gradient(135deg,#1e293b_0%,#0f172a_100%)] p-8 elev-sm"
         >
           <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-primary">Student dashboard</p>
-          <h2 className="mt-3 text-3xl font-headline font-bold tracking-tight text-slate-900">Welcome back, {studentName}</h2>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">Track applications, improve your profile, and keep your search moving with a clean view of what needs attention next.</p>
-          <p className="mt-3 text-sm text-slate-500">You have <span className="font-semibold text-slate-900">{applications.filter(a => a.status === 'Interview').length}</span> upcoming interviews this week.</p>
+          <h2 className="mt-3 text-3xl font-headline font-bold tracking-tight text-slate-900 dark:text-white">Welcome back, {studentName}</h2>
+
+          <p className="mt-3 text-sm text-slate-500 dark:text-slate-300">You have <span className="font-semibold text-slate-900 dark:text-white">{applications.filter(a => a.status === 'Interview').length}</span> upcoming interviews this week.</p>
         </motion.div>
       </section>
 
@@ -158,14 +158,14 @@ export function StudentDashboard({ applications = [], setApplications, setActive
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {jobs.map(job => {
               const isApplied = applications.some(
-                app => app.company.toLowerCase() === job.company.toLowerCase() && 
-                       app.role.toLowerCase() === job.title.toLowerCase()
+                app => app.company.toLowerCase() === job.company.toLowerCase() &&
+                  app.role.toLowerCase() === job.title.toLowerCase()
               );
               return (
-                <JobCard 
-                  key={job.id} 
-                  job={job} 
-                  applied={isApplied} 
+                <JobCard
+                  key={job.id}
+                  job={job}
+                  applied={isApplied}
                   onApply={() => handleApply(job)}
                   onTailorResume={openTailoredSearch}
                 />
@@ -281,15 +281,14 @@ export function StudentDashboard({ applications = [], setApplications, setActive
 
                 {/* Progress Line */}
                 <div className="absolute top-[20px] left-[12.5%] z-0 h-0.5 bg-primary transition-all duration-500"
-                     style={{ width: `${(getStepsForStatus(currentTracker.status, currentTracker.appliedDate).filter(s => s.done).length - 1) * 25}%` }}></div>
+                  style={{ width: `${(getStepsForStatus(currentTracker.status, currentTracker.appliedDate).filter(s => s.done).length - 1) * 25}%` }}></div>
 
                 <div className="relative z-10 grid grid-cols-4">
                   {getStepsForStatus(currentTracker.status, currentTracker.appliedDate).map((step, i) => (
                     <div key={i} className={`flex flex-col items-center gap-2 ${!step.active ? 'opacity-40' : ''}`}>
-                      <div className={`flex h-10 w-10 items-center justify-center rounded-full transition-all ${
-                        step.done ? 'bg-primary text-white' :
-                        step.current ? 'border-2 border-primary bg-white text-primary' : 'border-2 border-slate-200 bg-white text-slate-400'
-                      }`}>
+                      <div className={`flex h-10 w-10 items-center justify-center rounded-full transition-all ${step.done ? 'bg-primary text-white' :
+                          step.current ? 'border-2 border-primary bg-white text-primary' : 'border-2 border-slate-200 bg-white text-slate-400'
+                        }`}>
                         <span className="material-symbols-outlined text-[20px]" style={step.done ? { fontVariationSettings: "'FILL' 1" } : {}}>{step.icon}</span>
                       </div>
                       <div className="text-center">

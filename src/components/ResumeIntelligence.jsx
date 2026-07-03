@@ -144,7 +144,7 @@ export function ResumeIntelligence() {
   };
 
   return (
-    <div className="pt-24 px-8 pb-12 max-w-6xl mx-auto space-y-10">
+    <div className="mx-auto max-w-7xl space-y-10 px-8 pb-12 pt-24">
       <section className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
         <div className="space-y-3">
           <label className="block text-sm font-medium text-slate-700 ml-1">Paste job description</label>
@@ -284,10 +284,10 @@ export function ResumeIntelligence() {
             {(analysis?.suggestedBullets || [
               'Your suggested rewrite bullets will appear here after analysis.',
             ]).map((bullet, index) => (
-              <div key={index} className="relative bg-slate-900 text-slate-100 p-6 rounded-xl font-mono text-xs leading-relaxed group">
-                <p>"{bullet}"</p>
+              <div key={index} className="relative bg-primary text-white p-6 rounded-xl font-mono text-xs leading-relaxed group shadow-sm">
+                <p className="text-white font-medium">"{bullet}"</p>
                 <button className="absolute top-4 right-4 p-2 bg-white/10 rounded-md hover:bg-white/20 transition-colors opacity-0 group-hover:opacity-100">
-                  <span className="material-symbols-outlined text-xs">content_copy</span>
+                  <span className="material-symbols-outlined text-xs text-white">content_copy</span>
                 </button>
               </div>
             ))}

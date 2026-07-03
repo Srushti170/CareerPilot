@@ -111,13 +111,13 @@ export function ResumeBuilder({ targetJob = null, onUseForApply, reviewContext =
 
   return (
     <div className="space-y-8">
-      <header className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-[linear-gradient(135deg,#ffffff_0%,#f6fbfa_55%,#eaf6f3_100%)] p-6 elev-sm md:flex-row md:items-end md:justify-between">
+      <header className="flex flex-col gap-4 rounded-2xl border border-outline-variant bg-[linear-gradient(135deg,#ffffff_0%,#f6fbfa_55%,#eaf6f3_100%)] dark:bg-[linear-gradient(135deg,#1e293b_0%,#0f172a_100%)] p-6 elev-sm md:flex-row md:items-end md:justify-between">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-primary">Resume Builder</p>
-          <h2 className="mt-2 text-3xl font-headline font-bold tracking-tight text-slate-900">
+          <h2 className="mt-2 text-3xl font-headline font-bold tracking-tight text-slate-900 dark:text-white">
             {targetJob ? `Tailor for ${targetJob.title} at ${targetJob.company}` : 'Build your ATS-ready resume'}
           </h2>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600 dark:text-slate-300">
             Save resume sections once, tailor them to a job in seconds, and keep your application package ready for one-click apply.
           </p>
         </div>

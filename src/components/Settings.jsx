@@ -195,7 +195,7 @@ export function Settings() {
 
   if (!currentUser) {
     return (
-      <div className="pt-24 px-8 pb-12 max-w-4xl mx-auto flex items-center justify-center">
+      <div className="mx-auto max-w-4xl px-8 pb-12 pt-24 flex items-center justify-center">
         <p className="text-slate-400 font-medium">Loading settings...</p>
       </div>
     );
@@ -204,7 +204,7 @@ export function Settings() {
   const role = currentUser.role;
 
   return (
-    <div className="pt-24 px-8 pb-12 max-w-4xl mx-auto space-y-8">
+    <div className="mx-auto max-w-4xl space-y-8 px-8 pb-12 pt-24">
       <header>
         <h2 className="text-3xl font-black text-on-surface tracking-tighter mb-1">Account Settings</h2>
         <p className="text-slate-500 text-sm">Manage your profile, system settings, and notifications</p>
@@ -227,21 +227,21 @@ export function Settings() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
         {/* Navigation Sidebar inside Settings page */}
         <div className="space-y-2">
-          <div className="p-4 bg-surface-container-low rounded-2xl border border-outline-variant/10">
-            <div className="flex items-center gap-3 mb-4 pb-4 border-b border-slate-200/50">
-              <div className="h-10 w-10 rounded-full bg-primary/10 text-primary font-bold flex items-center justify-center">
+          <div class="p-4 bg-white rounded-2xl border border-slate-200/50 shadow-sm">
+            <div class="flex items-center gap-3 mb-4 pb-4 border-b border-slate-200/50">
+              <div class="h-10 w-10 rounded-full bg-primary/10 text-primary font-bold flex items-center justify-center">
                 {name.charAt(0).toUpperCase() || 'U'}
               </div>
-              <div className="min-w-0">
+              <div class="min-w-0">
                 <p className="font-bold text-sm truncate">{name}</p>
                 <p className="text-xs text-slate-500 capitalize">{role}</p>
               </div>
             </div>
-            <div className="space-y-1">
+            <div class="space-y-1">
               <button
                 type="button"
                 onClick={() => { setActiveTab('profile'); setError(''); setSuccess(''); }}
-                className={`w-full text-left px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors ${activeTab === 'profile' ? 'bg-white text-primary shadow-sm' : 'text-slate-600 hover:bg-white/50'}`}
+                className={`w-full text-left px-3 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors ${activeTab === 'profile' ? 'bg-primary text-white shadow-md' : 'text-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
               >
                 <span className="material-symbols-outlined text-sm">person</span>
                 Profile Settings
@@ -249,7 +249,7 @@ export function Settings() {
               <button
                 type="button"
                 onClick={() => { setActiveTab('notifications'); setError(''); setSuccess(''); }}
-                className={`w-full text-left px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors ${activeTab === 'notifications' ? 'bg-white text-primary shadow-sm' : 'text-slate-600 hover:bg-white/50'}`}
+                className={`w-full text-left px-3 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors ${activeTab === 'notifications' ? 'bg-primary text-white shadow-md' : 'text-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
               >
                 <span className="material-symbols-outlined text-sm">notifications</span>
                 Notifications
@@ -257,7 +257,7 @@ export function Settings() {
               <button
                 type="button"
                 onClick={() => { setActiveTab('security'); setError(''); setSuccess(''); }}
-                className={`w-full text-left px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors ${activeTab === 'security' ? 'bg-white text-primary shadow-sm' : 'text-slate-600 hover:bg-white/50'}`}
+                className={`w-full text-left px-3 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors ${activeTab === 'security' ? 'bg-primary text-white shadow-md' : 'text-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
               >
                 <span className="material-symbols-outlined text-sm">security</span>
                 Security

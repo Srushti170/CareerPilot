@@ -148,7 +148,7 @@ export function Applications({ applications = [], setApplications }) {
   };
 
   return (
-    <div className="pt-24 px-8 pb-12 max-w-5xl mx-auto space-y-8">
+    <div className="mx-auto max-w-7xl space-y-8 px-8 pb-12 pt-24">
       <div className="flex justify-between items-end">
         <div>
           <h2 className="text-2xl md:text-3xl font-headline font-semibold text-slate-900 tracking-tight">Active applications</h2>
