@@ -6,6 +6,8 @@ import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI } from '@google/genai';
 import { MongoClient } from 'mongodb';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 
 dotenv.config();
 
@@ -66,11 +68,7 @@ const DERIVED_STORAGE_KEYS = new Set([
 ]);
 
 const DEFAULT_USERS = [];
-const LEGACY_DEMO_EMAILS = new Set([
-  'student@university.edu',
-  'hr@company.com',
-  'admin@university.edu',
-]);
+const LEGACY_DEMO_EMAILS = new Set([]);
 
 const DEFAULT_STORAGE = {
   careerpilot_users: JSON.stringify(DEFAULT_USERS),
@@ -445,14 +443,25 @@ async function readMongoStorage(db) {
   }, {});
 }
 
-async function ensureDb() {
+let ensureDbPromise = null;
+function ensureDb() {
+  if (!ensureDbPromise) {
+    ensureDbPromise = doEnsureDb().catch((err) => {
+      ensureDbPromise = null;
+      throw err;
+    });
+  }
+  return ensureDbPromise;
+}
+
+async function doEnsureDb() {
   await fs.mkdir(reportsDir, { recursive: true });
   if (mongoUri) {
     const mongoDb = await getMongoCollection();
     if (mongoDb) {
       await ensureMongoIndexes(mongoDb);
-      const hasUsers = await mongoDb.collection(COLLECTIONS.users).countDocuments({}, { limit: 1 });
-      if (!hasUsers) {
+      const isSeeded = await mongoDb.collection(COLLECTIONS.jobs).countDocuments({}, { limit: 1 });
+      if (!isSeeded) {
         const seedDb = await readFileSeedDb();
         await seedMongoDatabase(mongoDb, seedDb);
       }
@@ -548,67 +557,113 @@ async function readDb() {
   return db;
 }
 
-async function writeDb(db) {
-  await ensureDb();
-  if (mongoUri) {
-    const mongoDb = await getMongoCollection();
-    if (mongoDb) {
-      await replaceMongoCollection(mongoDb, 'users', (db.users || []).map(normalizeStoredUser));
-      await replaceMongoCollection(mongoDb, 'sessions', db.sessions || []);
-      await replaceMongoCollection(mongoDb, 'applications', db.applications || []);
-      await replaceMongoCollection(mongoDb, 'notifications', db.notifications || []);
-      await replaceMongoCollection(mongoDb, 'jobs', db.jobs || []);
-      await replaceMongoCollection(mongoDb, 'companies', db.companies || []);
-      await replaceMongoCollection(mongoDb, 'students', db.students || []);
-      await replaceMongoCollection(mongoDb, 'announcements', db.announcements || []);
-      await replaceMongoCollection(mongoDb, 'payments', db.payments || []);
-      await replaceMongoCollection(mongoDb, 'emails', db.emails || []);
-      await replaceMongoCollection(mongoDb, 'calendarEvents', db.calendarEvents || []);
-      await replaceMongoCollection(mongoDb, 'reports', db.reports || []);
-      await replaceMongoSingleton(mongoDb, 'studentProfiles', db.studentProfile || DEFAULT_STUDENT_PROFILE);
-      await replaceMongoStorage(mongoDb, db.storage || {});
-      return db;
-    }
-  }
+let writeDbPromise = Promise.resolve();
 
-  await fs.writeFile(dbPath, JSON.stringify(db, null, 2), 'utf8');
-  return db;
+// Database lock to prevent concurrent write operations
+let dbLock = Promise.resolve();
+
+async function withDbLock(operation) {
+  // Wait for any previous operation to complete
+  let releaseLock = () => {};
+  const locked = new Promise((resolve) => {
+    releaseLock = resolve;
+  });
+
+  // Chain the lock
+  const release = () => {
+    releaseLock();
+  };
+
+  // Wait for previous lock to release, then execute operation
+  await dbLock;
+  dbLock = new Promise((resolve) => {
+    releaseLock = resolve;
+  });
+
+  try {
+    return await operation();
+  } finally {
+    // Release the lock
+    dbLock = Promise.resolve();
+    releaseLock();
+  }
 }
 
+async function writeDb(db) {
+  const writeOperation = async () => {
+    await ensureDb();
+    if (mongoUri) {
+      const mongoDb = await getMongoCollection();
+      if (mongoDb) {
+        await replaceMongoCollection(mongoDb, 'users', (db.users || []).map(normalizeStoredUser));
+        await replaceMongoCollection(mongoDb, 'sessions', db.sessions || []);
+        await replaceMongoCollection(mongoDb, 'applications', db.applications || []);
+        await replaceMongoCollection(mongoDb, 'notifications', db.notifications || []);
+        await replaceMongoCollection(mongoDb, 'jobs', db.jobs || []);
+        await replaceMongoCollection(mongoDb, 'companies', db.companies || []);
+        await replaceMongoCollection(mongoDb, 'students', db.students || []);
+        await replaceMongoCollection(mongoDb, 'announcements', db.announcements || []);
+        await replaceMongoCollection(mongoDb, 'payments', db.payments || []);
+        await replaceMongoCollection(mongoDb, 'emails', db.emails || []);
+        await replaceMongoCollection(mongoDb, 'calendarEvents', db.calendarEvents || []);
+        await replaceMongoCollection(mongoDb, 'reports', db.reports || []);
+        await replaceMongoSingleton(mongoDb, 'studentProfiles', db.studentProfile || DEFAULT_STUDENT_PROFILE);
+        await replaceMongoStorage(mongoDb, db.storage || {});
+        return db;
+      }
+    }
+
+    await fs.writeFile(dbPath, JSON.stringify(db, null, 2), 'utf8');
+    return db;
+  };
+
+  writeDbPromise = writeDbPromise.then(writeOperation).catch(writeOperation);
+  return writeDbPromise;
+}
+
+const JWT_SECRET = process.env.JWT_SECRET || 'careerpilot-secret-key-12345';
+
 function createSession(user) {
+  const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
   return {
     id: crypto.randomUUID(),
-    token: crypto.randomUUID(),
+    token,
     userId: user.id,
     createdAt: new Date().toISOString(),
   };
 }
 
 function isPasswordHashed(password = '') {
-  return typeof password === 'string' && password.startsWith('scrypt$');
+  return typeof password === 'string' && (password.startsWith('$2a$') || password.startsWith('$2b$'));
 }
 
 function hashPassword(password = '') {
-  const salt = crypto.randomBytes(16).toString('hex');
-  const derivedKey = crypto.scryptSync(String(password), salt, 64).toString('hex');
-  return `scrypt$${salt}$${derivedKey}`;
+  return bcrypt.hashSync(String(password), 10);
 }
 
 function verifyPassword(password = '', storedPassword = '') {
   if (!isPasswordHashed(storedPassword)) {
+    if (typeof storedPassword === 'string' && storedPassword.startsWith('scrypt$')) {
+      const [, salt, expectedKey] = storedPassword.split('$');
+      if (!salt || !expectedKey) return false;
+      const derivedKey = crypto.scryptSync(String(password), salt, 64).toString('hex');
+      return crypto.timingSafeEqual(Buffer.from(expectedKey, 'hex'), Buffer.from(derivedKey, 'hex'));
+    }
     return String(password) === String(storedPassword);
   }
-
-  const [, salt, expectedKey] = String(storedPassword).split('$');
-  if (!salt || !expectedKey) return false;
-  const derivedKey = crypto.scryptSync(String(password), salt, 64).toString('hex');
-  return crypto.timingSafeEqual(Buffer.from(expectedKey, 'hex'), Buffer.from(derivedKey, 'hex'));
+  try {
+    return bcrypt.compareSync(String(password), storedPassword);
+  } catch (err) {
+    return false;
+  }
 }
 
 function normalizeStoredUser(user = {}) {
   return {
     ...user,
-    password: isPasswordHashed(user.password) ? user.password : hashPassword(user.password || ''),
+    password: isPasswordHashed(user.password) || String(user.password).startsWith('scrypt$')
+      ? user.password
+      : hashPassword(user.password || ''),
   };
 }
 
@@ -618,15 +673,8 @@ function sanitizeUser(user = {}) {
 }
 
 function parseUsersFromStorage(storage = {}) {
-  const raw = storage.careerpilot_users;
-  if (!raw) return DEFAULT_USERS.map(normalizeStoredUser);
-  try {
-    return JSON.parse(raw)
-      .filter((user) => !LEGACY_DEMO_EMAILS.has(String(user?.email || '').toLowerCase()))
-      .map(normalizeStoredUser);
-  } catch {
-    return DEFAULT_USERS.map(normalizeStoredUser);
-  }
+  // Ignore legacy careerpilot_users in storage since we are using MongoDB and don't want to restore legacy demo users.
+  return [];
 }
 
 function syncUsersToStorage(db, users) {
@@ -1013,75 +1061,95 @@ app.get('/api/student-profile', async (_req, res) => {
 });
 
 app.put('/api/student-profile', async (req, res) => {
-  const db = await readDb();
-  db.studentProfile = req.body?.profile || req.body || DEFAULT_STUDENT_PROFILE;
-  syncCollectionStorage(db);
-  await writeDb(db);
+  await withDbLock(async () => {
+    const db = await readDb();
+    db.studentProfile = req.body?.profile || req.body || DEFAULT_STUDENT_PROFILE;
+    syncCollectionStorage(db);
+    await writeDb(db);
+  });
   res.json({ ok: true });
 });
 
 app.post('/api/auth/login', async (req, res) => {
-  const db = await readDb();
-  const users = db.users || parseUsersFromStorage(db.storage);
-  const { email, password, role } = req.body;
-  const user = users.find(
-    (entry) =>
-      entry.email.toLowerCase() === String(email || '').toLowerCase() &&
-      verifyPassword(password, entry.password) &&
-      entry.role === role
-  );
+  let result, status = 200;
+  await withDbLock(async () => {
+    const db = await readDb();
+    const users = db.users || parseUsersFromStorage(db.storage);
+    const { email, password, role } = req.body;
+    const user = users.find(
+      (entry) =>
+        entry.email.toLowerCase() === String(email || '').toLowerCase() &&
+        verifyPassword(password, entry.password) &&
+        entry.role === role
+    );
 
-  if (!user) {
-    return res.status(401).json({ error: 'Invalid email, password, or role.' });
-  }
+    if (!user) {
+      status = 401;
+      result = { error: 'Invalid email, password, or role.' };
+      return;
+    }
 
-  const session = createSession(user);
-  db.sessions = [...db.sessions.filter((entry) => entry.userId !== user.id), session];
-  db.storage.careerpilot_current_user = JSON.stringify(sanitizeUser(user));
-  db.storage.careerpilot_session_token = session.token;
-  await writeDb(db);
-  return res.json({ user: sanitizeUser(user), sessionToken: session.token });
+    const session = createSession(user);
+    db.sessions = [...db.sessions.filter((entry) => entry.userId !== user.id), session];
+    db.storage.careerpilot_current_user = JSON.stringify(sanitizeUser(user));
+    db.storage.careerpilot_session_token = session.token;
+    await writeDb(db);
+    result = { user: sanitizeUser(user), sessionToken: session.token };
+  });
+  return res.status(status).json(result);
 });
 
 app.post('/api/auth/register', async (req, res) => {
-  const db = await readDb();
-  const users = db.users || parseUsersFromStorage(db.storage);
-  const { name, email, password, role } = req.body;
-  const normalizedEmail = String(email || '').trim().toLowerCase();
+  let result, status = 201;
+  await withDbLock(async () => {
+    const db = await readDb();
+    const users = db.users || parseUsersFromStorage(db.storage);
+    const { name, email, password, role } = req.body;
+    const normalizedEmail = String(email || '').trim().toLowerCase();
 
-  if (users.some((entry) => entry.email.toLowerCase() === normalizedEmail)) {
-    return res.status(409).json({ error: 'An account with this email already exists.' });
-  }
+    if (users.some((entry) => entry.email.toLowerCase() === normalizedEmail)) {
+      status = 409;
+      result = { error: 'An account with this email already exists.' };
+      return;
+    }
 
-  const user = {
-    id: crypto.randomUUID(),
-    name: String(name || '').trim(),
-    email: normalizedEmail,
-    password: hashPassword(password),
-    role,
-  };
-  const updatedUsers = [...users, user];
-  syncUsersToStorage(db, updatedUsers);
-  db.storage.careerpilot_current_user = JSON.stringify(sanitizeUser(user));
-  const session = createSession(user);
-  db.sessions.push(session);
-  db.storage.careerpilot_session_token = session.token;
-  await writeDb(db);
-  return res.status(201).json({ user: sanitizeUser(user), sessionToken: session.token });
+    const user = {
+      id: crypto.randomUUID(),
+      name: String(name || '').trim(),
+      email: normalizedEmail,
+      password: hashPassword(password),
+      role,
+    };
+    const updatedUsers = [...users, user];
+    syncUsersToStorage(db, updatedUsers);
+    db.storage.careerpilot_current_user = JSON.stringify(sanitizeUser(user));
+    const session = createSession(user);
+    db.sessions.push(session);
+    db.storage.careerpilot_session_token = session.token;
+    await writeDb(db);
+    result = { user: sanitizeUser(user), sessionToken: session.token };
+  });
+  return res.status(status).json(result);
 });
 
 app.get('/api/auth/me', async (req, res) => {
   const db = await readDb();
   const token = req.headers.authorization?.replace('Bearer ', '') || req.query.token || db.storage.careerpilot_session_token;
-  const session = db.sessions.find((entry) => entry.token === token);
-  if (!session) {
+  if (!token) {
     return res.status(401).json({ error: 'No active session.' });
   }
-  const user = (db.users || parseUsersFromStorage(db.storage)).find((entry) => entry.id === session.userId);
-  if (!user) {
-    return res.status(404).json({ error: 'User not found.' });
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const user = (db.users || parseUsersFromStorage(db.storage)).find(
+      (entry) => entry.id === decoded.id || entry.email.toLowerCase() === decoded.email.toLowerCase()
+    );
+    if (!user) {
+      return res.status(404).json({ error: 'User not found.' });
+    }
+    return res.json({ user: sanitizeUser(user) });
+  } catch (jwtError) {
+    return res.status(401).json({ error: 'Invalid or expired session token.' });
   }
-  return res.json({ user: sanitizeUser(user) });
 });
 
 app.put('/api/auth/profile', async (req, res) => {

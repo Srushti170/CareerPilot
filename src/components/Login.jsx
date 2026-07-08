@@ -292,16 +292,6 @@ function FloatingBadge({ children, style, delay = 0 }) {
 }
 
 // ─────────────────────────────────────────────
-// Default / Legacy setup
-// ─────────────────────────────────────────────
-const DEFAULT_USERS = [];
-const LEGACY_DEMO_EMAILS = new Set([
-  'student@university.edu',
-  'hr@company.com',
-  'admin@university.edu',
-]);
-
-// ─────────────────────────────────────────────
 // Main Login Component
 // ─────────────────────────────────────────────
 export function Login({ onLogin }) {
@@ -316,65 +306,17 @@ export function Login({ onLogin }) {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  const getStoredUsers = () => {
-    const stored = localStorage.getItem('careerpilot_users');
-    if (!stored) {
-      localStorage.setItem('careerpilot_users', JSON.stringify(DEFAULT_USERS));
-      return DEFAULT_USERS;
-    }
-    const parsed = JSON.parse(stored).filter(
-      (user) => !LEGACY_DEMO_EMAILS.has(String(user?.email || '').toLowerCase())
-    );
-    localStorage.setItem('careerpilot_users', JSON.stringify(parsed));
-    return parsed;
-  };
-
-  const persistLocalUser = (user) => {
-    const users = getStoredUsers();
-    const existingIndex = users.findIndex((entry) => entry.email.toLowerCase() === user.email.toLowerCase());
-    const existingUser = existingIndex >= 0 ? users[existingIndex] : null;
-    const normalizedUser = {
-      ...existingUser,
-      ...user,
-      password: user.password || existingUser?.password || '',
-    };
-    const updatedUsers = existingIndex >= 0
-      ? users.map((entry, index) => (index === existingIndex ? normalizedUser : entry))
-      : [...users, normalizedUser];
-    localStorage.setItem('careerpilot_users', JSON.stringify(updatedUsers));
-    return normalizedUser;
-  };
-
   const handleAuth = async (e) => {
     e.preventDefault();
     setError('');
     setSuccess('');
-    const users = getStoredUsers();
 
     if (mode === 'signin') {
       try {
         const { user: authenticatedUser, sessionToken } = await authApi.login({ email, password, role });
-        persistLocalUser({ ...authenticatedUser, password, role });
         onLogin(authenticatedUser, false, sessionToken);
-        return;
       } catch (apiError) {
-        console.warn('Backend login unavailable, using local auth fallback.', apiError);
-      }
-
-      const user = users.find(
-        (u) => u.email.toLowerCase() === email.toLowerCase() && u.password === password && u.role === role
-      );
-
-      if (user) {
-        persistLocalUser(user);
-        onLogin(user, false);
-      } else {
-        const anyUserWithEmail = users.find((u) => u.email.toLowerCase() === email.toLowerCase());
-        if (anyUserWithEmail && anyUserWithEmail.role !== role) {
-          setError(`Account exists, but with the role: ${anyUserWithEmail.role.toUpperCase()}. Please switch roles above.`);
-        } else {
-          setError('Invalid email or password.');
-        }
+        setError(apiError.message || 'Invalid email or password.');
       }
     } else {
       if (!name.trim()) { setError('Please enter your full name.'); return; }
@@ -382,8 +324,6 @@ export function Login({ onLogin }) {
       if (password !== confirmPassword) { setError('Passwords do not match.'); return; }
 
       const normalizedEmail = email.trim().toLowerCase();
-      const emailExists = users.some((u) => u.email.toLowerCase() === normalizedEmail);
-      if (emailExists) { setError('An account with this email already exists.'); return; }
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
         setError('Use a valid email address to create your account.');
         return;
@@ -391,18 +331,15 @@ export function Login({ onLogin }) {
 
       const newUser = { name: name.trim(), email: normalizedEmail, password, role };
       if (role === 'student') {
-        saveStudentProfile({ name: newUser.name, email: newUser.email, role: 'CS Senior Student', skills: [], onboardingComplete: false }, newUser);
+        await saveStudentProfile({ name: newUser.name, email: newUser.email, role: 'CS Senior Student', skills: [], onboardingComplete: false }, newUser);
       }
 
-      setSuccess('Account created successfully! Logging you in...');
       try {
         const { user: createdUser, sessionToken } = await authApi.register(newUser);
-        persistLocalUser(createdUser);
+        setSuccess('Account created successfully! Logging you in...');
         setTimeout(() => { onLogin(createdUser, true, sessionToken); }, 700);
       } catch (apiError) {
-        console.warn('Backend register unavailable, using local auth fallback.', apiError);
-        persistLocalUser(newUser);
-        setTimeout(() => { onLogin(newUser, true); }, 700);
+        setError(apiError.message || 'An error occurred during registration.');
       }
     }
   };

@@ -108,13 +108,15 @@ export function getStudentProfile(user = {}) {
   return normalizeStudentProfile(stored ? JSON.parse(stored) : {}, user);
 }
 
-export function saveStudentProfile(profile, user = {}) {
+export async function saveStudentProfile(profile, user = {}) {
   const normalized = normalizeStudentProfile(profile, user);
   localStorage.setItem(STUDENT_PROFILE_KEY, JSON.stringify(normalized));
   localStorage.setItem(STUDENT_ONBOARDING_KEY, JSON.stringify(normalized.onboardingComplete));
-  stateApi.saveStudentProfile(normalized).catch((error) => {
+  try {
+    await stateApi.saveStudentProfile(normalized);
+  } catch (error) {
     console.error('Student profile sync error:', error);
-  });
+  }
   return normalized;
 }
 

@@ -106,12 +106,7 @@ export default function App() {
     const hydrateCoreState = async () => {
       try {
         const token = localStorage.getItem('careerpilot_session_token');
-        const [nextApplications, nextNotifications] = await Promise.all([
-          stateApi.getApplications(),
-          stateApi.getNotifications(),
-        ]);
-
-        if (token && !localStorage.getItem('careerpilot_current_user')) {
+        if (token) {
           try {
             const sessionUser = await authApi.me(token);
             if (sessionUser?.user) {
@@ -120,12 +115,22 @@ export default function App() {
               setIsAuthenticated(true);
               setPersona(sessionUser.user.role || 'student');
               setNeedsOnboarding(sessionUser.user.role === 'student' && !isStudentOnboardingComplete(sessionUser.user));
+            } else {
+              throw new Error('No user returned');
             }
           } catch (sessionError) {
             console.warn('Session restore failed, clearing stale token.', sessionError);
             localStorage.removeItem('careerpilot_session_token');
+            localStorage.removeItem('careerpilot_current_user');
+            setCurrentUser(null);
+            setIsAuthenticated(false);
           }
         }
+
+        const [nextApplications, nextNotifications] = await Promise.all([
+          stateApi.getApplications(),
+          stateApi.getNotifications(),
+        ]);
 
         if (Array.isArray(nextApplications)) {
           setApplications(nextApplications);
