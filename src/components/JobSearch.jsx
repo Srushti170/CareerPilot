@@ -66,7 +66,7 @@ export function JobSearch({ searchQuery = '', setSearchQuery, applications = [],
   const handleApply = async (job) => {
     const isAlreadyApplied = applications.some(
       app => app.company.toLowerCase() === job.company.toLowerCase() &&
-             app.role.toLowerCase() === job.title.toLowerCase()
+        app.role.toLowerCase() === job.title.toLowerCase()
     );
     if (isAlreadyApplied) return;
 
@@ -156,7 +156,7 @@ export function JobSearch({ searchQuery = '', setSearchQuery, applications = [],
     setSelectedJob(job);
     setApplicationResumeDraft(tailorResumeForJob(studentProfile, job));
     setBuilderReviewContext(null);
-    setActiveSearchTab('builder');
+    setActiveSearchTab('studio');
   };
 
   const handleSearchChange = (e) => {
@@ -170,9 +170,9 @@ export function JobSearch({ searchQuery = '', setSearchQuery, applications = [],
   const filteredJobs = jobs.filter(job => {
     const q = localQuery.toLowerCase();
     const matchesQuery = !q || job.title.toLowerCase().includes(q) ||
-                         job.company.toLowerCase().includes(q) ||
-                         job.location.toLowerCase().includes(q) ||
-                         job.tags.some(tag => tag.toLowerCase().includes(q));
+      job.company.toLowerCase().includes(q) ||
+      job.location.toLowerCase().includes(q) ||
+      job.tags.some(tag => tag.toLowerCase().includes(q));
 
     const matchesType = filterJobTypes.length === 0 || filterJobTypes.includes(job.type);
     const matchesLocType = filterLocationTypes.length === 0 || filterLocationTypes.includes(job.locationType);
@@ -199,11 +199,8 @@ export function JobSearch({ searchQuery = '', setSearchQuery, applications = [],
             <button onClick={() => setActiveSearchTab('listings')} className={tabClass(activeSearchTab === 'listings')}>
               All listings
             </button>
-            <button onClick={() => setActiveSearchTab('builder')} className={tabClass(activeSearchTab === 'builder')}>
-              Resume builder
-            </button>
-            <button onClick={() => setActiveSearchTab('intelligence')} className={tabClass(activeSearchTab === 'intelligence')}>
-              Resume AI match
+            <button onClick={() => setActiveSearchTab('studio')} className={tabClass(activeSearchTab === 'studio')}>
+              Resume studio
             </button>
           </div>
         </div>
@@ -242,7 +239,7 @@ export function JobSearch({ searchQuery = '', setSearchQuery, applications = [],
                 filteredJobs.map((job, i) => {
                   const isApplied = applications.some(
                     app => app.company.toLowerCase() === job.company.toLowerCase() &&
-                           app.role.toLowerCase() === job.title.toLowerCase()
+                      app.role.toLowerCase() === job.title.toLowerCase()
                   );
                   return (
                     <JobCard
@@ -383,17 +380,27 @@ export function JobSearch({ searchQuery = '', setSearchQuery, applications = [],
               </div>
             </aside>
           </motion.div>
-        ) : activeSearchTab === 'builder' ? (
+        ) : (
           <motion.div
-            key="builder"
+            key="resume-studio"
             initial={{ opacity: 0, x: 12 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -12 }}
+            className="space-y-8"
           >
+
+
             <ResumeBuilder
               targetJob={selectedJob}
               setActiveTab={setActiveTab}
               reviewContext={builderReviewContext}
+              renderAnalysis={(draft) => (
+                <ResumeIntelligence
+                  targetJob={selectedJob}
+                  resumeTextOverride={resumeDraftToText(draft)}
+                  embedded
+                />
+              )}
               onUseForApply={(draft) => {
                 if (!selectedJob) return;
                 setApplicationResumeDraft(draft);
@@ -404,15 +411,6 @@ export function JobSearch({ searchQuery = '', setSearchQuery, applications = [],
                 });
               }}
             />
-          </motion.div>
-        ) : (
-          <motion.div
-            key="intelligence"
-            initial={{ opacity: 0, x: 12 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -12 }}
-          >
-            <ResumeIntelligence />
           </motion.div>
         )}
       </AnimatePresence>
@@ -465,9 +463,8 @@ export function JobSearch({ searchQuery = '', setSearchQuery, applications = [],
                     </div>
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-[0.06em] text-slate-400">Apply Decision</p>
-                      <span className={`mt-2 inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
-                        applicationDraft.isReadyToApply ? 'bg-success-soft text-success' : 'bg-warning-soft text-warning'
-                      }`}>
+                      <span className={`mt-2 inline-flex rounded-full px-3 py-1 text-xs font-semibold ${applicationDraft.isReadyToApply ? 'bg-success-soft text-success' : 'bg-warning-soft text-warning'
+                        }`}>
                         {applicationDraft.isReadyToApply ? 'Ready to apply' : 'Improve before applying'}
                       </span>
                     </div>
@@ -503,7 +500,7 @@ export function JobSearch({ searchQuery = '', setSearchQuery, applications = [],
                     <h4 className="text-sm font-semibold text-slate-900">
                       {applicationDraft.isReadyToApply ? 'AI Cover Letter' : 'AI Improvement Plan'}
                     </h4>
-                    <Button variant="ghost" size="sm" onClick={() => setActiveSearchTab('builder')}>
+                    <Button variant="ghost" size="sm" onClick={() => setActiveSearchTab('studio')}>
                       Edit Resume
                     </Button>
                   </div>
@@ -560,7 +557,7 @@ export function JobSearch({ searchQuery = '', setSearchQuery, applications = [],
                 <Button variant="secondary" onClick={() => {
                   setSelectedJob(applicationDraft.job);
                   setBuilderReviewContext(applicationDraft.applyReview || null);
-                  setActiveSearchTab('builder');
+                  setActiveSearchTab('studio');
                 }}>
                   Tailor Resume More
                 </Button>

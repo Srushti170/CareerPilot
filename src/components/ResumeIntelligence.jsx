@@ -1,11 +1,24 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { getStudentProfile } from '../lib/studentProfile';
 import { analyzeResumeWithAI, isCareerAiAvailable } from '../lib/aiCareerTools';
 
-export function ResumeIntelligence() {
+export function ResumeIntelligence({ targetJob = null, resumeTextOverride = '', embedded = false }) {
   const studentProfile = getStudentProfile();
   const aiAvailable = isCareerAiAvailable();
+  const targetJobDescription = useMemo(() => {
+    if (!targetJob) return '';
+
+    return [
+      `${targetJob.title || ''} at ${targetJob.company || ''}`.trim(),
+      targetJob.shortDescription || targetJob.description || '',
+      targetJob.requirements?.length ? `Requirements: ${targetJob.requirements.join(', ')}` : '',
+      targetJob.tags?.length ? `Skills: ${targetJob.tags.join(', ')}` : '',
+      targetJob.missingSkills?.length ? `Priority keywords: ${targetJob.missingSkills.join(', ')}` : '',
+      targetJob.location ? `Location: ${targetJob.location}` : '',
+    ].filter(Boolean).join('\n');
+  }, [targetJob]);
+
   const defaultResumeText = useMemo(() => {
     const sections = [
       studentProfile.name,
@@ -22,10 +35,17 @@ export function ResumeIntelligence() {
     return sections.join('\n');
   }, [studentProfile]);
 
-  const [jobDescription, setJobDescription] = useState('');
-  const [resumeText, setResumeText] = useState(defaultResumeText);
+  const jobDescription = targetJobDescription;
+  const resumeText = resumeTextOverride || defaultResumeText;
   const [analysis, setAnalysis] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const lastAnalyzedSignatureRef = useRef('');
+  const activeRequestRef = useRef(0);
+
+  const analysisSignature = useMemo(
+    () => `${jobDescription.trim()}::${resumeText.trim()}`,
+    [jobDescription, resumeText]
+  );
 
   const extractKeywords = (text) => {
     const cleaned = text.toLowerCase().replace(/[^a-z0-9+#./\s-]/g, ' ');
@@ -105,6 +125,19 @@ export function ResumeIntelligence() {
   };
 
   const handleAnalyze = async () => {
+    if (!jobDescription.trim() || !resumeText.trim()) {
+      setAnalysis(null);
+      setIsAnalyzing(false);
+      return;
+    }
+
+    if (lastAnalyzedSignatureRef.current === analysisSignature) {
+      return;
+    }
+
+    lastAnalyzedSignatureRef.current = analysisSignature;
+    const requestId = activeRequestRef.current + 1;
+    activeRequestRef.current = requestId;
     setIsAnalyzing(true);
 
     if (aiAvailable) {
@@ -128,9 +161,11 @@ export function ResumeIntelligence() {
           ],
         };
 
-        localStorage.setItem('careerpilot_latest_resume_analysis', JSON.stringify(normalizedAnalysis));
-        setAnalysis(normalizedAnalysis);
-        setIsAnalyzing(false);
+        if (activeRequestRef.current === requestId) {
+          localStorage.setItem('careerpilot_latest_resume_analysis', JSON.stringify(normalizedAnalysis));
+          setAnalysis(normalizedAnalysis);
+          setIsAnalyzing(false);
+        }
         return;
       } catch (error) {
         console.error('Gemini ATS analysis error, using fallback:', error);
@@ -138,85 +173,118 @@ export function ResumeIntelligence() {
     }
 
     const fallbackAnalysis = buildFallbackAnalysis();
-    localStorage.setItem('careerpilot_latest_resume_analysis', JSON.stringify(fallbackAnalysis));
-    setAnalysis(fallbackAnalysis);
-    setIsAnalyzing(false);
+    if (activeRequestRef.current === requestId) {
+      localStorage.setItem('careerpilot_latest_resume_analysis', JSON.stringify(fallbackAnalysis));
+      setAnalysis(fallbackAnalysis);
+      setIsAnalyzing(false);
+    }
   };
 
+  useEffect(() => {
+    if (!analysisSignature || !jobDescription.trim() || !resumeText.trim()) {
+      setAnalysis(null);
+      return undefined;
+    }
+
+    const analyzeTimer = window.setTimeout(() => {
+      handleAnalyze();
+    }, 900);
+
+    return () => window.clearTimeout(analyzeTimer);
+  }, [analysisSignature]);
+
   return (
-    <div className="mx-auto max-w-7xl space-y-10 px-8 pb-12 pt-24">
-      <section className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
-        <div className="space-y-3">
-          <label className="block text-sm font-medium text-slate-700 ml-1">Paste job description</label>
-          <div className="relative">
-            <textarea
-              value={jobDescription}
-              onChange={(e) => setJobDescription(e.target.value)}
-              className="w-full h-64 p-6 rounded-xl border border-slate-200 bg-white text-slate-600 font-sans text-sm resize-none outline-none transition-colors focus:border-primary focus:ring-4 focus:ring-primary/10"
-              placeholder="Enter the role requirements, responsibilities, and qualifications..."
-            />
-            <div className="absolute top-4 right-4 text-slate-300">
+    <div className={embedded ? 'space-y-8' : 'mx-auto max-w-7xl space-y-10 px-8 pb-12 pt-24'}>
+      {embedded && (
+        <header className="rounded-2xl border border-outline-variant bg-white p-6 elev-sm">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-primary">Resume AI Match</p>
+          <h2 className="mt-2 text-2xl font-headline font-bold tracking-tight text-slate-900">
+            Score the same resume against the selected role
+          </h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
+            The analyzer uses your saved profile and the current target job to surface ATS score, JD match, missing keywords, strengths, and AI recommendations.
+          </p>
+        </header>
+      )}
+
+      <section className={embedded ? 'grid grid-cols-1 gap-4 items-start' : 'grid grid-cols-1 lg:grid-cols-2 gap-6 items-start'}>
+        <div className="rounded-xl border border-slate-200 bg-white p-5 elev-sm">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary">
+              <span className="material-symbols-outlined">work</span>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-400">Connected job description</p>
+              <h3 className="mt-1 text-sm font-semibold text-slate-900">
+                {targetJob ? `${targetJob.title} at ${targetJob.company}` : 'Select a job to start matching'}
+              </h3>
+              <p className="mt-2 line-clamp-3 text-xs leading-5 text-slate-500">
+                {jobDescription || 'Resume AI Match will automatically use the target job selected in Resume Studio.'}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-slate-200 bg-white p-5 elev-sm">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary">
               <span className="material-symbols-outlined">description</span>
             </div>
-          </div>
-        </div>
-        <div className="space-y-3 ">
-          <label className="block text-sm font-medium text-slate-700 ml-1">Paste resume text</label>
-          <div className="relative">
-            <textarea
-              value={resumeText}
-              onChange={(e) => setResumeText(e.target.value)}
-              className="w-full h-64 p-6 rounded-xl border border-slate-200 bg-white text-slate-600 font-sans text-sm resize-none outline-none transition-colors focus:border-primary focus:ring-4 focus:ring-primary/10"
-              placeholder="Paste your resume content or career history here..."
-            />
-            <div className="absolute top-4 right-4 text-slate-300">
-              <span className="material-symbols-outlined">person</span>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-400">Connected resume draft</p>
+              <h3 className="mt-1 text-sm font-semibold text-slate-900">
+                Latest tailored draft from Resume Builder
+              </h3>
+              <p className="mt-2 text-xs leading-5 text-slate-500">
+                {resumeText ? `${resumeText.split(/\s+/).filter(Boolean).length} words synced from the editor.` : 'Start editing your resume to generate analysis.'}
+              </p>
             </div>
           </div>
         </div>
-        <div className="lg:col-span-2 flex justify-center pt-2">
-          <button
-            onClick={handleAnalyze}
-            type="button"
-            disabled={isAnalyzing}
-            className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-on-primary text-sm font-semibold rounded-xl transition-colors hover:bg-primary-hover focus:outline-none focus:ring-4 focus:ring-primary/10"
-          >
-            {isAnalyzing ? 'Analyzing...' : 'Analyze match'}
-            <span className="material-symbols-outlined text-base">bolt</span>
-          </button>
+
+        <div className={`${embedded ? '' : 'lg:col-span-2'} rounded-xl border border-slate-200 bg-slate-50 px-4 py-3`}>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-400">Analysis status</p>
+              <p className="mt-1 text-sm font-semibold text-slate-700">
+                {isAnalyzing ? 'Analyzing the latest resume and job match...' : analysis ? 'Analysis is synced with the latest editor state.' : 'Waiting for a selected job and resume draft.'}
+              </p>
+            </div>
+            <span className={`h-3 w-3 rounded-full ${isAnalyzing ? 'animate-pulse bg-warning' : analysis ? 'bg-success' : 'bg-slate-300'}`} />
+          </div>
         </div>
       </section>
 
-      <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="md:col-span-1 rounded-xl border border-slate-200 bg-white p-8 elev-sm flex flex-col items-center justify-center text-center">
-          <div className="relative w-44 h-44 flex items-center justify-center">
+      <section className={embedded ? 'grid grid-cols-1 gap-4' : 'grid grid-cols-1 md:grid-cols-3 gap-6'}>
+        <div className={`${embedded ? 'p-6' : 'md:col-span-1 p-8'} rounded-xl border border-slate-200 bg-white elev-sm flex flex-col items-center justify-center text-center`}>
+          <div className={`${embedded ? 'h-32 w-32' : 'w-44 h-44'} relative flex items-center justify-center`}>
             <svg className="w-full h-full transform -rotate-90">
-              <circle className="text-slate-100" cx="88" cy="88" fill="transparent" r="76" stroke="currentColor" strokeWidth="12"></circle>
+              <circle className="text-slate-100" cx={embedded ? '64' : '88'} cy={embedded ? '64' : '88'} fill="transparent" r={embedded ? '54' : '76'} stroke="currentColor" strokeWidth="12"></circle>
               <circle
                 className="text-primary"
-                cx="88"
-                cy="88"
+                cx={embedded ? '64' : '88'}
+                cy={embedded ? '64' : '88'}
                 fill="transparent"
-                r="76"
+                r={embedded ? '54' : '76'}
                 stroke="currentColor"
-                strokeDasharray="477.5"
-                strokeDashoffset={477.5 - ((analysis?.atsScore ?? 0) / 100) * 477.5}
+                strokeDasharray={embedded ? '339.3' : '477.5'}
+                strokeDashoffset={(embedded ? 339.3 : 477.5) - ((analysis?.atsScore ?? 0) / 100) * (embedded ? 339.3 : 477.5)}
                 strokeWidth="12"
                 strokeLinecap="round"
               ></circle>
             </svg>
             <div className="absolute flex flex-col items-center">
-              <span className="text-5xl font-headline font-bold text-slate-900 tracking-tight">{analysis?.atsScore ?? 0}</span>
+              <span className={`${embedded ? 'text-4xl' : 'text-5xl'} font-headline font-bold text-slate-900 tracking-tight`}>{analysis?.atsScore ?? 0}</span>
               <span className="text-[11px] font-medium text-slate-400">ATS score</span>
             </div>
           </div>
-          <h3 className="mt-6 text-lg font-semibold text-slate-900">{analysis ? `${analysis.matchScore}% JD match` : 'Run analysis'}</h3>
+          <h3 className="mt-6 text-lg font-semibold text-slate-900">{analysis ? `${analysis.matchScore}% JD match` : 'Waiting for sync'}</h3>
           <p className="text-sm text-slate-500 mt-1">
-            {analysis ? 'This score reflects AI-assisted ATS and recruiter-style review.' : 'Paste a job description and your resume to generate a real score.'}
+            {analysis ? 'This score reflects AI-assisted ATS and recruiter-style review.' : 'Select a job and edit your resume to generate a real score.'}
           </p>
         </div>
 
-        <div className="rounded-xl border border-slate-200 bg-white p-8 elev-sm flex flex-col">
+        <div className={`${embedded ? 'p-6' : 'p-8'} rounded-xl border border-slate-200 bg-white elev-sm flex flex-col`}>
           <div className="flex items-center justify-between mb-5">
             <h3 className="text-base font-semibold text-slate-900">Missing keywords</h3>
             <span className="material-symbols-outlined text-warning">warning</span>
@@ -232,7 +300,7 @@ export function ResumeIntelligence() {
           {analysis && <p className="mt-auto pt-6 text-xs text-slate-400">Add only skills and terms you can genuinely support in interviews.</p>}
         </div>
 
-        <div className="rounded-xl border border-slate-200 bg-white p-8 elev-sm flex flex-col">
+        <div className={`${embedded ? 'p-6' : 'p-8'} rounded-xl border border-slate-200 bg-white elev-sm flex flex-col`}>
           <div className="flex items-center justify-between mb-5">
             <h3 className="text-base font-semibold text-slate-900">Resume strengths</h3>
             <span className="material-symbols-outlined text-primary">verified</span>
@@ -253,8 +321,8 @@ export function ResumeIntelligence() {
         </div>
       </section>
 
-      <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="rounded-xl bg-white p-8 border border-slate-200 border-l-4 border-l-primary elev-sm">
+      <section className={embedded ? 'grid grid-cols-1 gap-4' : 'grid grid-cols-1 lg:grid-cols-2 gap-6'}>
+        <div className={`${embedded ? 'p-6' : 'p-8'} rounded-xl bg-white border border-slate-200 border-l-4 border-l-primary elev-sm`}>
           <div className="flex items-center gap-3 mb-5">
             <div className="w-10 h-10 bg-warning-soft rounded-lg flex items-center justify-center text-warning">
               <span className="material-symbols-outlined">priority_high</span>
@@ -273,7 +341,7 @@ export function ResumeIntelligence() {
           </div>
         </div>
 
-        <div className="rounded-xl bg-white p-8 border border-slate-200 elev-sm">
+        <div className={`${embedded ? 'p-6' : 'p-8'} rounded-xl bg-white border border-slate-200 elev-sm`}>
           <div className="flex items-center gap-3 mb-5">
             <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center text-on-primary">
               <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>auto_awesome</span>
@@ -295,10 +363,12 @@ export function ResumeIntelligence() {
         </div>
       </section>
 
-      <div className="fixed bottom-8 right-8 bg-white rounded-full py-2.5 px-5 elev-md flex items-center gap-2.5 border border-slate-200 z-50">
-        <div className="w-2 h-2 bg-primary rounded-full animate-pulse"></div>
-        <span className="text-sm font-semibold text-primary">{aiAvailable ? 'Gemini ATS active' : 'Fallback analyzer active'}</span>
-      </div>
+      {!embedded && (
+        <div className="fixed bottom-8 right-8 bg-white rounded-full py-2.5 px-5 elev-md flex items-center gap-2.5 border border-slate-200 z-50">
+          <div className="w-2 h-2 bg-primary rounded-full animate-pulse"></div>
+          <span className="text-sm font-semibold text-primary">{aiAvailable ? 'Gemini ATS active' : 'Fallback analyzer active'}</span>
+        </div>
+      )}
     </div>
   );
 }
