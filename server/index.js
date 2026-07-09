@@ -74,199 +74,16 @@ const DEFAULT_STORAGE = {
   careerpilot_users: JSON.stringify(DEFAULT_USERS),
 };
 
-const DEFAULT_APPLICATIONS = [
-  {
-    id: '1',
-    company: 'Google',
-    role: 'Software Engineer Intern',
-    appliedDate: 'Oct 12, 2026',
-    status: 'Interview',
-    logo: 'https://lh3.googleusercontent.com/aida-public/AB6AXuC6n9O4Yw1sHm33bnxv42c3Lc__KboJawPt7X0Q7ccBUqzaPBfqbyO3NijginBJ6pnNTcE0_zmA7b1bGoiapK3X6BW-S-8TbXCeAv06XaZs1HCk-oGvvv1g-VLo9cAZjCiqB0aOwe6GDt5BS-e1hdsRwWFNw_UkfrG-HrmWWGQZ8xxzZibnX37QHy3ASKJFheqhCdg0lpHIJRVgXK5s52Z5gSAIq78DMoGGiR60gBtoynaU4cZUm8k_PZT2u6YCkx7jmjC36lPZNho',
-  },
-  {
-    id: '2',
-    company: 'Amazon',
-    role: 'AWS Cloud Support',
-    appliedDate: 'Oct 05, 2026',
-    status: 'Reviewing',
-    logo: '',
-  },
-  {
-    id: '3',
-    company: 'Meta',
-    role: 'Frontend Developer',
-    appliedDate: 'Sep 28, 2026',
-    status: 'Rejected',
-    logo: '',
-  },
-];
-
-const DEFAULT_NOTIFICATIONS = [
-  { id: '1', title: 'Interview tomorrow', desc: 'Google interview scheduled at 10 AM', time: '5m ago', read: false },
-  { id: '2', title: 'Application Update', desc: 'Amazon status updated to Reviewing', time: '2h ago', read: false },
-  { id: '3', title: 'Profile Views', desc: '3 recruiters viewed your profile today', time: '1d ago', read: true },
-];
-
-const DEFAULT_JOBS = [
-  {
-    id: 'seed-google-sde',
-    company: 'Google',
-    title: 'Software Engineer III',
-    location: 'Mountain View, CA',
-    type: 'Full-time',
-    locationType: 'On-site',
-    experience: 'Senior (5+ years)',
-    salaryMin: 165000,
-    salary: '$165k - $220k',
-    match: 98,
-    status: 'Active',
-    planTier: 'Premium',
-    branchEligibility: ['Computer Science', 'Information Technology'],
-    batchEligibility: ['2026', '2027'],
-    cgpaCutoff: '8.0',
-    requirements: ['Distributed Systems', 'Cloud', 'System Design', 'Leadership'],
-    tags: ['Distributed Systems', 'Cloud'],
-    shortDescription: 'Lead the design and implementation of highly scalable distributed cloud services.',
-    description: [
-      'Design, develop, test, deploy, maintain and improve software.',
-      'Lead major software components, systems, and features.',
-      'Mentor team members on design techniques and coding standards.',
-    ],
-    missingSkills: ['Go (Golang)'],
-    deadline: '2026-07-15',
-    createdAt: '2026-06-10T09:00:00.000Z',
-    logo: 'https://lh3.googleusercontent.com/aida-public/AB6AXuC6n9O4Yw1sHm33bnxv42c3Lc__KboJawPt7X0Q7ccBUqzaPBfqbyO3NijginBJ6pnNTcE0_zmA7b1bGoiapK3X6BW-S-8TbXCeAv06XaZs1HCk-oGvvv1g-VLo9cAZjCiqB0aOwe6GDt5BS-e1hdsRwWFNw_UkfrG-HrmWWGQZ8xxzZibnX37QHy3ASKJFheqhCdg0lpHIJRVgXK5s52Z5gSAIq78DMoGGiR60gBtoynaU4cZUm8k_PZT2u6YCkx7jmjC36lPZNho',
-  },
-  {
-    id: 'seed-stripe-frontend',
-    company: 'Stripe',
-    title: 'Frontend Engineer (Payments)',
-    location: 'Seattle, WA',
-    type: 'Full-time',
-    locationType: 'Remote',
-    experience: 'Mid Level (3-5 years)',
-    salaryMin: 150000,
-    salary: '$150k - $190k',
-    match: 94,
-    status: 'Active',
-    planTier: 'Pro',
-    branchEligibility: ['Computer Science', 'Electronics'],
-    batchEligibility: ['2026'],
-    cgpaCutoff: '7.5',
-    requirements: ['React', 'TypeScript', 'Accessibility', 'Performance'],
-    tags: ['React', 'Typescript', 'Fintech'],
-    shortDescription: 'Build pixel-perfect, accessible, and performant user interfaces for global payment flows.',
-    description: [
-      'Architect and build responsive, accessible React components.',
-      'Collaborate with design and product to define frontend APIs and standards.',
-      'Optimize builds and frontend performance metrics.',
-    ],
-    missingSkills: ['GraphQL'],
-    deadline: '2026-06-28',
-    createdAt: '2026-06-11T11:30:00.000Z',
-    logo: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCwmqkI3ugEyAnfsIVvXzR8vd1J9f9masmOZDuUcNxM7Pmv5auaHnJq4jqZ5RB7EIjvXQsdKUi2ABBHG3llgUqyEP5yE7D0qP5CkjcWdlKUA7oZBD_Dlw2-p_9z5NlKJZYVCIdL0Vm7HIl-f2boEq24HBF7pJTQqExh8pVkjGr08UsJTHsMsobEApFce94gIcP0x-ewbECTANIIia9-IFVjjnPsCN_GKmKcyFq7ad9D5XaRJsmIF7esEeXyeTEQEeY4oE8nnrrOxvY',
-  },
-  {
-    id: 'seed-amazon-intern',
-    company: 'Amazon',
-    title: 'SDE Intern',
-    location: 'Seattle, WA',
-    type: 'Internship',
-    locationType: 'On-site',
-    experience: 'Entry Level (0-2 years)',
-    salaryMin: 96000,
-    salary: '$8k/mo',
-    match: 95,
-    status: 'Closing Soon',
-    planTier: 'Basic',
-    branchEligibility: ['Computer Science', 'AI & DS', 'IT'],
-    batchEligibility: ['2027'],
-    cgpaCutoff: '7.0',
-    requirements: ['Java', 'AWS', 'DSA', 'Problem Solving'],
-    tags: ['Java', 'AWS'],
-    shortDescription: 'Join a 12-week internship program building backend services for AWS core infrastructure.',
-    description: [
-      'Design and implement a scalable microservice using Java and AWS.',
-      'Participate in daily standups and agile sprint planning.',
-      'Write unit and integration tests to ensure code reliability.',
-    ],
-    missingSkills: ['DynamoDB'],
-    deadline: '2026-06-20',
-    createdAt: '2026-06-12T14:00:00.000Z',
-    logo: 'https://upload.wikimedia.org/wikipedia/commons/4/4a/Amazon_icon.svg',
-  },
-];
-
-const DEFAULT_COMPANIES = [
-  {
-    id: 'company-google',
-    name: 'Google',
-    tier: 'Platinum',
-    visits: 3,
-    logo: 'https://ui-avatars.com/api/?name=Google&background=random',
-    status: 'Approved',
-    documents: 'GST, PAN, recruiter verification complete',
-    note: 'Top tier strategic partner',
-  },
-  {
-    id: 'company-microsoft',
-    name: 'Microsoft',
-    tier: 'Platinum',
-    visits: 2,
-    logo: 'https://ui-avatars.com/api/?name=Microsoft&background=random',
-    status: 'Approved',
-    documents: 'GST, PAN, MSA signed',
-    note: 'Strong conversion across product and engineering',
-  },
-  {
-    id: 'company-amazon',
-    name: 'Amazon',
-    tier: 'Gold',
-    visits: 4,
-    logo: 'https://ui-avatars.com/api/?name=Amazon&background=random',
-    status: 'Approved',
-    documents: 'GST, PAN verified',
-    note: 'Internship-heavy recruiter pipeline',
-  },
-  {
-    id: 'company-stripe',
-    name: 'Stripe',
-    tier: 'Silver',
-    visits: 1,
-    logo: 'https://ui-avatars.com/api/?name=Stripe&background=random',
-    status: 'Pending',
-    documents: 'Awaiting GST proof',
-    note: 'New partner intake under review',
-  },
-];
-
-const DEFAULT_STUDENTS = [
-  { id: 'student-alex', name: 'Alex Rivera', role: 'Full Stack', cgpa: 8.9, placement: 'Placed (Google)', branch: 'Computer Science', initial: 'AR' },
-  { id: 'student-sonia', name: 'Sonia Gupta', role: 'Data Analyst', cgpa: 8.5, placement: 'Placed (Accenture)', branch: 'Information Technology', initial: 'SG' },
-  { id: 'student-rahul', name: 'Rahul Dev', role: 'Backend Dev', cgpa: 7.8, placement: 'Open', branch: 'Computer Science', initial: 'RD' },
-  { id: 'student-mira', name: 'Mira Nair', role: 'Designer', cgpa: 9.1, placement: 'In-Process', branch: 'Electronics', initial: 'MN' },
-];
-
-const DEFAULT_ANNOUNCEMENTS = [
-  {
-    id: 'announcement-1',
-    title: 'Resume Review Week Open',
-    message: 'Placement mentors are reviewing ATS-tailored resumes this week. Complete Resume Builder before Friday.',
-    audience: 'All Students',
-    createdAt: '2026-06-12T10:00:00.000Z',
-  },
-  {
-    id: 'announcement-2',
-    title: 'Amazon Internship Window',
-    message: 'Amazon internship applications close soon. Prioritize Java, AWS, and DSA preparation before applying.',
-    audience: 'Computer Science',
-    createdAt: '2026-06-13T09:30:00.000Z',
-  },
-];
+const DEFAULT_APPLICATIONS = [];
+const DEFAULT_NOTIFICATIONS = [];
+const DEFAULT_JOBS = [];
+const DEFAULT_COMPANIES = [];
+const DEFAULT_STUDENTS = [];
+const DEFAULT_ANNOUNCEMENTS = [];
 
 const DEFAULT_STUDENT_PROFILE = {
-  name: 'Alex Rivera',
-  email: 'student@university.edu',
+  name: '',
+  email: '',
   phone: '',
   role: 'CS Senior Student',
   university: '',
@@ -319,6 +136,80 @@ function createDefaultDb() {
     oauth: {
       googleConfigured: Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
     },
+  };
+}
+
+const SEEDED_APPLICATION_KEYS = new Set([
+  'google::software engineer intern::1',
+  'amazon::aws cloud support::2',
+  'meta::frontend developer::3',
+]);
+
+const SEEDED_NOTIFICATION_KEYS = new Set([
+  'interview tomorrow::google interview scheduled at 10 am',
+  'application update::amazon status updated to reviewing',
+  'profile views::3 recruiters viewed your profile today',
+]);
+
+const SEEDED_JOB_IDS = new Set(['seed-google-sde', 'seed-stripe-frontend', 'seed-amazon-intern']);
+const SEEDED_COMPANY_IDS = new Set(['company-google', 'company-microsoft', 'company-amazon', 'company-stripe']);
+const SEEDED_STUDENT_IDS = new Set(['student-alex', 'student-sonia', 'student-rahul', 'student-mira']);
+const SEEDED_ANNOUNCEMENT_IDS = new Set(['announcement-1', 'announcement-2']);
+
+function sanitizeSeededApplications(applications = []) {
+  return (Array.isArray(applications) ? applications : []).filter((entry = {}) => {
+    const key = `${String(entry.company || '').toLowerCase()}::${String(entry.role || '').toLowerCase()}::${String(entry.id || '')}`;
+    return !SEEDED_APPLICATION_KEYS.has(key);
+  });
+}
+
+function sanitizeSeededNotifications(notifications = []) {
+  return (Array.isArray(notifications) ? notifications : []).filter((entry = {}) => {
+    const key = `${String(entry.title || '').toLowerCase()}::${String(entry.desc || '').toLowerCase()}`;
+    return !SEEDED_NOTIFICATION_KEYS.has(key);
+  });
+}
+
+function sanitizeSeededJobs(jobs = []) {
+  return (Array.isArray(jobs) ? jobs : []).filter((entry = {}) => !SEEDED_JOB_IDS.has(String(entry.id || '')));
+}
+
+function sanitizeSeededCompanies(companies = []) {
+  return (Array.isArray(companies) ? companies : []).filter((entry = {}) => !SEEDED_COMPANY_IDS.has(String(entry.id || '')));
+}
+
+function sanitizeSeededStudents(students = []) {
+  return (Array.isArray(students) ? students : []).filter((entry = {}) => !SEEDED_STUDENT_IDS.has(String(entry.id || '')));
+}
+
+function sanitizeSeededAnnouncements(announcements = []) {
+  return (Array.isArray(announcements) ? announcements : []).filter((entry = {}) => !SEEDED_ANNOUNCEMENT_IDS.has(String(entry.id || '')));
+}
+
+function isSeededStudentProfile(profile = {}) {
+  return (
+    String(profile?.email || '').toLowerCase() === 'student@university.edu' &&
+    String(profile?.name || '') === 'Alex Rivera'
+  );
+}
+
+function sanitizeStudentProfile(profile = {}) {
+  if (!profile || typeof profile !== 'object' || isSeededStudentProfile(profile)) {
+    return { ...DEFAULT_STUDENT_PROFILE };
+  }
+  return profile;
+}
+
+function sanitizeDemoContent(db = {}) {
+  return {
+    ...db,
+    applications: sanitizeSeededApplications(db.applications),
+    notifications: sanitizeSeededNotifications(db.notifications),
+    jobs: sanitizeSeededJobs(db.jobs),
+    companies: sanitizeSeededCompanies(db.companies),
+    students: sanitizeSeededStudents(db.students),
+    announcements: sanitizeSeededAnnouncements(db.announcements),
+    studentProfile: sanitizeStudentProfile(db.studentProfile),
   };
 }
 
@@ -405,13 +296,13 @@ async function replaceMongoStorage(db, storage = {}) {
 }
 
 async function seedMongoDatabase(db, seedState = createDefaultDb()) {
-  const normalized = {
+  const normalized = sanitizeDemoContent({
     ...createDefaultDb(),
     ...seedState,
     users: Array.isArray(seedState.users)
       ? seedState.users.map(normalizeStoredUser)
       : parseUsersFromStorage(seedState.storage || DEFAULT_STORAGE),
-  };
+  });
 
   await replaceMongoCollection(db, 'users', normalized.users);
   await replaceMongoCollection(db, 'sessions', normalized.sessions || []);
@@ -538,7 +429,7 @@ async function readDb() {
     const raw = await fs.readFile(dbPath, 'utf8');
     parsed = JSON.parse(raw);
   }
-  const db = {
+  const db = sanitizeDemoContent({
     ...createDefaultDb(),
     ...parsed,
     storage: { ...DEFAULT_STORAGE, ...(parsed.storage || {}) },
@@ -550,7 +441,7 @@ async function readDb() {
     students: Array.isArray(parsed.students) ? parsed.students : DEFAULT_STUDENTS,
     announcements: Array.isArray(parsed.announcements) ? parsed.announcements : DEFAULT_ANNOUNCEMENTS,
     studentProfile: parsed.studentProfile || DEFAULT_STUDENT_PROFILE,
-  };
+  });
   syncUsersToStorage(db, db.users);
   syncCollectionStorage(db);
   sanitizeAuthStorage(db);
@@ -592,29 +483,30 @@ async function withDbLock(operation) {
 async function writeDb(db) {
   const writeOperation = async () => {
     await ensureDb();
+    const sanitizedDb = sanitizeDemoContent(db);
     if (mongoUri) {
       const mongoDb = await getMongoCollection();
       if (mongoDb) {
-        await replaceMongoCollection(mongoDb, 'users', (db.users || []).map(normalizeStoredUser));
-        await replaceMongoCollection(mongoDb, 'sessions', db.sessions || []);
-        await replaceMongoCollection(mongoDb, 'applications', db.applications || []);
-        await replaceMongoCollection(mongoDb, 'notifications', db.notifications || []);
-        await replaceMongoCollection(mongoDb, 'jobs', db.jobs || []);
-        await replaceMongoCollection(mongoDb, 'companies', db.companies || []);
-        await replaceMongoCollection(mongoDb, 'students', db.students || []);
-        await replaceMongoCollection(mongoDb, 'announcements', db.announcements || []);
-        await replaceMongoCollection(mongoDb, 'payments', db.payments || []);
-        await replaceMongoCollection(mongoDb, 'emails', db.emails || []);
-        await replaceMongoCollection(mongoDb, 'calendarEvents', db.calendarEvents || []);
-        await replaceMongoCollection(mongoDb, 'reports', db.reports || []);
-        await replaceMongoSingleton(mongoDb, 'studentProfiles', db.studentProfile || DEFAULT_STUDENT_PROFILE);
-        await replaceMongoStorage(mongoDb, db.storage || {});
-        return db;
+        await replaceMongoCollection(mongoDb, 'users', (sanitizedDb.users || []).map(normalizeStoredUser));
+        await replaceMongoCollection(mongoDb, 'sessions', sanitizedDb.sessions || []);
+        await replaceMongoCollection(mongoDb, 'applications', sanitizedDb.applications || []);
+        await replaceMongoCollection(mongoDb, 'notifications', sanitizedDb.notifications || []);
+        await replaceMongoCollection(mongoDb, 'jobs', sanitizedDb.jobs || []);
+        await replaceMongoCollection(mongoDb, 'companies', sanitizedDb.companies || []);
+        await replaceMongoCollection(mongoDb, 'students', sanitizedDb.students || []);
+        await replaceMongoCollection(mongoDb, 'announcements', sanitizedDb.announcements || []);
+        await replaceMongoCollection(mongoDb, 'payments', sanitizedDb.payments || []);
+        await replaceMongoCollection(mongoDb, 'emails', sanitizedDb.emails || []);
+        await replaceMongoCollection(mongoDb, 'calendarEvents', sanitizedDb.calendarEvents || []);
+        await replaceMongoCollection(mongoDb, 'reports', sanitizedDb.reports || []);
+        await replaceMongoSingleton(mongoDb, 'studentProfiles', sanitizedDb.studentProfile || DEFAULT_STUDENT_PROFILE);
+        await replaceMongoStorage(mongoDb, sanitizedDb.storage || {});
+        return sanitizedDb;
       }
     }
 
-    await fs.writeFile(dbPath, JSON.stringify(db, null, 2), 'utf8');
-    return db;
+    await fs.writeFile(dbPath, JSON.stringify(sanitizedDb, null, 2), 'utf8');
+    return sanitizedDb;
   };
 
   writeDbPromise = writeDbPromise.then(writeOperation).catch(writeOperation);

@@ -7,33 +7,7 @@ import { authApi } from '../lib/backendSync';
 const inputClass = "w-full px-4 py-2.5 rounded-lg bg-white border border-slate-200 focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-colors text-sm";
 
 export function Profile({ currentUser, setCurrentUser }) {
-  const [profile, setProfile] = useState(() => {
-    const existingProfile = getStudentProfile(currentUser);
-
-    if (existingProfile.onboardingComplete) {
-      return existingProfile;
-    }
-
-    const seededProfile = saveStudentProfile({
-      ...existingProfile,
-      role: "CS Senior Student",
-      university: "Stanford University",
-      location: "Palo Alto, CA",
-      summary: "Passionate Computer Science student with a strong foundation in full-stack development and artificial intelligence. Experienced in building scalable web applications using React and Node.js. Actively seeking opportunities to contribute to innovative projects and grow as a software engineer. Currently focused on LLM integrations and distributed systems.",
-      skills: ['React', 'TypeScript', 'Node.js', 'Python', 'AWS', 'Docker', 'System Design'],
-      gpa: "3.92/4.00",
-      coursework: "Algorithms, Operating Systems, Database Systems, Machine Learning",
-      graduation: "2026",
-      socials: {
-        LinkedIn: { connected: true, handle: "linkedin.com/in/alexrivera" },
-        GitHub: { connected: true, handle: "github.com/alexrivera" },
-        Portfolio: { connected: false, handle: "" }
-      },
-      onboardingComplete: true,
-    }, currentUser);
-
-    return seededProfile;
-  });
+  const [profile, setProfile] = useState(() => getStudentProfile(currentUser));
 
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isConnectOpen, setIsConnectOpen] = useState(null);

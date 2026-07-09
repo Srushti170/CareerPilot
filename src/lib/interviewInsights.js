@@ -1,43 +1,6 @@
 export const INTERVIEW_FEEDBACK_KEY = 'careerpilot_interview_feedback';
 
-const DEFAULT_FEEDBACK = [
-  {
-    id: 'fb1',
-    title: 'Data Structures & Algorithms',
-    topicId: 'algorithms',
-    roleTrack: 'Software Engineer',
-    score: 85,
-    date: 'Oct 28',
-    summary: 'Good complexity analysis. Code structure was clear but can optimize the space complexity.',
-    strengths: ['Complexity analysis', 'Problem decomposition'],
-    weakAreas: ['Space optimization'],
-    questionCount: 3,
-  },
-  {
-    id: 'fb2',
-    title: 'Frontend Core (React/JS)',
-    topicId: 'frontend',
-    roleTrack: 'Frontend Engineer',
-    score: 92,
-    date: 'Oct 22',
-    summary: 'Excellent understanding of Virtual DOM and React reconciliation mechanics.',
-    strengths: ['React fundamentals', 'Framework fluency'],
-    weakAreas: ['Testing examples'],
-    questionCount: 3,
-  },
-  {
-    id: 'fb3',
-    title: 'Behavioral & Leadership',
-    topicId: 'behave',
-    roleTrack: 'Generalist',
-    score: 78,
-    date: 'Oct 15',
-    summary: 'Detailed conflict resolution example. Make sure to structure responses using the STAR method.',
-    strengths: ['Conflict resolution'],
-    weakAreas: ['STAR structure'],
-    questionCount: 3,
-  },
-];
+const SEEDED_FEEDBACK_IDS = new Set(['fb1', 'fb2', 'fb3']);
 
 export function normalizeInterviewFeedback(entry) {
   return {
@@ -57,11 +20,14 @@ export function normalizeInterviewFeedback(entry) {
 export function getInterviewFeedbackHistory() {
   const stored = localStorage.getItem(INTERVIEW_FEEDBACK_KEY);
   if (!stored) {
-    localStorage.setItem(INTERVIEW_FEEDBACK_KEY, JSON.stringify(DEFAULT_FEEDBACK));
-    return DEFAULT_FEEDBACK.map(normalizeInterviewFeedback);
+    return [];
   }
 
-  return JSON.parse(stored).map(normalizeInterviewFeedback);
+  const normalized = JSON.parse(stored)
+    .filter((entry = {}) => !SEEDED_FEEDBACK_IDS.has(String(entry.id || '')))
+    .map(normalizeInterviewFeedback);
+  localStorage.setItem(INTERVIEW_FEEDBACK_KEY, JSON.stringify(normalized));
+  return normalized;
 }
 
 export function saveInterviewFeedbackHistory(history) {

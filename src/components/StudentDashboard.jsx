@@ -21,7 +21,7 @@ export function StudentDashboard({ applications = [], setApplications, setActive
   const applicationMatchScores = applications.map((app) => app.matchScore).filter((score) => typeof score === 'number');
   const averageApplicationMatch = applicationMatchScores.length
     ? Math.round(applicationMatchScores.reduce((sum, score) => sum + score, 0) / applicationMatchScores.length)
-    : 76;
+    : 0;
 
   const actions = [
     { title: "Improve your Resume", desc: "Add your recent Hackathon project.", progress: 90, icon: "edit_document", color: "primary", actionKey: "profile" },
@@ -125,9 +125,9 @@ export function StudentDashboard({ applications = [], setApplications, setActive
       <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <MetricCard
           label="ATS Resume Score"
-          value={`${latestResumeAnalysis?.atsScore ?? 82}/100`}
+          value={`${latestResumeAnalysis?.atsScore ?? 0}/100`}
           subtext={latestResumeAnalysis ? `Latest JD match: ${latestResumeAnalysis.matchScore}%` : 'Run Resume AI Match to generate a real score'}
-          progress={latestResumeAnalysis?.atsScore ?? 82}
+          progress={latestResumeAnalysis?.atsScore ?? 0}
           icon="document_scanner"
           color="primary"
         />
@@ -156,21 +156,27 @@ export function StudentDashboard({ applications = [], setApplications, setActive
             action={<Button variant="ghost" size="sm" onClick={() => setActiveTab('search')}>View all</Button>}
           />
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {jobs.map(job => {
-              const isApplied = applications.some(
-                app => app.company.toLowerCase() === job.company.toLowerCase() &&
-                  app.role.toLowerCase() === job.title.toLowerCase()
-              );
-              return (
-                <JobCard
-                  key={job.id}
-                  job={job}
-                  applied={isApplied}
-                  onApply={() => handleApply(job)}
-                  onTailorResume={openTailoredSearch}
-                />
-              );
-            })}
+            {jobs.length === 0 ? (
+              <div className="md:col-span-2 lg:col-span-3 rounded-xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-500 elev-sm">
+                No jobs available.
+              </div>
+            ) : (
+              jobs.map(job => {
+                const isApplied = applications.some(
+                  app => app.company.toLowerCase() === job.company.toLowerCase() &&
+                    app.role.toLowerCase() === job.title.toLowerCase()
+                );
+                return (
+                  <JobCard
+                    key={job.id}
+                    job={job}
+                    applied={isApplied}
+                    onApply={() => handleApply(job)}
+                    onTailorResume={openTailoredSearch}
+                  />
+                );
+              })
+            )}
           </div>
         </section>
       </div>

@@ -22,6 +22,32 @@ import { motion, AnimatePresence } from 'motion/react';
 import { isStudentOnboardingComplete } from './lib/studentProfile';
 import { authApi, stateApi } from './lib/backendSync';
 
+const SEEDED_APPLICATION_KEYS = new Set([
+  'google::software engineer intern::1',
+  'amazon::aws cloud support::2',
+  'meta::frontend developer::3',
+]);
+
+const SEEDED_NOTIFICATION_KEYS = new Set([
+  'interview tomorrow::google interview scheduled at 10 am',
+  'application update::amazon status updated to reviewing',
+  'profile views::3 recruiters viewed your profile today',
+]);
+
+function sanitizeApplications(applications = []) {
+  return (Array.isArray(applications) ? applications : []).filter((entry = {}) => {
+    const key = `${String(entry.company || '').toLowerCase()}::${String(entry.role || '').toLowerCase()}::${String(entry.id || '')}`;
+    return !SEEDED_APPLICATION_KEYS.has(key);
+  });
+}
+
+function sanitizeNotifications(notifications = []) {
+  return (Array.isArray(notifications) ? notifications : []).filter((entry = {}) => {
+    const key = `${String(entry.title || '').toLowerCase()}::${String(entry.desc || '').toLowerCase()}`;
+    return !SEEDED_NOTIFICATION_KEYS.has(key);
+  });
+}
+
 export default function App() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [currentUser, setCurrentUser] = useState(() => {
@@ -41,63 +67,30 @@ export default function App() {
 
   const [applications, setApplications] = useState(() => {
     const stored = localStorage.getItem('careerpilot_applications');
-    if (stored) return JSON.parse(stored);
-
-    const defaultApps = [
-      {
-        id: '1',
-        company: 'Google',
-        role: 'Software Engineer Intern',
-        appliedDate: 'Oct 12, 2026',
-        status: 'Interview',
-        logo: 'https://lh3.googleusercontent.com/aida-public/AB6AXuC6n9O4Yw1sHm33bnxv42c3Lc__KboJawPt7X0Q7ccBUqzaPBfqbyO3NijginBJ6pnNTcE0_zmA7b1bGoiapK3X6BW-S-8TbXCeAv06XaZs1HCk-oGvvv1g-VLo9cAZjCiqB0aOwe6GDt5BS-e1hdsRwWFNw_UkfrG-HrmWWGQZ8xxzZibnX37QHy3ASKJFheqhCdg0lpHIJRVgXK5s52Z5gSAIq78DMoGGiR60gBtoynaU4cZUm8k_PZT2u6YCkx7jmjC36lPZNho'
-      },
-      {
-        id: '2',
-        company: 'Amazon',
-        role: 'AWS Cloud Support',
-        appliedDate: 'Oct 05, 2026',
-        status: 'Reviewing',
-        logo: ''
-      },
-      {
-        id: '3',
-        company: 'Meta',
-        role: 'Frontend Developer',
-        appliedDate: 'Sep 28, 2026',
-        status: 'Rejected',
-        logo: ''
-      }
-    ];
-    localStorage.setItem('careerpilot_applications', JSON.stringify(defaultApps));
-    return defaultApps;
+    if (stored) return sanitizeApplications(JSON.parse(stored));
+    return [];
   });
 
   const [notifications, setNotifications] = useState(() => {
     const stored = localStorage.getItem('careerpilot_notifications');
-    if (stored) return JSON.parse(stored);
-
-    const defaultNotifs = [
-      { id: '1', title: 'Interview tomorrow', desc: 'Google interview scheduled at 10 AM', time: '5m ago', read: false },
-      { id: '2', title: 'Application Update', desc: 'Amazon status updated to Reviewing', time: '2h ago', read: false },
-      { id: '3', title: 'Profile Views', desc: '3 recruiters viewed your profile today', time: '1d ago', read: true }
-    ];
-    localStorage.setItem('careerpilot_notifications', JSON.stringify(defaultNotifs));
-    return defaultNotifs;
+    if (stored) return sanitizeNotifications(JSON.parse(stored));
+    return [];
   });
 
   const updateApplications = (newApps) => {
-    setApplications(newApps);
-    localStorage.setItem('careerpilot_applications', JSON.stringify(newApps));
-    stateApi.saveApplications(newApps).catch((error) => {
+    const sanitized = sanitizeApplications(newApps);
+    setApplications(sanitized);
+    localStorage.setItem('careerpilot_applications', JSON.stringify(sanitized));
+    stateApi.saveApplications(sanitized).catch((error) => {
       console.error('Applications sync error:', error);
     });
   };
 
   const updateNotifications = (newNotifs) => {
-    setNotifications(newNotifs);
-    localStorage.setItem('careerpilot_notifications', JSON.stringify(newNotifs));
-    stateApi.saveNotifications(newNotifs).catch((error) => {
+    const sanitized = sanitizeNotifications(newNotifs);
+    setNotifications(sanitized);
+    localStorage.setItem('careerpilot_notifications', JSON.stringify(sanitized));
+    stateApi.saveNotifications(sanitized).catch((error) => {
       console.error('Notifications sync error:', error);
     });
   };
@@ -133,13 +126,15 @@ export default function App() {
         ]);
 
         if (Array.isArray(nextApplications)) {
-          setApplications(nextApplications);
-          localStorage.setItem('careerpilot_applications', JSON.stringify(nextApplications));
+          const sanitizedApplications = sanitizeApplications(nextApplications);
+          setApplications(sanitizedApplications);
+          localStorage.setItem('careerpilot_applications', JSON.stringify(sanitizedApplications));
         }
 
         if (Array.isArray(nextNotifications)) {
-          setNotifications(nextNotifications);
-          localStorage.setItem('careerpilot_notifications', JSON.stringify(nextNotifications));
+          const sanitizedNotifications = sanitizeNotifications(nextNotifications);
+          setNotifications(sanitizedNotifications);
+          localStorage.setItem('careerpilot_notifications', JSON.stringify(sanitizedNotifications));
         }
       } catch (error) {
         console.warn('Core state hydrate fallback to local cache.', error);
@@ -159,12 +154,12 @@ export default function App() {
 
     const syncApplications = () => {
       const stored = localStorage.getItem('careerpilot_applications');
-      setApplications(stored ? JSON.parse(stored) : []);
+      setApplications(stored ? sanitizeApplications(JSON.parse(stored)) : []);
     };
 
     const syncNotifications = () => {
       const stored = localStorage.getItem('careerpilot_notifications');
-      setNotifications(stored ? JSON.parse(stored) : []);
+      setNotifications(stored ? sanitizeNotifications(JSON.parse(stored)) : []);
     };
 
     window.addEventListener('careerpilot:storage-updated:careerpilot_current_user', syncCurrentUser);
@@ -301,7 +296,7 @@ export default function App() {
 
       <main className={`min-h-screen transition-all duration-300 ${isSidebarCollapsed ? 'ml-20' : 'ml-64'}`}>
         <TopBar
-          userName={currentUser?.name || "Alex Rivera"}
+          userName={currentUser?.name || "Student"}
           userRole={persona === 'student' ? 'CS Senior Student' : persona === 'recruiter' ? 'Talent Lead' : 'Placement Head'}
           avatarUrl="https://lh3.googleusercontent.com/aida-public/AB6AXuC42WzyRRM9i-A-ICmV_pg60wrnV6wmP2YNel9d09qWP8QDl2Z5I0UTb-etCnEIu3CR6etIn6A1mvu9hW8Nu905W_iU-v39Jmhr3643oecpxiMi__iNi9fkrb5kxEv150M8m9agiFNGNyqvy1n9Tlo54Czu1umtCZOmVVDeD6ga9MEaDTIFsB23F95vkFtAHieg1w2r4MxiQwjFr6r77oUKzRgPhI45cIwOIef4r0P29jWL9GS1Y_j85DmndrFu8roy5VTB0UHtRB0"
           onNavigateSettings={() => setActiveTab('settings')}

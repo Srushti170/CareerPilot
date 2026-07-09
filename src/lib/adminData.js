@@ -5,72 +5,12 @@ const COMPANIES_KEY = 'careerpilot_companies';
 const STUDENTS_KEY = 'careerpilot_students';
 const ANNOUNCEMENTS_KEY = 'careerpilot_announcements';
 
-const DEFAULT_COMPANIES = [
-  {
-    id: 'company-google',
-    name: 'Google',
-    tier: 'Platinum',
-    visits: 3,
-    logo: 'https://ui-avatars.com/api/?name=Google&background=random',
-    status: 'Approved',
-    documents: 'GST, PAN, recruiter verification complete',
-    note: 'Top tier strategic partner',
-  },
-  {
-    id: 'company-microsoft',
-    name: 'Microsoft',
-    tier: 'Platinum',
-    visits: 2,
-    logo: 'https://ui-avatars.com/api/?name=Microsoft&background=random',
-    status: 'Approved',
-    documents: 'GST, PAN, MSA signed',
-    note: 'Strong conversion across product and engineering',
-  },
-  {
-    id: 'company-amazon',
-    name: 'Amazon',
-    tier: 'Gold',
-    visits: 4,
-    logo: 'https://ui-avatars.com/api/?name=Amazon&background=random',
-    status: 'Approved',
-    documents: 'GST, PAN verified',
-    note: 'Internship-heavy recruiter pipeline',
-  },
-  {
-    id: 'company-stripe',
-    name: 'Stripe',
-    tier: 'Silver',
-    visits: 1,
-    logo: 'https://ui-avatars.com/api/?name=Stripe&background=random',
-    status: 'Pending',
-    documents: 'Awaiting GST proof',
-    note: 'New partner intake under review',
-  },
-];
-
-const DEFAULT_STUDENTS = [
-  { id: 'student-alex', name: 'Alex Rivera', role: 'Full Stack', cgpa: 8.9, placement: 'Placed (Google)', branch: 'Computer Science', initial: 'AR' },
-  { id: 'student-sonia', name: 'Sonia Gupta', role: 'Data Analyst', cgpa: 8.5, placement: 'Placed (Accenture)', branch: 'Information Technology', initial: 'SG' },
-  { id: 'student-rahul', name: 'Rahul Dev', role: 'Backend Dev', cgpa: 7.8, placement: 'Open', branch: 'Computer Science', initial: 'RD' },
-  { id: 'student-mira', name: 'Mira Nair', role: 'Designer', cgpa: 9.1, placement: 'In-Process', branch: 'Electronics', initial: 'MN' },
-];
-
-const DEFAULT_ANNOUNCEMENTS = [
-  {
-    id: 'announcement-1',
-    title: 'Resume Review Week Open',
-    message: 'Placement mentors are reviewing ATS-tailored resumes this week. Complete Resume Builder before Friday.',
-    audience: 'All Students',
-    createdAt: '2026-06-12T10:00:00.000Z',
-  },
-  {
-    id: 'announcement-2',
-    title: 'Amazon Internship Window',
-    message: 'Amazon internship applications close soon. Prioritize Java, AWS, and DSA preparation before applying.',
-    audience: 'Computer Science',
-    createdAt: '2026-06-13T09:30:00.000Z',
-  },
-];
+const DEFAULT_COMPANIES = [];
+const DEFAULT_STUDENTS = [];
+const DEFAULT_ANNOUNCEMENTS = [];
+const SEEDED_COMPANY_IDS = new Set(['company-google', 'company-microsoft', 'company-amazon', 'company-stripe']);
+const SEEDED_STUDENT_IDS = new Set(['student-alex', 'student-sonia', 'student-rahul', 'student-mira']);
+const SEEDED_ANNOUNCEMENT_IDS = new Set(['announcement-1', 'announcement-2']);
 
 function toInitials(name = '') {
   return name
@@ -98,17 +38,17 @@ export function normalizeCompany(company = {}) {
 export function getStoredCompanies() {
   const stored = localStorage.getItem(COMPANIES_KEY);
   if (!stored) {
-    localStorage.setItem(COMPANIES_KEY, JSON.stringify(DEFAULT_COMPANIES));
-    return DEFAULT_COMPANIES.map(normalizeCompany);
+    return [];
   }
 
   try {
-    const parsed = JSON.parse(stored).map(normalizeCompany);
+    const parsed = JSON.parse(stored)
+      .filter((company = {}) => !SEEDED_COMPANY_IDS.has(String(company.id || '')))
+      .map(normalizeCompany);
     localStorage.setItem(COMPANIES_KEY, JSON.stringify(parsed));
     return parsed;
   } catch {
-    localStorage.setItem(COMPANIES_KEY, JSON.stringify(DEFAULT_COMPANIES));
-    return DEFAULT_COMPANIES.map(normalizeCompany);
+    return [];
   }
 }
 
@@ -137,17 +77,17 @@ export function normalizeStudentRecord(student = {}) {
 export function getStoredStudents() {
   const stored = localStorage.getItem(STUDENTS_KEY);
   if (!stored) {
-    localStorage.setItem(STUDENTS_KEY, JSON.stringify(DEFAULT_STUDENTS));
-    return DEFAULT_STUDENTS.map(normalizeStudentRecord);
+    return [];
   }
 
   try {
-    const parsed = JSON.parse(stored).map(normalizeStudentRecord);
+    const parsed = JSON.parse(stored)
+      .filter((student = {}) => !SEEDED_STUDENT_IDS.has(String(student.id || '')))
+      .map(normalizeStudentRecord);
     localStorage.setItem(STUDENTS_KEY, JSON.stringify(parsed));
     return parsed;
   } catch {
-    localStorage.setItem(STUDENTS_KEY, JSON.stringify(DEFAULT_STUDENTS));
-    return DEFAULT_STUDENTS.map(normalizeStudentRecord);
+    return [];
   }
 }
 
@@ -164,17 +104,17 @@ export function saveStoredStudents(students = []) {
 export function getStoredAnnouncements() {
   const stored = localStorage.getItem(ANNOUNCEMENTS_KEY);
   if (!stored) {
-    localStorage.setItem(ANNOUNCEMENTS_KEY, JSON.stringify(DEFAULT_ANNOUNCEMENTS));
-    return DEFAULT_ANNOUNCEMENTS;
+    return [];
   }
 
   try {
-    const parsed = JSON.parse(stored);
+    const parsed = JSON.parse(stored).filter(
+      (announcement = {}) => !SEEDED_ANNOUNCEMENT_IDS.has(String(announcement.id || ''))
+    );
     localStorage.setItem(ANNOUNCEMENTS_KEY, JSON.stringify(parsed));
     return parsed;
   } catch {
-    localStorage.setItem(ANNOUNCEMENTS_KEY, JSON.stringify(DEFAULT_ANNOUNCEMENTS));
-    return DEFAULT_ANNOUNCEMENTS;
+    return [];
   }
 }
 

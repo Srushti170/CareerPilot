@@ -20,8 +20,8 @@ export const STUDENT_ONBOARDING_KEY = 'careerpilot_student_onboarding_complete';
 
 export function createDefaultStudentProfile(user = {}) {
   return {
-    name: user.name || 'Alex Rivera',
-    email: user.email || 'student@university.edu',
+    name: user.name || '',
+    email: user.email || '',
     phone: '',
     role: 'CS Senior Student',
     university: '',
@@ -69,6 +69,13 @@ function normalizeSocials(rawSocials = {}, rawCodingProfiles = {}) {
 }
 
 export function normalizeStudentProfile(rawProfile = {}, user = {}) {
+  if (
+    String(rawProfile?.email || '').toLowerCase() === 'student@university.edu' &&
+    String(rawProfile?.name || '') === 'Alex Rivera'
+  ) {
+    rawProfile = {};
+  }
+
   const defaults = createDefaultStudentProfile(user);
   const socials = normalizeSocials(rawProfile.socials, rawProfile.codingProfiles);
 

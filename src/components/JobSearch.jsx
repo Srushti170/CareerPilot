@@ -236,7 +236,7 @@ export function JobSearch({ searchQuery = '', setSearchQuery, applications = [],
             <div className="col-span-12 lg:col-span-8 space-y-6">
               {filteredJobs.length === 0 ? (
                 <div className="bg-white p-12 rounded-xl border border-slate-200 text-center text-slate-400 text-sm">
-                  No jobs match your search query. Try another keyword!
+                  {jobs.length === 0 ? 'No jobs available.' : 'No jobs match your search query. Try another keyword!'}
                 </div>
               ) : (
                 filteredJobs.map((job, i) => {
