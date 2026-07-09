@@ -14,6 +14,7 @@ const DEFAULT_CODING_PROFILES = {
   CodeChef: '',
   HackerRank: '',
 };
+const LEGACY_DEMO_ROLE = ['CS', 'Senior', 'Student'].join(' ');
 
 export const STUDENT_PROFILE_KEY = 'careerpilot_student_profile';
 export const STUDENT_ONBOARDING_KEY = 'careerpilot_student_onboarding_complete';
@@ -23,7 +24,7 @@ export function createDefaultStudentProfile(user = {}) {
     name: user.name || '',
     email: user.email || '',
     phone: '',
-    role: 'CS Senior Student',
+    role: '',
     university: '',
     degree: '',
     branch: '',
@@ -69,22 +70,19 @@ function normalizeSocials(rawSocials = {}, rawCodingProfiles = {}) {
 }
 
 export function normalizeStudentProfile(rawProfile = {}, user = {}) {
-  if (
-    String(rawProfile?.email || '').toLowerCase() === 'student@university.edu' &&
-    String(rawProfile?.name || '') === 'Alex Rivera'
-  ) {
-    rawProfile = {};
-  }
-
   const defaults = createDefaultStudentProfile(user);
   const socials = normalizeSocials(rawProfile.socials, rawProfile.codingProfiles);
+  const rawRole = String(rawProfile.role || '').trim();
+  const role = rawRole && rawRole !== 'student' && rawRole !== LEGACY_DEMO_ROLE
+    ? rawRole
+    : defaults.role;
 
   const normalized = {
     ...defaults,
     ...rawProfile,
     name: rawProfile.name || user.name || defaults.name,
     email: rawProfile.email || user.email || defaults.email,
-    role: rawProfile.role && rawProfile.role !== 'student' ? rawProfile.role : defaults.role,
+    role,
     degree: rawProfile.degree || rawProfile.branch || defaults.degree,
     branch: rawProfile.branch || rawProfile.degree || defaults.branch,
     semester: rawProfile.semester || '',

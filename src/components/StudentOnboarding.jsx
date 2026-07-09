@@ -80,7 +80,7 @@ export function StudentOnboarding({ currentUser, onComplete }) {
 
     const profile = {
       ...form,
-      role: 'CS Senior Student',
+      role: form.role || '',
       branch: form.branch || form.degree,
       degree: form.degree || form.branch,
       gpa: form.gpa,

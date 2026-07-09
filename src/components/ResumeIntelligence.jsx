@@ -160,7 +160,7 @@ export function ResumeIntelligence() {
             </div>
           </div>
         </div>
-        <div className="space-y-3 lg:mt-12">
+        <div className="space-y-3 ">
           <label className="block text-sm font-medium text-slate-700 ml-1">Paste resume text</label>
           <div className="relative">
             <textarea

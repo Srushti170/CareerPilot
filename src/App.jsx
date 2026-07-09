@@ -19,7 +19,7 @@ import { InterviewDesk } from './components/InterviewDesk';
 import { GlobalReports } from './components/GlobalReports';
 import { Card } from './components/ui/Card';
 import { motion, AnimatePresence } from 'motion/react';
-import { isStudentOnboardingComplete } from './lib/studentProfile';
+import { getStudentProfile, isStudentOnboardingComplete } from './lib/studentProfile';
 import { authApi, stateApi } from './lib/backendSync';
 
 const SEEDED_APPLICATION_KEYS = new Set([
@@ -297,7 +297,7 @@ export default function App() {
       <main className={`min-h-screen transition-all duration-300 ${isSidebarCollapsed ? 'ml-20' : 'ml-64'}`}>
         <TopBar
           userName={currentUser?.name || "Student"}
-          userRole={persona === 'student' ? 'CS Senior Student' : persona === 'recruiter' ? 'Talent Lead' : 'Placement Head'}
+          userRole={persona === 'student' ? getStudentProfile(currentUser).role : persona === 'recruiter' ? 'Talent Lead' : 'Placement Head'}
           avatarUrl="https://lh3.googleusercontent.com/aida-public/AB6AXuC42WzyRRM9i-A-ICmV_pg60wrnV6wmP2YNel9d09qWP8QDl2Z5I0UTb-etCnEIu3CR6etIn6A1mvu9hW8Nu905W_iU-v39Jmhr3643oecpxiMi__iNi9fkrb5kxEv150M8m9agiFNGNyqvy1n9Tlo54Czu1umtCZOmVVDeD6ga9MEaDTIFsB23F95vkFtAHieg1w2r4MxiQwjFr6r77oUKzRgPhI45cIwOIef4r0P29jWL9GS1Y_j85DmndrFu8roy5VTB0UHtRB0"
           onNavigateSettings={() => setActiveTab('settings')}
           searchQuery={globalSearchQuery}

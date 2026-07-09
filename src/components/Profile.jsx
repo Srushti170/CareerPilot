@@ -6,6 +6,10 @@ import { authApi } from '../lib/backendSync';
 
 const inputClass = "w-full px-4 py-2.5 rounded-lg bg-white border border-slate-200 focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-colors text-sm";
 
+function displayValue(value, placeholder) {
+  return String(value || '').trim() || placeholder;
+}
+
 export function Profile({ currentUser, setCurrentUser }) {
   const [profile, setProfile] = useState(() => getStudentProfile(currentUser));
 
@@ -172,6 +176,9 @@ export function Profile({ currentUser, setCurrentUser }) {
     saveProfile({ ...profile, skills: profile.skills.filter(s => s !== skill) });
   };
 
+  const headline = [profile.role, profile.university].filter(Boolean).join(' @ ');
+  const educationTitle = profile.degree || profile.branch;
+
   return (
     <div className="mx-auto max-w-7xl space-y-10 px-8 pb-12 pt-24">
       <header className="flex flex-col md:flex-row gap-8 items-start md:items-center">
@@ -207,15 +214,15 @@ export function Profile({ currentUser, setCurrentUser }) {
                 <h1 className="text-3xl font-headline font-semibold text-slate-900 tracking-tight">{profile.name}</h1>
                 <span className="px-2.5 py-1 bg-primary-soft text-primary text-[11px] font-semibold rounded-md">Student</span>
               </div>
-              <p className="text-base text-slate-500 mb-4">{profile.role} @ {profile.university}</p>
+              <p className="text-base text-slate-500 mb-4">{displayValue(headline, 'Profile details not added')}</p>
               <div className="flex flex-wrap gap-3">
                 <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 rounded-lg border border-slate-200">
                   <span className="material-symbols-outlined text-primary text-base">location_on</span>
-                  <span className="text-xs font-medium text-slate-700">{profile.location}</span>
+                  <span className="text-xs font-medium text-slate-700">{displayValue(profile.location, 'Location not added')}</span>
                 </div>
                 <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 rounded-lg border border-slate-200">
                   <span className="material-symbols-outlined text-primary text-base">mail</span>
-                  <span className="text-xs font-medium text-slate-700">{profile.email}</span>
+                  <span className="text-xs font-medium text-slate-700">{displayValue(profile.email, 'Email not added')}</span>
                 </div>
               </div>
             </div>
@@ -275,10 +282,10 @@ export function Profile({ currentUser, setCurrentUser }) {
                   
                   <div className="flex-1">
                     <div className="flex justify-between items-start">
-                      <h4 className="font-semibold text-slate-900 text-base">B.S. in Computer Science</h4>
-                      <span className="text-xs font-medium text-slate-400">{profile.graduation}</span>
+                      <h4 className="font-semibold text-slate-900 text-base">{displayValue(educationTitle, 'Education not added')}</h4>
+                      <span className="text-xs font-medium text-slate-400">{displayValue(profile.graduation, 'Graduation year not added')}</span>
                     </div>
-                    <p className="text-primary font-semibold text-sm">{profile.university}</p>
+                    <p className="text-primary font-semibold text-sm">{displayValue(profile.university, 'University not added')}</p>
                     <p className="text-xs text-slate-500 mt-2">Major GPA: {profile.gpa} • Relevant coursework: {profile.coursework}</p>
                   </div>
                 </div>

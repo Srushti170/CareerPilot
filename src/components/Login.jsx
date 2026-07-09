@@ -331,7 +331,7 @@ export function Login({ onLogin }) {
 
       const newUser = { name: name.trim(), email: normalizedEmail, password, role };
       if (role === 'student') {
-        await saveStudentProfile({ name: newUser.name, email: newUser.email, role: 'CS Senior Student', skills: [], onboardingComplete: false }, newUser);
+        await saveStudentProfile({ name: newUser.name, email: newUser.email, role: '', skills: [], onboardingComplete: false }, newUser);
       }
 
       try {

@@ -85,7 +85,7 @@ const DEFAULT_STUDENT_PROFILE = {
   name: '',
   email: '',
   phone: '',
-  role: 'CS Senior Student',
+  role: '',
   university: '',
   degree: '',
   branch: '',
