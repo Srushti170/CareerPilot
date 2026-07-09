@@ -194,20 +194,20 @@ export function ResumeIntelligence({ targetJob = null, resumeTextOverride = '', 
   }, [analysisSignature]);
 
   return (
-    <div className={embedded ? 'space-y-8' : 'mx-auto max-w-7xl space-y-10 px-8 pb-12 pt-24'}>
+    <div className={embedded ? 'space-y-6' : 'mx-auto max-w-7xl space-y-10 px-8 pb-12 pt-24'}>
       {embedded && (
         <header className="rounded-2xl border border-outline-variant bg-white p-6 elev-sm">
           <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-primary">Resume AI Match</p>
           <h2 className="mt-2 text-2xl font-headline font-bold tracking-tight text-slate-900">
-            Score the same resume against the selected role
+            AI analysis panel
           </h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
-            The analyzer uses your saved profile and the current target job to surface ATS score, JD match, missing keywords, strengths, and AI recommendations.
+            ATS score, JD match, missing keywords, strengths, and recommendations update from the selected job and current resume draft.
           </p>
         </header>
       )}
 
-      <section className={embedded ? 'grid grid-cols-1 gap-4 items-start' : 'grid grid-cols-1 lg:grid-cols-2 gap-6 items-start'}>
+      <section className={embedded ? 'grid grid-cols-1 gap-3 items-start' : 'grid grid-cols-1 lg:grid-cols-2 gap-6 items-start'}>
         <div className="rounded-xl border border-slate-200 bg-white p-5 elev-sm">
           <div className="flex items-start gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary">
@@ -241,20 +241,13 @@ export function ResumeIntelligence({ targetJob = null, resumeTextOverride = '', 
             </div>
           </div>
         </div>
-
-        <div className={`${embedded ? '' : 'lg:col-span-2'} rounded-xl border border-slate-200 bg-slate-50 px-4 py-3`}>
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-400">Analysis status</p>
-              <p className="mt-1 text-sm font-semibold text-slate-700">
-                {isAnalyzing ? 'Analyzing the latest resume and job match...' : analysis ? 'Analysis is synced with the latest editor state.' : 'Waiting for a selected job and resume draft.'}
-              </p>
-            </div>
-            <span className={`h-3 w-3 rounded-full ${isAnalyzing ? 'animate-pulse bg-warning' : analysis ? 'bg-success' : 'bg-slate-300'}`} />
-          </div>
-        </div>
       </section>
 
+      <div className="space-y-3">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-primary">Analysis Snapshot</p>
+          <h3 className="mt-1 text-lg font-semibold text-slate-900">Fit signals</h3>
+        </div>
       <section className={embedded ? 'grid grid-cols-1 gap-4' : 'grid grid-cols-1 md:grid-cols-3 gap-6'}>
         <div className={`${embedded ? 'p-6' : 'md:col-span-1 p-8'} rounded-xl border border-slate-200 bg-white elev-sm flex flex-col items-center justify-center text-center`}>
           <div className={`${embedded ? 'h-32 w-32' : 'w-44 h-44'} relative flex items-center justify-center`}>
@@ -320,8 +313,14 @@ export function ResumeIntelligence({ targetJob = null, resumeTextOverride = '', 
           </ul>
         </div>
       </section>
+      </div>
 
-      <section className={embedded ? 'grid grid-cols-1 gap-4' : 'grid grid-cols-1 lg:grid-cols-2 gap-6'}>
+      <div className="space-y-3">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-primary">Improvement Plan</p>
+          <h3 className="mt-1 text-lg font-semibold text-slate-900">Next edits to make</h3>
+        </div>
+      <section className="grid grid-cols-1 gap-4">
         <div className={`${embedded ? 'p-6' : 'p-8'} rounded-xl bg-white border border-slate-200 border-l-4 border-l-primary elev-sm`}>
           <div className="flex items-center gap-3 mb-5">
             <div className="w-10 h-10 bg-warning-soft rounded-lg flex items-center justify-center text-warning">
@@ -329,39 +328,61 @@ export function ResumeIntelligence({ targetJob = null, resumeTextOverride = '', 
             </div>
             <h3 className="text-base font-semibold text-slate-900">Critical improvements</h3>
           </div>
-          <div className="space-y-2">
-            {(analysis?.improvementTips || [
-              'Paste a real job description and resume to generate prioritized improvement tips.',
-            ]).map((item, i) => (
-              <div key={i} className="p-4 bg-slate-50 rounded-lg flex justify-between items-center group hover:bg-slate-100 transition-colors cursor-pointer">
-                <span className="text-sm font-medium text-slate-700">{item}</span>
-                <span className="material-symbols-outlined text-slate-400 group-hover:text-primary transition-colors">chevron_right</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className={`${embedded ? 'p-6' : 'p-8'} rounded-xl bg-white border border-slate-200 elev-sm`}>
-          <div className="flex items-center gap-3 mb-5">
-            <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center text-on-primary">
-              <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>auto_awesome</span>
-            </div>
-            <h3 className="text-base font-semibold text-slate-900">AI suggested bullets</h3>
-          </div>
           <div className="space-y-4">
-            {(analysis?.suggestedBullets || [
-              'Your suggested rewrite bullets will appear here after analysis.',
-            ]).map((bullet, index) => (
-              <div key={index} className="relative bg-primary text-white p-6 rounded-xl font-mono text-xs leading-relaxed group shadow-sm">
-                <p className="text-white font-medium">"{bullet}"</p>
-                <button className="absolute top-4 right-4 p-2 bg-white/10 rounded-md hover:bg-white/20 transition-colors opacity-0 group-hover:opacity-100">
-                  <span className="material-symbols-outlined text-xs text-white">content_copy</span>
-                </button>
-              </div>
-            ))}
+            {Array.from({
+              length: Math.max(
+                (analysis?.improvementTips || [
+                  'Paste a real job description and resume to generate prioritized improvement tips.',
+                ]).length,
+                (analysis?.suggestedBullets || [
+                  'Your suggested rewrite bullets will appear here after analysis.',
+                ]).length
+              ),
+            }).map((_, index) => {
+              const improvements = analysis?.improvementTips || [
+                'Paste a real job description and resume to generate prioritized improvement tips.',
+              ];
+              const bullets = analysis?.suggestedBullets || [
+                'Your suggested rewrite bullets will appear here after analysis.',
+              ];
+              const problem = improvements[index] || 'Suggested rewrite opportunity.';
+              const suggestedBullet = bullets[index] || 'Add a clearer role-specific bullet that connects your work to the target job requirements.';
+
+              return (
+                <div key={`${problem}-${suggestedBullet}`} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="space-y-4">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-warning">Problem</p>
+                      <p className="mt-1 text-sm font-medium leading-6 text-slate-800">{problem}</p>
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400">Why it matters</p>
+                      <p className="mt-1 text-sm leading-6 text-slate-600">
+                        This affects how clearly ATS systems and recruiters can connect your resume evidence to the target role.
+                      </p>
+                    </div>
+                    <div className="rounded-xl bg-primary p-4 text-white">
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-white/70">Suggested rewrite / bullet</p>
+                        <button
+                          type="button"
+                          onClick={() => navigator.clipboard?.writeText(suggestedBullet)}
+                          className="inline-flex items-center gap-1 rounded-lg bg-white/10 px-2.5 py-1 text-xs font-semibold text-white transition-colors hover:bg-white/20"
+                        >
+                          <span className="material-symbols-outlined text-[14px]">content_copy</span>
+                          Copy
+                        </button>
+                      </div>
+                      <p className="font-mono text-xs font-medium leading-relaxed text-white">"{suggestedBullet}"</p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       </section>
+      </div>
 
       {!embedded && (
         <div className="fixed bottom-8 right-8 bg-white rounded-full py-2.5 px-5 elev-md flex items-center gap-2.5 border border-slate-200 z-50">
