@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Card, MetricCard } from './MetricCard';
 import { getDepartmentBreakdown, getPlacementStats, getStoredAnnouncements, getStoredCompanies, getStoredStudents, mergeStudentRecords, normalizeCompany, saveStoredAnnouncements, saveStoredCompanies } from '../lib/adminData';
 import { getStoredJobs } from '../lib/recruiterData';
-import { getInterviewFeedbackHistory } from '../lib/interviewInsights';
 
 export function PlacementDashboard() {
   const [showModal, setShowModal] = useState(false);
@@ -61,17 +60,6 @@ export function PlacementDashboard() {
     () => mergedStudents.filter((student) => student.placement.startsWith('Placed')).slice(0, 6),
     [mergedStudents]
   );
-  const focusAreas = useMemo(() => {
-    const feedback = getInterviewFeedbackHistory();
-    const weakAreas = feedback.flatMap((entry) => entry.weakAreas || []);
-    const counts = weakAreas.reduce((acc, item) => {
-      acc[item] = (acc[item] || 0) + 1;
-      return acc;
-    }, {});
-    return Object.entries(counts)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 3);
-  }, []);
 
   const visits = useMemo(
     () =>
@@ -216,7 +204,7 @@ export function PlacementDashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.15fr_0.85fr]">
+      <div className="grid grid-cols-1 gap-6">
         <Card className="p-6">
           <div className="mb-6 flex items-center justify-between">
             <div>
@@ -238,28 +226,6 @@ export function PlacementDashboard() {
                 <p className="mt-3 text-xs text-slate-400">{new Date(announcement.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</p>
               </div>
             ))}
-          </div>
-        </Card>
-
-        <Card className="p-6">
-          <h4 className="text-lg font-headline font-semibold text-slate-900">Optimization insights</h4>
-          <p className="mt-1 text-sm text-slate-500">Spot the weak areas showing up most often in mock interviews and prep loops.</p>
-          <div className="mt-6 space-y-4">
-            {focusAreas.length === 0 ? (
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
-                Complete a few mock interviews to unlock branch and topic-level coaching insights.
-              </div>
-            ) : (
-              focusAreas.map(([topic, count]) => (
-                <div key={topic} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                  <div className="flex items-center justify-between">
-                    <p className="font-semibold text-slate-900">{topic}</p>
-                    <span className="rounded-full bg-warning-soft px-3 py-1 text-[11px] font-semibold text-warning">{count} mentions</span>
-                  </div>
-                  <p className="mt-2 text-sm text-slate-500">Recommended next step: share prep material and nudge students to complete one focused mock round on this topic.</p>
-                </div>
-              ))
-            )}
           </div>
         </Card>
       </div>
