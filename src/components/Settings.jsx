@@ -91,27 +91,14 @@ export function Settings() {
 
     if (!currentUser) return;
 
-    const users = JSON.parse(localStorage.getItem('careerpilot_users') || '[]');
-    const userIndex = users.findIndex(u => u.email.toLowerCase() === currentUser.email.toLowerCase());
+    try {
+      const response = await authApi.updateProfile({
+        currentEmail: currentUser.email,
+        name,
+        email,
+      });
+      const updatedUser = response.user || { ...currentUser, name, email };
 
-    if (userIndex !== -1) {
-      users[userIndex].name = name;
-      users[userIndex].email = email;
-
-      let updatedUser = { ...currentUser, name, email };
-
-      try {
-        const response = await authApi.updateProfile({
-          currentEmail: currentUser.email,
-          name,
-          email,
-        });
-        updatedUser = response.user || updatedUser;
-      } catch (apiError) {
-        console.warn('Backend profile update unavailable, using local profile update fallback.', apiError);
-      }
-
-      localStorage.setItem('careerpilot_users', JSON.stringify(users));
       localStorage.setItem('careerpilot_current_user', JSON.stringify(updatedUser));
 
       if (currentUser.role === 'student') {
@@ -126,8 +113,8 @@ export function Settings() {
 
       setCurrentUser(updatedUser);
       setSuccess('Profile details updated successfully!');
-    } else {
-      setError('User account not found.');
+    } catch (apiError) {
+      setError(apiError.message || 'Profile update failed.');
     }
   };
 
@@ -162,34 +149,18 @@ export function Settings() {
       return;
     }
 
-    const users = JSON.parse(localStorage.getItem('careerpilot_users') || '[]');
-    const userIndex = users.findIndex(u => u.email.toLowerCase() === currentUser.email.toLowerCase());
-
-    if (userIndex !== -1) {
-      if (password !== users[userIndex].password) {
-        setError('Incorrect current password.');
-        return;
-      }
-
-      try {
-        await authApi.updatePassword({
-          email: currentUser.email,
-          currentPassword: password,
-          newPassword,
-        });
-      } catch (apiError) {
-        console.warn('Backend password update unavailable, using local password update fallback.', apiError);
-      }
-
-      users[userIndex].password = newPassword;
-      localStorage.setItem('careerpilot_users', JSON.stringify(users));
-
+    try {
+      await authApi.updatePassword({
+        email: currentUser.email,
+        currentPassword: password,
+        newPassword,
+      });
       setSuccess('Password updated successfully!');
       setPassword('');
       setNewPassword('');
       setConfirmPassword('');
-    } else {
-      setError('User account not found.');
+    } catch (apiError) {
+      setError(apiError.message || 'Password update failed.');
     }
   };
 

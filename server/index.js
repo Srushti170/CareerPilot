@@ -52,11 +52,9 @@ const COLLECTION_STORAGE_KEY_MAP = {
   careerpilot_students: 'students',
   careerpilot_announcements: 'announcements',
   careerpilot_student_profile: 'studentProfile',
-  careerpilot_users: 'users',
 };
 
 const DERIVED_STORAGE_KEYS = new Set([
-  'careerpilot_users',
   'careerpilot_applications',
   'careerpilot_notifications',
   'careerpilot_jobs',
@@ -67,12 +65,12 @@ const DERIVED_STORAGE_KEYS = new Set([
   'careerpilot_student_onboarding_complete',
 ]);
 
+const BLOCKED_STORAGE_KEYS = new Set(['careerpilot_users']);
+
 const DEFAULT_USERS = [];
 const LEGACY_DEMO_EMAILS = new Set([]);
 
-const DEFAULT_STORAGE = {
-  careerpilot_users: JSON.stringify(DEFAULT_USERS),
-};
+const DEFAULT_STORAGE = {};
 
 const DEFAULT_APPLICATIONS = [];
 const DEFAULT_NOTIFICATIONS = [];
@@ -263,7 +261,7 @@ async function readFileSeedDb() {
 
 function getPersistedStorageEntries(storage = {}) {
   return Object.entries(storage)
-    .filter(([key]) => !DERIVED_STORAGE_KEYS.has(key))
+    .filter(([key]) => !DERIVED_STORAGE_KEYS.has(key) && !BLOCKED_STORAGE_KEYS.has(key))
     .map(([key, value]) => ({
       key,
       value: typeof value === 'string' ? value : JSON.stringify(value),
@@ -293,6 +291,17 @@ async function replaceMongoStorage(db, storage = {}) {
   if (entries.length > 0) {
     await collection.insertMany(entries);
   }
+}
+
+async function persistUser(user = {}) {
+  if (!mongoUri) return;
+  const mongoDb = await getMongoCollection();
+  if (!mongoDb) return;
+  await mongoDb.collection(COLLECTIONS.users).replaceOne(
+    { id: user.id },
+    normalizeStoredUser(user),
+    { upsert: true }
+  );
 }
 
 async function seedMongoDatabase(db, seedState = createDefaultDb()) {
@@ -327,7 +336,7 @@ async function readMongoCollectionDocs(db, name) {
 async function readMongoStorage(db) {
   const entries = await db.collection(COLLECTIONS.storage).find({}).toArray();
   return entries.reduce((acc, entry) => {
-    if (entry?.key) {
+    if (entry?.key && !BLOCKED_STORAGE_KEYS.has(entry.key)) {
       acc[entry.key] = typeof entry.value === 'string' ? entry.value : JSON.stringify(entry.value);
     }
     return acc;
@@ -487,7 +496,6 @@ async function writeDb(db) {
     if (mongoUri) {
       const mongoDb = await getMongoCollection();
       if (mongoDb) {
-        await replaceMongoCollection(mongoDb, 'users', (sanitizedDb.users || []).map(normalizeStoredUser));
         await replaceMongoCollection(mongoDb, 'sessions', sanitizedDb.sessions || []);
         await replaceMongoCollection(mongoDb, 'applications', sanitizedDb.applications || []);
         await replaceMongoCollection(mongoDb, 'notifications', sanitizedDb.notifications || []);
@@ -571,7 +579,6 @@ function parseUsersFromStorage(storage = {}) {
 
 function syncUsersToStorage(db, users) {
   db.users = users.map(normalizeStoredUser);
-  db.storage.careerpilot_users = JSON.stringify(db.users);
 }
 
 function updateUserInStorage(db, previousEmail, nextUser) {
@@ -594,13 +601,15 @@ function parseStoredJsonValue(value, fallback) {
 }
 
 function applyStorageValue(db, key, incomingValue) {
+  if (BLOCKED_STORAGE_KEYS.has(key)) {
+    delete db.storage[key];
+    return;
+  }
+
   const value = typeof incomingValue === 'string' ? incomingValue : JSON.stringify(incomingValue);
   db.storage[key] = value;
 
   switch (COLLECTION_STORAGE_KEY_MAP[key]) {
-    case 'users':
-      db.users = parseStoredJsonValue(value, []).map(normalizeStoredUser);
-      break;
     case 'applications':
     case 'notifications':
     case 'jobs':
@@ -630,9 +639,6 @@ function removeStorageValue(db, key) {
   delete db.storage[key];
 
   switch (COLLECTION_STORAGE_KEY_MAP[key]) {
-    case 'users':
-      db.users = [];
-      break;
     case 'applications':
     case 'notifications':
     case 'jobs':
@@ -1018,6 +1024,7 @@ app.post('/api/auth/register', async (req, res) => {
     const session = createSession(user);
     db.sessions.push(session);
     db.storage.careerpilot_session_token = session.token;
+    await persistUser(user);
     await writeDb(db);
     result = { user: sanitizeUser(user), sessionToken: session.token };
   });
@@ -1081,6 +1088,7 @@ app.put('/api/auth/profile', async (req, res) => {
     };
   }
   syncCollectionStorage(db);
+  await persistUser(updatedUser);
   await writeDb(db);
   return res.json({ user: sanitizeUser(updatedUser) });
 });
@@ -1115,6 +1123,7 @@ app.put('/api/auth/password', async (req, res) => {
       db.storage.careerpilot_current_user = JSON.stringify(sanitizeUser(updatedUser));
     }
   }
+  await persistUser(updatedUser);
   await writeDb(db);
   return res.json({ ok: true });
 });

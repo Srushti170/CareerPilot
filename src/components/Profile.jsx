@@ -31,24 +31,15 @@ export function Profile({ currentUser, setCurrentUser }) {
     setProfile(normalized);
 
     if (currentUser && (normalized.name !== currentUser.name || normalized.email !== currentUser.email)) {
-      const updatedUser = { ...currentUser, name: normalized.name, email: normalized.email };
-      setCurrentUser(updatedUser);
-      localStorage.setItem('careerpilot_current_user', JSON.stringify(updatedUser));
-
-      const users = JSON.parse(localStorage.getItem('careerpilot_users') || '[]');
-      const userIndex = users.findIndex(u => u.email.toLowerCase() === currentUser.email.toLowerCase());
-      if (userIndex !== -1) {
-        users[userIndex].name = normalized.name;
-        users[userIndex].email = normalized.email;
-        localStorage.setItem('careerpilot_users', JSON.stringify(users));
-      }
-
       try {
-        await authApi.updateProfile({
+        const response = await authApi.updateProfile({
           currentEmail: currentUser.email,
           name: normalized.name,
           email: normalized.email,
         });
+        const updatedUser = response.user || { ...currentUser, name: normalized.name, email: normalized.email };
+        setCurrentUser(updatedUser);
+        localStorage.setItem('careerpilot_current_user', JSON.stringify(updatedUser));
       } catch (error) {
         console.error('Profile account sync error:', error);
       }
