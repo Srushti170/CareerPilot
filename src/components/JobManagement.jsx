@@ -34,6 +34,15 @@ function createEmptyJobDraft() {
   };
 }
 
+function getCurrentUser() {
+  try {
+    const stored = localStorage.getItem('careerpilot_current_user');
+    return stored ? JSON.parse(stored) : null;
+  } catch {
+    return null;
+  }
+}
+
 export function JobManagement({ applications = [] }) {
   const [jobs, setJobs] = useState(() => getStoredJobs());
   const [showModal, setShowModal] = useState(false);
@@ -92,10 +101,14 @@ export function JobManagement({ applications = [] }) {
 
   const handleSave = async (event) => {
     event.preventDefault();
+    const recruiter = getCurrentUser();
     const nextJob = normalizeJob({
       ...editingJob,
       ...jobDraft,
       id: editingJob?.id || `${Date.now()}`,
+      recruiterId: editingJob?.recruiterId || recruiter?.id || '',
+      recruiterEmail: editingJob?.recruiterEmail || recruiter?.email || '',
+      postedBy: editingJob?.postedBy || recruiter?.email || '',
       createdAt: editingJob?.createdAt || new Date().toISOString(),
     });
 

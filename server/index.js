@@ -608,14 +608,26 @@ async function requireAuthenticatedUser(req, res, db) {
 
 function getOwnedJobIds(db, recruiter) {
   if (!recruiter || recruiter.role !== 'recruiter') return new Set();
-  return new Set((db.jobs || [])
+  return new Set(getOwnedJobs(db, recruiter)
+    .map((job) => job.id || `${job.company}-${job.title}`));
+}
+
+function getOwnedJobs(db, recruiter) {
+  if (!recruiter || recruiter.role !== 'recruiter') return [];
+  return (db.jobs || [])
     .filter((job = {}) => {
       if (job.recruiterId) return job.recruiterId === recruiter.id;
       if (job.recruiterEmail) return job.recruiterEmail.toLowerCase() === String(recruiter.email || '').toLowerCase();
       if (job.postedBy) return job.postedBy.toLowerCase() === String(recruiter.email || '').toLowerCase();
       return true;
-    })
-    .map((job) => job.id || `${job.company}-${job.title}`));
+    });
+}
+
+function sameCompanyRole(application = {}, job = {}) {
+  return (
+    String(application.company || '').toLowerCase() === String(job.company || '').toLowerCase() &&
+    String(application.role || application.title || '').toLowerCase() === String(job.title || job.role || '').toLowerCase()
+  );
 }
 
 function applicationBelongsToStudent(application = {}, user = {}) {
@@ -630,7 +642,8 @@ function applicationBelongsToRecruiter(application = {}, user = {}, db = {}) {
   const ownedJobIds = getOwnedJobIds(db, user);
   const applicationJobId = application.jobId || `${application.company}-${application.role}`;
   if (ownedJobIds.has(applicationJobId)) return true;
-  return !application.recruiterId && !application.recruiterEmail && ownedJobIds.size === 0;
+  if (getOwnedJobs(db, user).some((job) => sameCompanyRole(application, job))) return true;
+  return false;
 }
 
 function scopeApplicationsForUser(applications = [], user = {}, db = {}) {
@@ -648,6 +661,16 @@ function prepareApplicationForUser(application = {}, user = {}) {
     studentId: application.studentId || user.id,
     studentEmail: application.studentEmail || user.email,
     studentName: application.studentName || user.name,
+  };
+}
+
+function prepareJobForUser(job = {}, user = {}) {
+  if (user.role !== 'recruiter') return job;
+  return {
+    ...job,
+    recruiterId: job.recruiterId || user.id,
+    recruiterEmail: job.recruiterEmail || user.email,
+    postedBy: job.postedBy || user.email,
   };
 }
 
@@ -1059,11 +1082,33 @@ app.get('/api/jobs', async (_req, res) => {
 });
 
 app.put('/api/jobs', async (req, res) => {
-  const db = await readDb();
-  db.jobs = Array.isArray(req.body) ? req.body : Array.isArray(req.body.jobs) ? req.body.jobs : [];
-  syncCollectionStorage(db);
-  await writeDb(db);
-  res.json({ ok: true, count: db.jobs.length });
+  let result, status = 200;
+  await withDbLock(async () => {
+    const db = await readDb();
+    const user = await getAuthenticatedUser(req, db);
+    if (!user) {
+      status = 401;
+      result = { error: 'Authentication required.' };
+      return;
+    }
+    if (!['recruiter', 'admin'].includes(user.role)) {
+      status = 403;
+      result = { error: 'Only recruiters or placement heads can manage jobs.' };
+      return;
+    }
+    const incoming = Array.isArray(req.body) ? req.body : Array.isArray(req.body.jobs) ? req.body.jobs : [];
+    const ownedIncoming = incoming.map((job) => prepareJobForUser(job, user));
+    if (user.role === 'recruiter') {
+      const retained = (db.jobs || []).filter((job) => !getOwnedJobs({ jobs: [job] }, user).length);
+      db.jobs = [...ownedIncoming, ...retained];
+    } else {
+      db.jobs = ownedIncoming;
+    }
+    syncCollectionStorage(db);
+    await writeDb(db);
+    result = { ok: true, count: db.jobs.length };
+  });
+  res.status(status).json(result);
 });
 
 app.get('/api/companies', async (_req, res) => {

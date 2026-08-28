@@ -33,6 +33,9 @@ export function normalizeJob(job = {}) {
 
   return {
     id: job.id || `${Date.now()}`,
+    recruiterId: job.recruiterId || '',
+    recruiterEmail: job.recruiterEmail || '',
+    postedBy: job.postedBy || '',
     company: job.company || 'Hiring Company',
     title: job.title || 'New Role',
     location: job.location || 'Campus / Remote',
