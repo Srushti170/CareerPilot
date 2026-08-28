@@ -1,4 +1,5 @@
 import { stateApi } from './backendSync';
+import { getScopedJson, setScopedJson } from './userScopedStorage';
 
 const DEFAULT_SOCIALS = {
   LinkedIn: { connected: false, handle: '' },
@@ -19,10 +20,21 @@ const LEGACY_DEMO_ROLE = ['CS', 'Senior', 'Student'].join(' ');
 export const STUDENT_PROFILE_KEY = 'careerpilot_student_profile';
 export const STUDENT_ONBOARDING_KEY = 'careerpilot_student_onboarding_complete';
 
+function getCurrentUser() {
+  try {
+    const stored = localStorage.getItem('careerpilot_current_user');
+    return stored ? JSON.parse(stored) : {};
+  } catch {
+    return {};
+  }
+}
+
 export function createDefaultStudentProfile(user = {}) {
+  const activeUser = user.id || user.email ? user : getCurrentUser();
   return {
-    name: user.name || '',
-    email: user.email || '',
+    userId: activeUser.id || '',
+    name: activeUser.name || '',
+    email: activeUser.email || '',
     phone: '',
     role: '',
     university: '',
@@ -70,7 +82,8 @@ function normalizeSocials(rawSocials = {}, rawCodingProfiles = {}) {
 }
 
 export function normalizeStudentProfile(rawProfile = {}, user = {}) {
-  const defaults = createDefaultStudentProfile(user);
+  const activeUser = user.id || user.email ? user : getCurrentUser();
+  const defaults = createDefaultStudentProfile(activeUser);
   const socials = normalizeSocials(rawProfile.socials, rawProfile.codingProfiles);
   const rawRole = String(rawProfile.role || '').trim();
   const role = rawRole && rawRole !== 'student' && rawRole !== LEGACY_DEMO_ROLE
@@ -80,8 +93,9 @@ export function normalizeStudentProfile(rawProfile = {}, user = {}) {
   const normalized = {
     ...defaults,
     ...rawProfile,
-    name: rawProfile.name || user.name || defaults.name,
-    email: rawProfile.email || user.email || defaults.email,
+    userId: rawProfile.userId || activeUser.id || defaults.userId,
+    name: rawProfile.name || activeUser.name || defaults.name,
+    email: rawProfile.email || activeUser.email || defaults.email,
     role,
     degree: rawProfile.degree || rawProfile.branch || defaults.degree,
     branch: rawProfile.branch || rawProfile.degree || defaults.branch,
@@ -109,14 +123,16 @@ export function normalizeStudentProfile(rawProfile = {}, user = {}) {
 }
 
 export function getStudentProfile(user = {}) {
-  const stored = localStorage.getItem(STUDENT_PROFILE_KEY);
-  return normalizeStudentProfile(stored ? JSON.parse(stored) : {}, user);
+  const activeUser = user.id || user.email ? user : getCurrentUser();
+  const stored = getScopedJson(STUDENT_PROFILE_KEY, null, activeUser.id || activeUser.email);
+  return normalizeStudentProfile(stored || {}, activeUser);
 }
 
 export function saveStudentProfile(profile, user = {}) {
   const normalized = normalizeStudentProfile(profile, user);
-  localStorage.setItem(STUDENT_PROFILE_KEY, JSON.stringify(normalized));
-  localStorage.setItem(STUDENT_ONBOARDING_KEY, JSON.stringify(normalized.onboardingComplete));
+  const scope = user.id || user.email || normalized.userId || normalized.email;
+  setScopedJson(STUDENT_PROFILE_KEY, normalized, scope);
+  setScopedJson(STUDENT_ONBOARDING_KEY, normalized.onboardingComplete, scope);
   stateApi.saveStudentProfile(normalized).catch((error) => {
     console.error('Student profile sync error:', error);
   });
@@ -124,13 +140,9 @@ export function saveStudentProfile(profile, user = {}) {
 }
 
 export function isStudentOnboardingComplete(user = {}) {
-  const storedFlag = localStorage.getItem(STUDENT_ONBOARDING_KEY);
+  const storedFlag = getScopedJson(STUDENT_ONBOARDING_KEY, null, user.id || user.email);
   if (storedFlag !== null) {
-    try {
-      return Boolean(JSON.parse(storedFlag));
-    } catch {
-      return storedFlag === 'true';
-    }
+    return Boolean(storedFlag);
   }
 
   return getStudentProfile(user).onboardingComplete;

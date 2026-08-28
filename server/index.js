@@ -14,8 +14,8 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, '..');
-const dataDir = path.join(rootDir, 'server', 'data');
-const reportsDir = path.join(rootDir, 'server', 'reports');
+const dataDir = process.env.CAREERPILOT_DATA_DIR || path.join(rootDir, 'server', 'data');
+const reportsDir = process.env.CAREERPILOT_REPORTS_DIR || path.join(rootDir, 'server', 'reports');
 const dbPath = path.join(dataDir, 'db.json');
 const port = Number(process.env.API_PORT || 8787);
 const mongoUri = process.env.MONGODB_URI || '';
@@ -65,7 +65,15 @@ const DERIVED_STORAGE_KEYS = new Set([
   'careerpilot_student_onboarding_complete',
 ]);
 
-const BLOCKED_STORAGE_KEYS = new Set(['careerpilot_users']);
+const BLOCKED_STORAGE_KEYS = new Set([
+  'careerpilot_users',
+  'careerpilot_current_user',
+  'careerpilot_session_token',
+  'careerpilot_applications',
+  'careerpilot_notifications',
+  'careerpilot_student_profile',
+  'careerpilot_student_onboarding_complete',
+]);
 
 const DEFAULT_USERS = [];
 const LEGACY_DEMO_EMAILS = new Set([]);
@@ -572,6 +580,106 @@ function sanitizeUser(user = {}) {
   return safeUser;
 }
 
+function getTokenFromRequest(req) {
+  return req.headers.authorization?.replace('Bearer ', '') || req.query.token || req.body?.token || '';
+}
+
+async function getAuthenticatedUser(req, db) {
+  const token = getTokenFromRequest(req);
+  if (!token) return null;
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    return (db.users || parseUsersFromStorage(db.storage)).find(
+      (entry) => entry.id === decoded.id || entry.email.toLowerCase() === String(decoded.email || '').toLowerCase()
+    ) || null;
+  } catch {
+    return null;
+  }
+}
+
+async function requireAuthenticatedUser(req, res, db) {
+  const user = await getAuthenticatedUser(req, db);
+  if (!user) {
+    res.status(401).json({ error: 'Authentication required.' });
+    return null;
+  }
+  return user;
+}
+
+function getOwnedJobIds(db, recruiter) {
+  if (!recruiter || recruiter.role !== 'recruiter') return new Set();
+  return new Set((db.jobs || [])
+    .filter((job = {}) => {
+      if (job.recruiterId) return job.recruiterId === recruiter.id;
+      if (job.recruiterEmail) return job.recruiterEmail.toLowerCase() === String(recruiter.email || '').toLowerCase();
+      if (job.postedBy) return job.postedBy.toLowerCase() === String(recruiter.email || '').toLowerCase();
+      return true;
+    })
+    .map((job) => job.id || `${job.company}-${job.title}`));
+}
+
+function applicationBelongsToStudent(application = {}, user = {}) {
+  if (application.studentId) return application.studentId === user.id;
+  if (application.studentEmail) return application.studentEmail.toLowerCase() === String(user.email || '').toLowerCase();
+  return false;
+}
+
+function applicationBelongsToRecruiter(application = {}, user = {}, db = {}) {
+  if (application.recruiterId) return application.recruiterId === user.id;
+  if (application.recruiterEmail) return application.recruiterEmail.toLowerCase() === String(user.email || '').toLowerCase();
+  const ownedJobIds = getOwnedJobIds(db, user);
+  const applicationJobId = application.jobId || `${application.company}-${application.role}`;
+  if (ownedJobIds.has(applicationJobId)) return true;
+  return !application.recruiterId && !application.recruiterEmail && ownedJobIds.size === 0;
+}
+
+function scopeApplicationsForUser(applications = [], user = {}, db = {}) {
+  if (user.role === 'admin') return applications;
+  if (user.role === 'recruiter') {
+    return applications.filter((application) => applicationBelongsToRecruiter(application, user, db));
+  }
+  return applications.filter((application) => applicationBelongsToStudent(application, user));
+}
+
+function prepareApplicationForUser(application = {}, user = {}) {
+  if (user.role !== 'student') return application;
+  return {
+    ...application,
+    studentId: application.studentId || user.id,
+    studentEmail: application.studentEmail || user.email,
+    studentName: application.studentName || user.name,
+  };
+}
+
+function notificationVisibleToUser(notification = {}, user = {}) {
+  if (notification.recipientId) return notification.recipientId === user.id;
+  if (notification.recipientEmail) return notification.recipientEmail.toLowerCase() === String(user.email || '').toLowerCase();
+  if (notification.recipientRole) return notification.recipientRole === user.role;
+  if (notification.broadcast === true || notification.audience === 'all') return true;
+  return false;
+}
+
+function notificationCanBeSavedByUser(notification = {}, user = {}, db = {}) {
+  if (notificationVisibleToUser(notification, user)) return true;
+  if (user.role === 'admin') return true;
+  if (user.role === 'recruiter' && notification.sourceId) {
+    const sourceApplication = (db.applications || []).find((application) => application.id === notification.sourceId);
+    return sourceApplication ? applicationBelongsToRecruiter(sourceApplication, user, db) : false;
+  }
+  return false;
+}
+
+function prepareNotificationForUser(notification = {}, user = {}) {
+  return {
+    ...notification,
+    recipientId: notification.recipientId || user.id,
+    recipientEmail: notification.recipientEmail || user.email,
+    recipientRole: notification.recipientRole || user.role,
+    createdAt: notification.createdAt || new Date().toISOString(),
+    read: Boolean(notification.read),
+  };
+}
+
 function parseUsersFromStorage(storage = {}) {
   // Ignore legacy careerpilot_users in storage since we are using MongoDB and don't want to restore legacy demo users.
   return [];
@@ -667,14 +775,17 @@ function sanitizeAuthStorage(db) {
 }
 
 function syncCollectionStorage(db) {
-  db.storage.careerpilot_applications = JSON.stringify(db.applications || []);
-  db.storage.careerpilot_notifications = JSON.stringify(db.notifications || []);
   db.storage.careerpilot_jobs = JSON.stringify(db.jobs || []);
   db.storage.careerpilot_companies = JSON.stringify(db.companies || []);
   db.storage.careerpilot_students = JSON.stringify(db.students || []);
   db.storage.careerpilot_announcements = JSON.stringify(db.announcements || []);
-  db.storage.careerpilot_student_profile = JSON.stringify(db.studentProfile || DEFAULT_STUDENT_PROFILE);
-  db.storage.careerpilot_student_onboarding_complete = JSON.stringify(Boolean(db.studentProfile?.onboardingComplete));
+  BLOCKED_STORAGE_KEYS.forEach((key) => {
+    delete db.storage[key];
+  });
+}
+
+function getPublicBootstrapStorage(storage = {}) {
+  return Object.fromEntries(Object.entries(storage).filter(([key]) => !BLOCKED_STORAGE_KEYS.has(key)));
 }
 
 function buildProviderStatus(db) {
@@ -842,7 +953,7 @@ app.get('/api/health', async (_req, res) => {
 
 app.get('/api/bootstrap', async (_req, res) => {
   const db = await readDb();
-  res.json({ storage: db.storage, providers: buildProviderStatus(db) });
+  res.json({ storage: getPublicBootstrapStorage(db.storage), providers: buildProviderStatus(db) });
 });
 
 app.put('/api/storage/:key', async (req, res) => {
@@ -875,30 +986,71 @@ app.delete('/api/storage/:key', async (req, res) => {
   res.json({ ok: true });
 });
 
-app.get('/api/applications', async (_req, res) => {
+app.get('/api/applications', async (req, res) => {
   const db = await readDb();
-  res.json(db.applications);
+  const user = await requireAuthenticatedUser(req, res, db);
+  if (!user) return;
+  res.json(scopeApplicationsForUser(db.applications || [], user, db));
 });
 
 app.put('/api/applications', async (req, res) => {
-  const db = await readDb();
-  db.applications = Array.isArray(req.body) ? req.body : Array.isArray(req.body.applications) ? req.body.applications : [];
-  syncCollectionStorage(db);
-  await writeDb(db);
-  res.json({ ok: true, count: db.applications.length });
+  let result, status = 200;
+  await withDbLock(async () => {
+    const db = await readDb();
+    const user = await getAuthenticatedUser(req, db);
+    if (!user) {
+      status = 401;
+      result = { error: 'Authentication required.' };
+      return;
+    }
+    const incoming = Array.isArray(req.body) ? req.body : Array.isArray(req.body.applications) ? req.body.applications : [];
+    const ownedIncoming = incoming
+      .map((application) => prepareApplicationForUser(application, user))
+      .filter((application) => (
+        user.role === 'admin' ||
+        (user.role === 'recruiter' && applicationBelongsToRecruiter(application, user, db)) ||
+        (user.role === 'student' && applicationBelongsToStudent(application, user))
+      ));
+    const retained = (db.applications || []).filter((application) => !scopeApplicationsForUser([application], user, db).length);
+    db.applications = [...ownedIncoming, ...retained];
+    syncCollectionStorage(db);
+    await writeDb(db);
+    result = { ok: true, count: ownedIncoming.length };
+  });
+  res.status(status).json(result);
 });
 
-app.get('/api/notifications', async (_req, res) => {
+app.get('/api/notifications', async (req, res) => {
   const db = await readDb();
-  res.json(db.notifications);
+  const user = await requireAuthenticatedUser(req, res, db);
+  if (!user) return;
+  res.json((db.notifications || []).filter((notification) => notificationVisibleToUser(notification, user)));
 });
 
 app.put('/api/notifications', async (req, res) => {
-  const db = await readDb();
-  db.notifications = Array.isArray(req.body) ? req.body : Array.isArray(req.body.notifications) ? req.body.notifications : [];
-  syncCollectionStorage(db);
-  await writeDb(db);
-  res.json({ ok: true, count: db.notifications.length });
+  let result, status = 200;
+  await withDbLock(async () => {
+    const db = await readDb();
+    const user = await getAuthenticatedUser(req, db);
+    if (!user) {
+      status = 401;
+      result = { error: 'Authentication required.' };
+      return;
+    }
+    const incoming = Array.isArray(req.body) ? req.body : Array.isArray(req.body.notifications) ? req.body.notifications : [];
+    const ownedIncoming = incoming
+      .filter((notification) => notificationCanBeSavedByUser(notification, user, db))
+      .map((notification) => prepareNotificationForUser(notification, user));
+    const ownedIds = new Set(ownedIncoming.map((notification) => notification.id).filter(Boolean));
+    const retained = (db.notifications || []).filter((notification) => (
+      !ownedIds.has(notification.id) && !notificationVisibleToUser(notification, user)
+    ));
+    db.notifications = [...ownedIncoming, ...retained];
+    syncCollectionStorage(db);
+    await writeDb(db);
+    result = { ok: true, count: ownedIncoming.length };
+  });
+  res.status(status).json(result);
 });
 
 app.get('/api/jobs', async (_req, res) => {
@@ -989,8 +1141,6 @@ app.post('/api/auth/login', async (req, res) => {
 
     const session = createSession(user);
     db.sessions = [...db.sessions.filter((entry) => entry.userId !== user.id), session];
-    db.storage.careerpilot_current_user = JSON.stringify(sanitizeUser(user));
-    db.storage.careerpilot_session_token = session.token;
     await writeDb(db);
     result = { user: sanitizeUser(user), sessionToken: session.token };
   });
@@ -1020,10 +1170,8 @@ app.post('/api/auth/register', async (req, res) => {
     };
     const updatedUsers = [...users, user];
     syncUsersToStorage(db, updatedUsers);
-    db.storage.careerpilot_current_user = JSON.stringify(sanitizeUser(user));
     const session = createSession(user);
     db.sessions.push(session);
-    db.storage.careerpilot_session_token = session.token;
     await persistUser(user);
     await writeDb(db);
     result = { user: sanitizeUser(user), sessionToken: session.token };
@@ -1033,7 +1181,7 @@ app.post('/api/auth/register', async (req, res) => {
 
 app.get('/api/auth/me', async (req, res) => {
   const db = await readDb();
-  const token = req.headers.authorization?.replace('Bearer ', '') || req.query.token || db.storage.careerpilot_session_token;
+  const token = req.headers.authorization?.replace('Bearer ', '') || req.query.token;
   if (!token) {
     return res.status(401).json({ error: 'No active session.' });
   }
@@ -1079,7 +1227,6 @@ app.put('/api/auth/profile', async (req, res) => {
   };
 
   updateUserInStorage(db, existingUser.email, updatedUser);
-  db.storage.careerpilot_current_user = JSON.stringify(sanitizeUser(updatedUser));
   if (db.studentProfile?.email?.toLowerCase() === existingUser.email.toLowerCase()) {
     db.studentProfile = {
       ...db.studentProfile,
@@ -1113,16 +1260,6 @@ app.put('/api/auth/password', async (req, res) => {
   };
 
   updateUserInStorage(db, existingUser.email, updatedUser);
-  if (db.storage.careerpilot_current_user) {
-    try {
-      const currentUser = JSON.parse(db.storage.careerpilot_current_user);
-      if (currentUser.email?.toLowerCase() === existingUser.email.toLowerCase()) {
-        db.storage.careerpilot_current_user = JSON.stringify(sanitizeUser(currentUser));
-      }
-    } catch {
-      db.storage.careerpilot_current_user = JSON.stringify(sanitizeUser(updatedUser));
-    }
-  }
   await persistUser(updatedUser);
   await writeDb(db);
   return res.json({ ok: true });
@@ -1130,10 +1267,8 @@ app.put('/api/auth/password', async (req, res) => {
 
 app.post('/api/auth/logout', async (req, res) => {
   const db = await readDb();
-  const token = req.headers.authorization?.replace('Bearer ', '') || req.body.token || db.storage.careerpilot_session_token;
+  const token = req.headers.authorization?.replace('Bearer ', '') || req.body.token;
   db.sessions = db.sessions.filter((entry) => entry.token !== token);
-  delete db.storage.careerpilot_current_user;
-  delete db.storage.careerpilot_session_token;
   await writeDb(db);
   return res.json({ ok: true });
 });
@@ -1391,4 +1526,8 @@ async function startServer() {
   }
 }
 
-startServer();
+if (process.env.NODE_ENV !== 'test') {
+  startServer();
+}
+
+export { app, startServer };

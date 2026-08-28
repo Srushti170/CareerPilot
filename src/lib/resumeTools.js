@@ -279,6 +279,11 @@ export function createApplicationRecord(job, profile = getStudentProfile(), tail
 
   return {
     id: Date.now().toString(),
+    jobId: job.id || `${job.company}-${job.title}`,
+    recruiterId: job.recruiterId || '',
+    recruiterEmail: job.recruiterEmail || '',
+    studentId: profile.userId || '',
+    studentEmail: profile.email || '',
     company: job.company,
     role: job.title,
     studentName: profile.name || 'Student Candidate',

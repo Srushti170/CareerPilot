@@ -55,6 +55,12 @@ export function StudentDashboard({ applications = [], setApplications, setActive
 
     const newApp = {
       id: Date.now().toString(),
+      jobId: job.id || `${job.company}-${job.title}`,
+      recruiterId: job.recruiterId || '',
+      recruiterEmail: job.recruiterEmail || '',
+      studentId: savedProfile.userId || '',
+      studentEmail: savedProfile.email || '',
+      studentName: savedProfile.name || 'Student',
       company: job.company,
       role: job.title,
       appliedDate: new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),

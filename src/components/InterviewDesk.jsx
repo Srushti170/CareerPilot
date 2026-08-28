@@ -76,7 +76,14 @@ export function InterviewDesk({ applications = [], setApplications }) {
     if (action === 'cancel') {
       pushWorkflowNotification(
         'Interview cancelled',
-        `${targetApplication.role} at ${targetApplication.company} has been closed by the recruiter.`
+        `${targetApplication.role} at ${targetApplication.company} has been closed by the recruiter.`,
+        {
+          recipientId: targetApplication.studentId,
+          recipientEmail: targetApplication.studentEmail,
+          recipientRole: 'student',
+          type: 'interview_cancelled',
+          sourceId: targetApplication.id,
+        }
       );
       await sendWorkflowEmail({
         to: getApplicationContact(targetApplication),
@@ -88,7 +95,14 @@ export function InterviewDesk({ applications = [], setApplications }) {
     if (action === 'complete') {
       pushWorkflowNotification(
         'Moved to offer stage',
-        `${targetApplication.company} marked your ${targetApplication.role} interview as completed.`
+        `${targetApplication.company} marked your ${targetApplication.role} interview as completed.`,
+        {
+          recipientId: targetApplication.studentId,
+          recipientEmail: targetApplication.studentEmail,
+          recipientRole: 'student',
+          type: 'offer_stage',
+          sourceId: targetApplication.id,
+        }
       );
       await sendWorkflowEmail({
         to: getApplicationContact(targetApplication),
@@ -124,7 +138,14 @@ export function InterviewDesk({ applications = [], setApplications }) {
     if (selectedApplication) {
       pushWorkflowNotification(
         'Interview slot shared',
-        `${selectedApplication.company} shared a ${type} slot for ${selectedApplication.role} on ${slot.label} at ${slot.time}.`
+        `${selectedApplication.company} shared a ${type} slot for ${selectedApplication.role} on ${slot.label} at ${slot.time}.`,
+        {
+          recipientId: selectedApplication.studentId,
+          recipientEmail: selectedApplication.studentEmail,
+          recipientRole: 'student',
+          type: 'interview_slot',
+          sourceId: selectedApplication.id,
+        }
       );
       await sendWorkflowEmail({
         to: getApplicationContact(selectedApplication),

@@ -19,7 +19,21 @@ let patched = false;
 let syncTimer = null;
 const pendingEntries = new Map();
 const pendingDeletes = new Set();
-const STORAGE_SYNC_BLOCKLIST = new Set(['careerpilot_users']);
+const STORAGE_SYNC_BLOCKLIST = new Set([
+  'careerpilot_users',
+  'careerpilot_current_user',
+  'careerpilot_session_token',
+  'careerpilot_applications',
+  'careerpilot_notifications',
+  'careerpilot_student_profile',
+  'careerpilot_student_onboarding_complete',
+]);
+const LEGACY_SHARED_CACHE_KEYS = [
+  'careerpilot_applications',
+  'careerpilot_notifications',
+  'careerpilot_student_profile',
+  'careerpilot_student_onboarding_complete',
+];
 
 function emitStorageSyncEvent(key, value = null, action = 'set') {
   window.dispatchEvent(new CustomEvent('careerpilot:storage-updated', {
@@ -34,9 +48,11 @@ function emitStorageSyncEvent(key, value = null, action = 'set') {
 }
 
 async function request(path, options = {}) {
+  const token = rawLocalStorage.getItem('careerpilot_session_token');
   const response = await fetch(`${API_BASE}${path}`, {
     headers: {
       'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(options.headers || {}),
     },
     ...options,
@@ -125,6 +141,7 @@ export async function initializeBackendPersistence() {
   initialized = true;
 
   try {
+    LEGACY_SHARED_CACHE_KEYS.forEach((key) => rawLocalStorage.removeItem(key));
     const payload = await request('/bootstrap');
     const storage = payload?.storage || {};
     Object.entries(storage).forEach(([key, value]) => {

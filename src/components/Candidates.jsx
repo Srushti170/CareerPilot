@@ -55,7 +55,14 @@ export function Candidates({ applications = [], setApplications }) {
     if (targetApplication) {
       pushWorkflowNotification(
         'Application status updated',
-        `${targetApplication.company} updated your ${targetApplication.role} application to ${newStatus}.`
+        `${targetApplication.company} updated your ${targetApplication.role} application to ${newStatus}.`,
+        {
+          recipientId: targetApplication.studentId,
+          recipientEmail: targetApplication.studentEmail,
+          recipientRole: 'student',
+          type: 'application_status',
+          sourceId: targetApplication.id,
+        }
       );
     }
 

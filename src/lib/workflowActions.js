@@ -1,29 +1,50 @@
 import { integrationApi, stateApi } from './backendSync';
+import { getScopedJson, setScopedJson } from './userScopedStorage';
 
-function readNotifications() {
+function getCurrentUser() {
   try {
-    const stored = localStorage.getItem('careerpilot_notifications');
-    return stored ? JSON.parse(stored) : [];
+    const stored = localStorage.getItem('careerpilot_current_user');
+    return stored ? JSON.parse(stored) : null;
   } catch {
-    return [];
+    return null;
   }
 }
 
-export function pushWorkflowNotification(title, desc) {
-  const current = readNotifications();
-  const next = [
-    {
-      id: `notif-${Date.now()}`,
-      title,
-      desc,
-      time: 'Just now',
-      read: false,
-    },
-    ...current,
-  ].slice(0, 25);
+function readNotifications() {
+  return getScopedJson('careerpilot_notifications', []);
+}
 
-  localStorage.setItem('careerpilot_notifications', JSON.stringify(next));
-  stateApi.saveNotifications(next).catch((error) => {
+function isVisibleToCurrentUser(notification, currentUser) {
+  if (!currentUser) return true;
+  if (notification.recipientId) return notification.recipientId === currentUser.id;
+  if (notification.recipientEmail) return notification.recipientEmail.toLowerCase() === String(currentUser.email || '').toLowerCase();
+  if (notification.recipientRole) return notification.recipientRole === currentUser.role;
+  return false;
+}
+
+export function pushWorkflowNotification(title, desc, recipient = {}) {
+  const currentUser = getCurrentUser();
+  const notification = {
+    id: `notif-${Date.now()}`,
+    title,
+    desc,
+    time: 'Just now',
+    read: false,
+    type: recipient.type || 'workflow',
+    sourceId: recipient.sourceId || '',
+    recipientId: recipient.recipientId || recipient.userId || currentUser?.id || '',
+    recipientEmail: recipient.recipientEmail || recipient.email || currentUser?.email || '',
+    recipientRole: recipient.recipientRole || recipient.role || currentUser?.role || 'student',
+    createdAt: new Date().toISOString(),
+  };
+  const current = readNotifications();
+  const next = isVisibleToCurrentUser(notification, currentUser)
+    ? [notification, ...current].slice(0, 25)
+    : current;
+
+  setScopedJson('careerpilot_notifications', next);
+  window.dispatchEvent(new CustomEvent('careerpilot:notifications-updated', { detail: { notifications: next } }));
+  stateApi.saveNotifications([notification, ...current]).catch((error) => {
     console.error('Notifications sync error:', error);
   });
 }

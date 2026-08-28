@@ -21,6 +21,7 @@ import { Card } from './components/ui/Card';
 import { motion, AnimatePresence } from 'motion/react';
 import { getStudentProfile, isStudentOnboardingComplete } from './lib/studentProfile';
 import { authApi, stateApi } from './lib/backendSync';
+import { getScopedJson, setScopedJson } from './lib/userScopedStorage';
 
 const SEEDED_APPLICATION_KEYS = new Set([
   'google::software engineer intern::1',
@@ -48,48 +49,89 @@ function sanitizeNotifications(notifications = []) {
   });
 }
 
+function safeJsonParse(value, fallback = null) {
+  try {
+    return value ? JSON.parse(value) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function getStoredCurrentUser() {
+  return safeJsonParse(localStorage.getItem('careerpilot_current_user'), null);
+}
+
+function getUserScope(user = getStoredCurrentUser()) {
+  return user?.id || user?.email;
+}
+
+function applicationBelongsToUser(app = {}, user = getStoredCurrentUser()) {
+  if (!user) return false;
+  if (user.role === 'admin') return true;
+  if (user.role === 'recruiter') {
+    if (app.recruiterId) return app.recruiterId === user.id;
+    if (app.recruiterEmail) return app.recruiterEmail.toLowerCase() === String(user.email || '').toLowerCase();
+    return true;
+  }
+  if (app.studentId) return app.studentId === user.id;
+  if (app.studentEmail) return app.studentEmail.toLowerCase() === String(user.email || '').toLowerCase();
+  return false;
+}
+
+function notificationBelongsToUser(notification = {}, user = getStoredCurrentUser()) {
+  if (!user) return false;
+  if (notification.recipientId) return notification.recipientId === user.id;
+  if (notification.recipientEmail) return notification.recipientEmail.toLowerCase() === String(user.email || '').toLowerCase();
+  if (notification.recipientRole) return notification.recipientRole === user.role;
+  return false;
+}
+
+function scopeApplications(applications = [], user = getStoredCurrentUser()) {
+  return sanitizeApplications(applications).filter((app) => applicationBelongsToUser(app, user));
+}
+
+function scopeNotifications(notifications = [], user = getStoredCurrentUser()) {
+  return sanitizeNotifications(notifications).filter((notification) => notificationBelongsToUser(notification, user));
+}
+
 export default function App() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [currentUser, setCurrentUser] = useState(() => {
-    const stored = localStorage.getItem('careerpilot_current_user');
-    return stored ? JSON.parse(stored) : null;
+    return getStoredCurrentUser();
   });
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     return localStorage.getItem('careerpilot_current_user') !== null;
   });
   const [persona, setPersona] = useState(() => {
-    const stored = localStorage.getItem('careerpilot_current_user');
-    return stored ? JSON.parse(stored).role : 'student';
+    return getStoredCurrentUser()?.role || 'student';
   });
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [globalSearchQuery, setGlobalSearchQuery] = useState('');
 
   const [applications, setApplications] = useState(() => {
-    const stored = localStorage.getItem('careerpilot_applications');
-    if (stored) return sanitizeApplications(JSON.parse(stored));
-    return [];
+    return scopeApplications(getScopedJson('careerpilot_applications', []), getStoredCurrentUser());
   });
 
   const [notifications, setNotifications] = useState(() => {
-    const stored = localStorage.getItem('careerpilot_notifications');
-    if (stored) return sanitizeNotifications(JSON.parse(stored));
-    return [];
+    return scopeNotifications(getScopedJson('careerpilot_notifications', []), getStoredCurrentUser());
   });
 
   const updateApplications = (newApps) => {
-    const sanitized = sanitizeApplications(newApps);
+    const sanitized = scopeApplications(newApps, currentUser);
     setApplications(sanitized);
-    localStorage.setItem('careerpilot_applications', JSON.stringify(sanitized));
+    setScopedJson('careerpilot_applications', sanitized, getUserScope(currentUser));
+    window.dispatchEvent(new CustomEvent('careerpilot:applications-updated', { detail: { applications: sanitized } }));
     stateApi.saveApplications(sanitized).catch((error) => {
       console.error('Applications sync error:', error);
     });
   };
 
   const updateNotifications = (newNotifs) => {
-    const sanitized = sanitizeNotifications(newNotifs);
+    const sanitized = scopeNotifications(newNotifs, currentUser);
     setNotifications(sanitized);
-    localStorage.setItem('careerpilot_notifications', JSON.stringify(sanitized));
+    setScopedJson('careerpilot_notifications', sanitized, getUserScope(currentUser));
+    window.dispatchEvent(new CustomEvent('careerpilot:notifications-updated', { detail: { notifications: sanitized } }));
     stateApi.saveNotifications(sanitized).catch((error) => {
       console.error('Notifications sync error:', error);
     });
@@ -107,7 +149,7 @@ export default function App() {
               setCurrentUser(sessionUser.user);
               setIsAuthenticated(true);
               setPersona(sessionUser.user.role || 'student');
-              setNeedsOnboarding(sessionUser.user.role === 'student' && !isStudentOnboardingComplete(sessionUser.user));
+              setNeedsOnboarding(false);
             } else {
               throw new Error('No user returned');
             }
@@ -126,15 +168,17 @@ export default function App() {
         ]);
 
         if (Array.isArray(nextApplications)) {
-          const sanitizedApplications = sanitizeApplications(nextApplications);
+          const activeUser = getStoredCurrentUser();
+          const sanitizedApplications = scopeApplications(nextApplications, activeUser);
           setApplications(sanitizedApplications);
-          localStorage.setItem('careerpilot_applications', JSON.stringify(sanitizedApplications));
+          setScopedJson('careerpilot_applications', sanitizedApplications, getUserScope(activeUser));
         }
 
         if (Array.isArray(nextNotifications)) {
-          const sanitizedNotifications = sanitizeNotifications(nextNotifications);
+          const activeUser = getStoredCurrentUser();
+          const sanitizedNotifications = scopeNotifications(nextNotifications, activeUser);
           setNotifications(sanitizedNotifications);
-          localStorage.setItem('careerpilot_notifications', JSON.stringify(sanitizedNotifications));
+          setScopedJson('careerpilot_notifications', sanitizedNotifications, getUserScope(activeUser));
         }
       } catch (error) {
         console.warn('Core state hydrate fallback to local cache.', error);
@@ -144,32 +188,35 @@ export default function App() {
     hydrateCoreState();
 
     const syncCurrentUser = () => {
-      const stored = localStorage.getItem('careerpilot_current_user');
-      const nextUser = stored ? JSON.parse(stored) : null;
+      const nextUser = getStoredCurrentUser();
       setCurrentUser(nextUser);
       setIsAuthenticated(nextUser !== null);
       setPersona(nextUser?.role || 'student');
-      setNeedsOnboarding(nextUser ? nextUser.role === 'student' && !isStudentOnboardingComplete(nextUser) : false);
+      setNeedsOnboarding(false);
+      setApplications(scopeApplications(getScopedJson('careerpilot_applications', [], getUserScope(nextUser)), nextUser));
+      setNotifications(scopeNotifications(getScopedJson('careerpilot_notifications', [], getUserScope(nextUser)), nextUser));
     };
 
-    const syncApplications = () => {
-      const stored = localStorage.getItem('careerpilot_applications');
-      setApplications(stored ? sanitizeApplications(JSON.parse(stored)) : []);
+    const syncApplications = (event) => {
+      const nextUser = getStoredCurrentUser();
+      const incoming = event?.detail?.applications || getScopedJson('careerpilot_applications', [], getUserScope(nextUser));
+      setApplications(scopeApplications(incoming, nextUser));
     };
 
-    const syncNotifications = () => {
-      const stored = localStorage.getItem('careerpilot_notifications');
-      setNotifications(stored ? sanitizeNotifications(JSON.parse(stored)) : []);
+    const syncNotifications = (event) => {
+      const nextUser = getStoredCurrentUser();
+      const incoming = event?.detail?.notifications || getScopedJson('careerpilot_notifications', [], getUserScope(nextUser));
+      setNotifications(scopeNotifications(incoming, nextUser));
     };
 
     window.addEventListener('careerpilot:storage-updated:careerpilot_current_user', syncCurrentUser);
-    window.addEventListener('careerpilot:storage-updated:careerpilot_applications', syncApplications);
-    window.addEventListener('careerpilot:storage-updated:careerpilot_notifications', syncNotifications);
+    window.addEventListener('careerpilot:applications-updated', syncApplications);
+    window.addEventListener('careerpilot:notifications-updated', syncNotifications);
 
     return () => {
       window.removeEventListener('careerpilot:storage-updated:careerpilot_current_user', syncCurrentUser);
-      window.removeEventListener('careerpilot:storage-updated:careerpilot_applications', syncApplications);
-      window.removeEventListener('careerpilot:storage-updated:careerpilot_notifications', syncNotifications);
+      window.removeEventListener('careerpilot:applications-updated', syncApplications);
+      window.removeEventListener('careerpilot:notifications-updated', syncNotifications);
     };
   }, []);
 
@@ -232,7 +279,7 @@ export default function App() {
   const sidebarData = getSidebarData();
 
   const handleLogin = (user, isNewUser = false, sessionToken = null) => {
-    const onboardingRequired = user.role === 'student' && !isStudentOnboardingComplete(user);
+    const onboardingRequired = isNewUser && user.role === 'student' && !isStudentOnboardingComplete(user);
     localStorage.setItem('careerpilot_current_user', JSON.stringify(user));
     if (sessionToken) {
       localStorage.setItem('careerpilot_session_token', sessionToken);
@@ -240,8 +287,22 @@ export default function App() {
     setCurrentUser(user);
     setPersona(user.role);
     setNeedsOnboarding(onboardingRequired);
+    setApplications(scopeApplications(getScopedJson('careerpilot_applications', [], getUserScope(user)), user));
+    setNotifications(scopeNotifications(getScopedJson('careerpilot_notifications', [], getUserScope(user)), user));
     setIsAuthenticated(true);
     setActiveTab('dashboard');
+    Promise.all([stateApi.getApplications(), stateApi.getNotifications()])
+      .then(([nextApplications, nextNotifications]) => {
+        const scopedApps = scopeApplications(nextApplications, user);
+        const scopedNotifs = scopeNotifications(nextNotifications, user);
+        setApplications(scopedApps);
+        setNotifications(scopedNotifs);
+        setScopedJson('careerpilot_applications', scopedApps, getUserScope(user));
+        setScopedJson('careerpilot_notifications', scopedNotifs, getUserScope(user));
+      })
+      .catch((error) => {
+        console.warn('User-owned state hydrate fallback to scoped browser cache.', error);
+      });
   };
 
   const handleLogout = async () => {
@@ -259,6 +320,8 @@ export default function App() {
     setIsAuthenticated(false);
     setPersona('student');
     setNeedsOnboarding(false);
+    setApplications([]);
+    setNotifications([]);
     setActiveTab('dashboard');
   };
 
