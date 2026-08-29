@@ -284,6 +284,22 @@ export const stateApi = {
   async getNotifications() {
     return request('/notifications');
   },
+  subscribeToNotifications(onNotifications, onError) {
+    const token = rawLocalStorage.getItem('careerpilot_session_token');
+    if (!token || typeof EventSource === 'undefined') return null;
+    const stream = new EventSource(`${API_BASE}/notifications/stream?token=${encodeURIComponent(token)}`);
+    stream.addEventListener('notifications', (event) => {
+      try {
+        onNotifications(JSON.parse(event.data));
+      } catch (error) {
+        console.error('Notification stream parse error:', error);
+      }
+    });
+    stream.onerror = (error) => {
+      if (onError) onError(error);
+    };
+    return () => stream.close();
+  },
   async saveNotifications(notifications) {
     return request('/notifications', {
       method: 'PUT',

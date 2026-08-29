@@ -26,6 +26,7 @@ const serverAi = geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey }) : null
 let mongoClientPromise = null;
 let mongoConnectionState = mongoUri ? 'pending' : 'disabled';
 const PROFILE_DOCUMENT_ID = 'primary';
+const notificationStreams = new Map();
 
 const COLLECTIONS = {
   storage: 'app_storage',
@@ -682,6 +683,44 @@ function notificationVisibleToUser(notification = {}, user = {}) {
   return false;
 }
 
+function getNotificationStreamKey(user = {}) {
+  return user?.id || user?.email || '';
+}
+
+function getVisibleNotificationsForUser(db = {}, user = {}) {
+  return (db.notifications || [])
+    .filter((notification) => notificationVisibleToUser(notification, user))
+    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+}
+
+function sendNotificationStreamEvent(user = {}, payload = []) {
+  const streamKey = getNotificationStreamKey(user);
+  const streams = streamKey ? notificationStreams.get(streamKey) : null;
+  if (!streams) return;
+  const encoded = `event: notifications\ndata: ${JSON.stringify(payload)}\n\n`;
+  streams.forEach((stream) => stream.write(encoded));
+}
+
+function broadcastNotificationUpdates(db = {}, notifications = []) {
+  const recipientKeys = new Set();
+  notifications.forEach((notification = {}) => {
+    if (notification.recipientId) recipientKeys.add(notification.recipientId);
+    if (notification.recipientEmail) {
+      const user = (db.users || []).find((entry) => (
+        entry.email?.toLowerCase() === String(notification.recipientEmail || '').toLowerCase()
+      ));
+      if (user?.id) recipientKeys.add(user.id);
+    }
+  });
+
+  recipientKeys.forEach((recipientId) => {
+    const user = (db.users || []).find((entry) => entry.id === recipientId);
+    if (user) {
+      sendNotificationStreamEvent(user, getVisibleNotificationsForUser(db, user));
+    }
+  });
+}
+
 function notificationCanBeSavedByUser(notification = {}, user = {}, db = {}) {
   if (notificationVisibleToUser(notification, user)) return true;
   if (user.role === 'admin') return true;
@@ -692,11 +731,21 @@ function notificationCanBeSavedByUser(notification = {}, user = {}, db = {}) {
   return false;
 }
 
-function prepareNotificationForUser(notification = {}, user = {}) {
+function prepareNotificationForUser(notification = {}, user = {}, db = {}) {
+  const sourceApplication = notification.sourceId
+    ? (db.applications || []).find((application) => application.id === notification.sourceId)
+    : null;
+  const shouldUseSourceStudent = (
+    sourceApplication &&
+    notification.recipientRole === 'student' &&
+    !notification.recipientId &&
+    !notification.recipientEmail
+  );
+
   return {
     ...notification,
-    recipientId: notification.recipientId || user.id,
-    recipientEmail: notification.recipientEmail || user.email,
+    recipientId: notification.recipientId || (shouldUseSourceStudent ? sourceApplication.studentId : user.id),
+    recipientEmail: notification.recipientEmail || (shouldUseSourceStudent ? sourceApplication.studentEmail : user.email),
     recipientRole: notification.recipientRole || user.role,
     createdAt: notification.createdAt || new Date().toISOString(),
     read: Boolean(notification.read),
@@ -1047,7 +1096,34 @@ app.get('/api/notifications', async (req, res) => {
   const db = await readDb();
   const user = await requireAuthenticatedUser(req, res, db);
   if (!user) return;
-  res.json((db.notifications || []).filter((notification) => notificationVisibleToUser(notification, user)));
+  res.json(getVisibleNotificationsForUser(db, user));
+});
+
+app.get('/api/notifications/stream', async (req, res) => {
+  const db = await readDb();
+  const user = await requireAuthenticatedUser(req, res, db);
+  if (!user) return;
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+  });
+  res.write(': connected\n\n');
+
+  const streamKey = getNotificationStreamKey(user);
+  if (!notificationStreams.has(streamKey)) {
+    notificationStreams.set(streamKey, new Set());
+  }
+  notificationStreams.get(streamKey).add(res);
+  sendNotificationStreamEvent(user, getVisibleNotificationsForUser(db, user));
+
+  req.on('close', () => {
+    const streams = notificationStreams.get(streamKey);
+    if (!streams) return;
+    streams.delete(res);
+    if (streams.size === 0) notificationStreams.delete(streamKey);
+  });
 });
 
 app.put('/api/notifications', async (req, res) => {
@@ -1063,7 +1139,7 @@ app.put('/api/notifications', async (req, res) => {
     const incoming = Array.isArray(req.body) ? req.body : Array.isArray(req.body.notifications) ? req.body.notifications : [];
     const ownedIncoming = incoming
       .filter((notification) => notificationCanBeSavedByUser(notification, user, db))
-      .map((notification) => prepareNotificationForUser(notification, user));
+      .map((notification) => prepareNotificationForUser(notification, user, db));
     const ownedIds = new Set(ownedIncoming.map((notification) => notification.id).filter(Boolean));
     const retained = (db.notifications || []).filter((notification) => (
       !ownedIds.has(notification.id) && !notificationVisibleToUser(notification, user)
@@ -1071,6 +1147,7 @@ app.put('/api/notifications', async (req, res) => {
     db.notifications = [...ownedIncoming, ...retained];
     syncCollectionStorage(db);
     await writeDb(db);
+    broadcastNotificationUpdates(db, ownedIncoming);
     result = { ok: true, count: ownedIncoming.length };
   });
   res.status(status).json(result);

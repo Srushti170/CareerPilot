@@ -12,6 +12,7 @@ export function TopBar({
   setSearchQuery,
   notifications = [],
   setNotifications,
+  onRefreshNotifications,
   isSidebarCollapsed
 }) {
   const [showNotifications, setShowNotifications] = useState(false);
@@ -71,6 +72,13 @@ export function TopBar({
     }
   };
 
+  const toggleNotifications = async () => {
+    if (onRefreshNotifications) {
+      await onRefreshNotifications();
+    }
+    setShowNotifications((current) => !current);
+  };
+
   const unreadCount = notifications.filter(n => !n.read).length;
 
   return (
@@ -96,7 +104,7 @@ export function TopBar({
         {/* Notifications Icon & Panel */}
         <div className="relative" ref={notificationRef}>
           <button
-            onClick={() => setShowNotifications(!showNotifications)}
+            onClick={toggleNotifications}
             className="relative flex h-10 w-10 items-center justify-center rounded-xl text-on-surface-variant transition-colors hover:bg-surface-container-low hover:text-on-surface"
           >
             <span className="material-symbols-outlined text-[22px]">notifications</span>

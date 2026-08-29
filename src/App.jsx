@@ -137,6 +137,24 @@ export default function App() {
     });
   };
 
+  const refreshOwnedState = async (user = currentUser) => {
+    if (!user) return;
+    try {
+      const [nextApplications, nextNotifications] = await Promise.all([
+        stateApi.getApplications(),
+        stateApi.getNotifications(),
+      ]);
+      const scopedApps = scopeApplications(nextApplications, user);
+      const scopedNotifs = scopeNotifications(nextNotifications, user);
+      setApplications(scopedApps);
+      setNotifications(scopedNotifs);
+      setScopedJson('careerpilot_applications', scopedApps, getUserScope(user));
+      setScopedJson('careerpilot_notifications', scopedNotifs, getUserScope(user));
+    } catch (error) {
+      console.warn('Unable to refresh user-owned state.', error);
+    }
+  };
+
   useEffect(() => {
     const hydrateCoreState = async () => {
       try {
@@ -219,6 +237,40 @@ export default function App() {
       window.removeEventListener('careerpilot:notifications-updated', syncNotifications);
     };
   }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated || !currentUser) return undefined;
+
+    const unsubscribe = stateApi.subscribeToNotifications(
+      (nextNotifications) => {
+        const scopedNotifs = scopeNotifications(nextNotifications, currentUser);
+        setNotifications(scopedNotifs);
+        setScopedJson('careerpilot_notifications', scopedNotifs, getUserScope(currentUser));
+      },
+      () => {
+        // EventSource reconnects automatically; polling and bell-click refresh remain as fallback.
+      }
+    );
+
+    const refreshActiveUserState = () => refreshOwnedState(currentUser);
+    const handleVisibilityRefresh = () => {
+      if (document.visibilityState === 'visible') {
+        refreshActiveUserState();
+      }
+    };
+
+    refreshActiveUserState();
+    const intervalId = window.setInterval(refreshActiveUserState, 15000);
+    window.addEventListener('focus', refreshActiveUserState);
+    document.addEventListener('visibilitychange', handleVisibilityRefresh);
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', refreshActiveUserState);
+      document.removeEventListener('visibilitychange', handleVisibilityRefresh);
+    };
+  }, [isAuthenticated, currentUser?.id, currentUser?.email, currentUser?.role]);
 
 
   const studentItems = [
@@ -372,6 +424,7 @@ export default function App() {
           }}
           notifications={notifications}
           setNotifications={updateNotifications}
+          onRefreshNotifications={() => refreshOwnedState(currentUser)}
           isSidebarCollapsed={isSidebarCollapsed}
         />
 
