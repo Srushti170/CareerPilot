@@ -465,7 +465,7 @@ export default function App() {
                     applications={applications}
                   />
                 )}
-                {persona === 'admin' && <PlacementDashboard />}
+                {persona === 'admin' && <PlacementDashboard applications={applications} />}
               </>
             )}
 
@@ -519,8 +519,8 @@ export default function App() {
             {persona === 'admin' && (
               <>
                 {activeTab === 'companies' && <Companies />}
-                {activeTab === 'students' && <StudentRecords />}
-                {activeTab === 'reports' && <GlobalReports />}
+                {activeTab === 'students' && <StudentRecords applications={applications} />}
+                {activeTab === 'reports' && <GlobalReports applications={applications} />}
               </>
             )}
 

@@ -4,24 +4,14 @@ import { Card } from './ui/Card';
 import { getDepartmentBreakdown, getPlacementStats, getStoredStudents, mergeStudentRecords } from '../lib/adminData';
 import { integrationApi } from '../lib/backendSync';
 
-export function GlobalReports() {
+export function GlobalReports({ applications = [] }) {
   const [students, setStudents] = useState(() => getStoredStudents());
-  const [applications, setApplications] = useState(() => {
-    const stored = localStorage.getItem('careerpilot_applications');
-    return stored ? JSON.parse(stored) : [];
-  });
 
   useEffect(() => {
     const syncStudents = () => setStudents(getStoredStudents());
-    const syncApplications = () => {
-      const stored = localStorage.getItem('careerpilot_applications');
-      setApplications(stored ? JSON.parse(stored) : []);
-    };
     window.addEventListener('careerpilot:students-updated', syncStudents);
-    window.addEventListener('careerpilot:storage-updated:careerpilot_applications', syncApplications);
     return () => {
       window.removeEventListener('careerpilot:students-updated', syncStudents);
-      window.removeEventListener('careerpilot:storage-updated:careerpilot_applications', syncApplications);
     };
   }, []);
 

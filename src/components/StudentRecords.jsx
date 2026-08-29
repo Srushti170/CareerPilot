@@ -5,12 +5,8 @@ import { getDepartmentBreakdown, getStoredStudents, mergeStudentRecords, normali
 
 const inputClass = 'w-full rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none transition-colors focus:border-primary focus:ring-4 focus:ring-primary/10';
 
-export function StudentRecords() {
+export function StudentRecords({ applications = [] }) {
   const [manualStudents, setManualStudents] = useState(() => getStoredStudents());
-  const [applications, setApplications] = useState(() => {
-    const stored = localStorage.getItem('careerpilot_applications');
-    return stored ? JSON.parse(stored) : [];
-  });
   const [showModal, setShowModal] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [draft, setDraft] = useState({
@@ -23,15 +19,9 @@ export function StudentRecords() {
 
   useEffect(() => {
     const syncStudents = () => setManualStudents(getStoredStudents());
-    const syncApplications = () => {
-      const stored = localStorage.getItem('careerpilot_applications');
-      setApplications(stored ? JSON.parse(stored) : []);
-    };
     window.addEventListener('careerpilot:students-updated', syncStudents);
-    window.addEventListener('careerpilot:storage-updated:careerpilot_applications', syncApplications);
     return () => {
       window.removeEventListener('careerpilot:students-updated', syncStudents);
-      window.removeEventListener('careerpilot:storage-updated:careerpilot_applications', syncApplications);
     };
   }, []);
 

@@ -315,14 +315,70 @@ function stripMongoMeta(document = {}) {
 }
 
 async function ensureMongoIndexes(db) {
+  const createCompatibleIndex = async (collectionName, keys, options = {}) => {
+    try {
+      await db.collection(collectionName).createIndex(keys, options);
+    } catch (error) {
+      if (['IndexKeySpecsConflict', 'IndexOptionsConflict'].includes(error.codeName)) {
+        console.warn(`MongoDB index already exists with different options on ${collectionName}. Continuing with existing index.`);
+        return;
+      }
+      throw error;
+    }
+  };
+
   await Promise.all([
-    db.collection(COLLECTIONS.storage).createIndex({ key: 1 }, { unique: true }),
-    db.collection(COLLECTIONS.users).createIndex({ email: 1 }, { unique: true }),
-    db.collection(COLLECTIONS.studentProfiles).createIndex({ userId: 1 }, { unique: true, sparse: true }),
-    db.collection(COLLECTIONS.studentProfiles).createIndex({ email: 1 }, { sparse: true }),
-    db.collection(COLLECTIONS.sessions).createIndex({ token: 1 }, { unique: true }),
-    db.collection(COLLECTIONS.sessions).createIndex({ userId: 1 }),
+    createCompatibleIndex(COLLECTIONS.storage, { key: 1 }, { unique: true }),
+    createCompatibleIndex(COLLECTIONS.users, { email: 1 }, { unique: true }),
+    createCompatibleIndex(COLLECTIONS.studentProfiles, { userId: 1 }, { unique: true, sparse: true }),
+    createCompatibleIndex(COLLECTIONS.studentProfiles, { email: 1 }, { sparse: true }),
+    createCompatibleIndex(COLLECTIONS.sessions, { token: 1 }, { unique: true }),
+    createCompatibleIndex(COLLECTIONS.sessions, { userId: 1 }),
   ]);
+}
+
+async function migrateLegacyStudentProfileSingleton(db) {
+  const collection = db.collection(COLLECTIONS.studentProfiles);
+  const legacyProfile = await collection.findOne({ _id: 'primary' });
+  if (!legacyProfile) return;
+
+  const migratedProfile = sanitizeStudentProfile(stripMongoMeta(legacyProfile));
+  const hasOwner = migratedProfile.userId || migratedProfile.email;
+
+  if (hasOwner) {
+    const filter = migratedProfile.userId
+      ? { userId: migratedProfile.userId }
+      : { email: migratedProfile.email };
+    await collection.updateOne(filter, { $setOnInsert: migratedProfile }, { upsert: true });
+  }
+
+  await collection.deleteOne({ _id: 'primary' });
+}
+
+async function ensureStudentProfilesForStudentUsers(db) {
+  const users = await db.collection(COLLECTIONS.users).find({ role: 'student' }).toArray();
+  if (!users.length) return;
+
+  const profiles = await db.collection(COLLECTIONS.studentProfiles).find({
+    _id: { $ne: 'primary' },
+  }).toArray();
+  const existingProfileKeys = new Set();
+  profiles.forEach((profile = {}) => {
+    if (profile.userId) existingProfileKeys.add(`id:${profile.userId}`);
+    if (profile.email) existingProfileKeys.add(`email:${String(profile.email).toLowerCase()}`);
+  });
+
+  const missingProfiles = users
+    .filter((user = {}) => (
+      user.id &&
+      !existingProfileKeys.has(`id:${user.id}`) &&
+      !existingProfileKeys.has(`email:${String(user.email || '').toLowerCase()}`)
+    ))
+    .map((user) => createStudentProfileForUser(user));
+
+  if (missingProfiles.length) {
+    await db.collection(COLLECTIONS.studentProfiles).insertMany(missingProfiles);
+  }
 }
 
 async function readFileSeedDb() {
@@ -346,9 +402,10 @@ function getPersistedStorageEntries(storage = {}) {
 
 async function replaceMongoCollection(db, name, docs = []) {
   const collection = db.collection(COLLECTIONS[name]);
+  const safeDocs = name === 'studentProfiles' ? sanitizeStudentProfiles(docs) : docs;
   await collection.deleteMany({});
-  if (docs.length > 0) {
-    await collection.insertMany(docs);
+  if (safeDocs.length > 0) {
+    await collection.insertMany(safeDocs);
   }
 }
 
@@ -398,6 +455,11 @@ async function seedMongoDatabase(db, seedState = createDefaultDb()) {
 }
 
 async function readMongoCollectionDocs(db, name) {
+  if (name === 'studentProfiles') {
+    await migrateLegacyStudentProfileSingleton(db);
+    await ensureStudentProfilesForStudentUsers(db);
+    return db.collection(COLLECTIONS[name]).find({ _id: { $ne: 'primary' } }).toArray();
+  }
   return db.collection(COLLECTIONS[name]).find({}).toArray();
 }
 
@@ -428,6 +490,8 @@ async function doEnsureDb() {
     const mongoDb = await getMongoCollection();
     if (mongoDb) {
       await ensureMongoIndexes(mongoDb);
+      await migrateLegacyStudentProfileSingleton(mongoDb);
+      await ensureStudentProfilesForStudentUsers(mongoDb);
       const isSeeded = await mongoDb.collection(COLLECTIONS.jobs).countDocuments({}, { limit: 1 });
       if (!isSeeded) {
         const seedDb = await readFileSeedDb();
@@ -684,7 +748,7 @@ function getOwnedJobs(db, recruiter) {
       if (job.recruiterId) return job.recruiterId === recruiter.id;
       if (job.recruiterEmail) return job.recruiterEmail.toLowerCase() === String(recruiter.email || '').toLowerCase();
       if (job.postedBy) return job.postedBy.toLowerCase() === String(recruiter.email || '').toLowerCase();
-      return true;
+      return false;
     });
 }
 
@@ -845,7 +909,7 @@ function parseStoredJsonValue(value, fallback) {
 }
 
 function applyStorageValue(db, key, incomingValue) {
-  if (BLOCKED_STORAGE_KEYS.has(key)) {
+  if (BLOCKED_STORAGE_KEYS.has(key) || DERIVED_STORAGE_KEYS.has(key)) {
     delete db.storage[key];
     return;
   }
@@ -870,6 +934,11 @@ function applyStorageValue(db, key, incomingValue) {
 }
 
 function removeStorageValue(db, key) {
+  if (DERIVED_STORAGE_KEYS.has(key)) {
+    delete db.storage[key];
+    return;
+  }
+
   delete db.storage[key];
 
   switch (COLLECTION_STORAGE_KEY_MAP[key]) {
@@ -1081,6 +1150,8 @@ app.get('/api/bootstrap', async (_req, res) => {
 
 app.put('/api/storage/:key', async (req, res) => {
   const db = await readDb();
+  const user = await requireAuthenticatedUser(req, res, db);
+  if (!user) return;
   applyStorageValue(db, req.params.key, req.body.value);
   syncUsersToStorage(db, db.users || parseUsersFromStorage(db.storage));
   syncCollectionStorage(db);
@@ -1090,6 +1161,8 @@ app.put('/api/storage/:key', async (req, res) => {
 
 app.post('/api/storage/bulk', async (req, res) => {
   const db = await readDb();
+  const user = await requireAuthenticatedUser(req, res, db);
+  if (!user) return;
   const entries = req.body.entries || {};
   Object.entries(entries).forEach(([key, value]) => {
     applyStorageValue(db, key, value);
@@ -1102,6 +1175,8 @@ app.post('/api/storage/bulk', async (req, res) => {
 
 app.delete('/api/storage/:key', async (req, res) => {
   const db = await readDb();
+  const user = await requireAuthenticatedUser(req, res, db);
+  if (!user) return;
   removeStorageValue(db, req.params.key);
   syncUsersToStorage(db, db.users || parseUsersFromStorage(db.storage));
   syncCollectionStorage(db);
@@ -1239,26 +1314,46 @@ app.put('/api/jobs', async (req, res) => {
   res.status(status).json(result);
 });
 
-app.get('/api/companies', async (_req, res) => {
+app.get('/api/companies', async (req, res) => {
   const db = await readDb();
+  const user = await requireAuthenticatedUser(req, res, db);
+  if (!user) return;
+  if (!['admin', 'recruiter'].includes(user.role)) {
+    return res.status(403).json({ error: 'Company data is available only for recruiters or placement heads.' });
+  }
   res.json(db.companies);
 });
 
 app.put('/api/companies', async (req, res) => {
   const db = await readDb();
+  const user = await requireAuthenticatedUser(req, res, db);
+  if (!user) return;
+  if (user.role !== 'admin') {
+    return res.status(403).json({ error: 'Only placement heads can manage companies.' });
+  }
   db.companies = Array.isArray(req.body) ? req.body : Array.isArray(req.body.companies) ? req.body.companies : [];
   syncCollectionStorage(db);
   await writeDb(db);
   res.json({ ok: true, count: db.companies.length });
 });
 
-app.get('/api/students', async (_req, res) => {
+app.get('/api/students', async (req, res) => {
   const db = await readDb();
+  const user = await requireAuthenticatedUser(req, res, db);
+  if (!user) return;
+  if (user.role !== 'admin') {
+    return res.status(403).json({ error: 'Student registry is available only for placement heads.' });
+  }
   res.json(db.students);
 });
 
 app.put('/api/students', async (req, res) => {
   const db = await readDb();
+  const user = await requireAuthenticatedUser(req, res, db);
+  if (!user) return;
+  if (user.role !== 'admin') {
+    return res.status(403).json({ error: 'Only placement heads can manage student records.' });
+  }
   db.students = Array.isArray(req.body) ? req.body : Array.isArray(req.body.students) ? req.body.students : [];
   syncCollectionStorage(db);
   await writeDb(db);
@@ -1272,6 +1367,11 @@ app.get('/api/announcements', async (_req, res) => {
 
 app.put('/api/announcements', async (req, res) => {
   const db = await readDb();
+  const user = await requireAuthenticatedUser(req, res, db);
+  if (!user) return;
+  if (user.role !== 'admin') {
+    return res.status(403).json({ error: 'Only placement heads can manage announcements.' });
+  }
   db.announcements = Array.isArray(req.body) ? req.body : Array.isArray(req.body.announcements) ? req.body.announcements : [];
   syncCollectionStorage(db);
   await writeDb(db);

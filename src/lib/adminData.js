@@ -1,4 +1,3 @@
-import { getStudentProfile } from './studentProfile';
 import { stateApi } from './backendSync';
 
 const COMPANIES_KEY = 'careerpilot_companies';
@@ -154,18 +153,6 @@ export function deriveStudentsFromApplications(applications = []) {
       placement,
     }));
   });
-
-  const profile = getStudentProfile();
-  if (profile?.name && !studentMap.has(profile.name)) {
-    studentMap.set(profile.name, normalizeStudentRecord({
-      id: 'current-profile-student',
-      name: profile.name,
-      role: profile.role || profile.degree || 'Open to roles',
-      cgpa: Number(profile.gpa || 0),
-      branch: profile.degree || profile.branch || 'Computer Science',
-      placement: 'Open',
-    }));
-  }
 
   return Array.from(studentMap.values());
 }

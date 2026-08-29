@@ -25,6 +25,10 @@ const STORAGE_SYNC_BLOCKLIST = new Set([
   'careerpilot_session_token',
   'careerpilot_applications',
   'careerpilot_notifications',
+  'careerpilot_jobs',
+  'careerpilot_companies',
+  'careerpilot_students',
+  'careerpilot_announcements',
   'careerpilot_student_profile',
   'careerpilot_student_onboarding_complete',
 ]);

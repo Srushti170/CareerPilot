@@ -4,16 +4,12 @@ import { Card, MetricCard } from './MetricCard';
 import { getDepartmentBreakdown, getPlacementStats, getStoredAnnouncements, getStoredCompanies, getStoredStudents, mergeStudentRecords, normalizeCompany, saveStoredAnnouncements, saveStoredCompanies } from '../lib/adminData';
 import { getStoredJobs } from '../lib/recruiterData';
 
-export function PlacementDashboard() {
+export function PlacementDashboard({ applications = [] }) {
   const [showModal, setShowModal] = useState(false);
   const [companies, setCompanies] = useState(() => getStoredCompanies());
   const [students, setStudents] = useState(() => getStoredStudents());
   const [jobs, setJobs] = useState(() => getStoredJobs());
   const [announcements, setAnnouncements] = useState(() => getStoredAnnouncements());
-  const [applications, setApplications] = useState(() => {
-    const stored = localStorage.getItem('careerpilot_applications');
-    return stored ? JSON.parse(stored) : [];
-  });
   const [showAnnouncementModal, setShowAnnouncementModal] = useState(false);
   const [draft, setDraft] = useState({
     companyName: '',
@@ -32,23 +28,17 @@ export function PlacementDashboard() {
     const syncStudents = () => setStudents(getStoredStudents());
     const syncJobs = () => setJobs(getStoredJobs());
     const syncAnnouncements = () => setAnnouncements(getStoredAnnouncements());
-    const syncApplications = () => {
-      const stored = localStorage.getItem('careerpilot_applications');
-      setApplications(stored ? JSON.parse(stored) : []);
-    };
 
     window.addEventListener('careerpilot:companies-updated', syncCompanies);
     window.addEventListener('careerpilot:students-updated', syncStudents);
     window.addEventListener('careerpilot:jobs-updated', syncJobs);
     window.addEventListener('careerpilot:announcements-updated', syncAnnouncements);
-    window.addEventListener('careerpilot:storage-updated:careerpilot_applications', syncApplications);
 
     return () => {
       window.removeEventListener('careerpilot:companies-updated', syncCompanies);
       window.removeEventListener('careerpilot:students-updated', syncStudents);
       window.removeEventListener('careerpilot:jobs-updated', syncJobs);
       window.removeEventListener('careerpilot:announcements-updated', syncAnnouncements);
-      window.removeEventListener('careerpilot:storage-updated:careerpilot_applications', syncApplications);
     };
   }, []);
 
