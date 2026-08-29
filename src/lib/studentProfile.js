@@ -139,6 +139,16 @@ export function saveStudentProfile(profile, user = {}) {
   return normalized;
 }
 
+export async function hydrateStudentProfile(user = {}) {
+  const activeUser = user.id || user.email ? user : getCurrentUser();
+  const profile = await stateApi.getStudentProfile();
+  const normalized = normalizeStudentProfile(profile || {}, activeUser);
+  const scope = activeUser.id || activeUser.email || normalized.userId || normalized.email;
+  setScopedJson(STUDENT_PROFILE_KEY, normalized, scope);
+  setScopedJson(STUDENT_ONBOARDING_KEY, normalized.onboardingComplete, scope);
+  return normalized;
+}
+
 export function isStudentOnboardingComplete(user = {}) {
   const storedFlag = getScopedJson(STUDENT_ONBOARDING_KEY, null, user.id || user.email);
   if (storedFlag !== null) {

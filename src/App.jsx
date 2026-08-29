@@ -19,7 +19,7 @@ import { InterviewDesk } from './components/InterviewDesk';
 import { GlobalReports } from './components/GlobalReports';
 import { Card } from './components/ui/Card';
 import { motion, AnimatePresence } from 'motion/react';
-import { getStudentProfile, isStudentOnboardingComplete } from './lib/studentProfile';
+import { getStudentProfile, hydrateStudentProfile, isStudentOnboardingComplete } from './lib/studentProfile';
 import { authApi, stateApi } from './lib/backendSync';
 import { getScopedJson, setScopedJson } from './lib/userScopedStorage';
 
@@ -150,6 +150,9 @@ export default function App() {
       setNotifications(scopedNotifs);
       setScopedJson('careerpilot_applications', scopedApps, getUserScope(user));
       setScopedJson('careerpilot_notifications', scopedNotifs, getUserScope(user));
+      if (user.role === 'student') {
+        await hydrateStudentProfile(user);
+      }
     } catch (error) {
       console.warn('Unable to refresh user-owned state.', error);
     }
@@ -168,6 +171,11 @@ export default function App() {
               setIsAuthenticated(true);
               setPersona(sessionUser.user.role || 'student');
               setNeedsOnboarding(false);
+              if (sessionUser.user.role === 'student') {
+                hydrateStudentProfile(sessionUser.user).catch((error) => {
+                  console.warn('Student profile hydrate fallback to scoped browser cache.', error);
+                });
+              }
             } else {
               throw new Error('No user returned');
             }
@@ -343,6 +351,11 @@ export default function App() {
     setNotifications(scopeNotifications(getScopedJson('careerpilot_notifications', [], getUserScope(user)), user));
     setIsAuthenticated(true);
     setActiveTab('dashboard');
+    if (user.role === 'student') {
+      hydrateStudentProfile(user).catch((error) => {
+        console.warn('Student profile hydrate fallback to scoped browser cache.', error);
+      });
+    }
     Promise.all([stateApi.getApplications(), stateApi.getNotifications()])
       .then(([nextApplications, nextNotifications]) => {
         const scopedApps = scopeApplications(nextApplications, user);

@@ -25,7 +25,6 @@ const geminiModel = process.env.GEMINI_MODEL || process.env.VITE_GEMINI_MODEL ||
 const serverAi = geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey }) : null;
 let mongoClientPromise = null;
 let mongoConnectionState = mongoUri ? 'pending' : 'disabled';
-const PROFILE_DOCUMENT_ID = 'primary';
 const notificationStreams = new Map();
 
 const COLLECTIONS = {
@@ -52,7 +51,6 @@ const COLLECTION_STORAGE_KEY_MAP = {
   careerpilot_companies: 'companies',
   careerpilot_students: 'students',
   careerpilot_announcements: 'announcements',
-  careerpilot_student_profile: 'studentProfile',
 };
 
 const DERIVED_STORAGE_KEYS = new Set([
@@ -136,6 +134,7 @@ function createDefaultDb() {
     students: DEFAULT_STUDENTS,
     announcements: DEFAULT_ANNOUNCEMENTS,
     studentProfile: DEFAULT_STUDENT_PROFILE,
+    studentProfiles: [],
     payments: [],
     emails: [],
     calendarEvents: [],
@@ -207,6 +206,71 @@ function sanitizeStudentProfile(profile = {}) {
   return profile;
 }
 
+function sanitizeStudentProfiles(profiles = []) {
+  const seen = new Set();
+  return (Array.isArray(profiles) ? profiles : [])
+    .map(sanitizeStudentProfile)
+    .filter((profile = {}) => {
+      const key = profile.userId || String(profile.email || '').toLowerCase();
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+function createStudentProfileForUser(user = {}) {
+  return {
+    ...DEFAULT_STUDENT_PROFILE,
+    userId: user.id || '',
+    name: user.name || '',
+    email: user.email || '',
+  };
+}
+
+function profileBelongsToUser(profile = {}, user = {}) {
+  if (!profile || !user) return false;
+  if (profile.userId && user.id) return profile.userId === user.id;
+  if (profile.email && user.email) {
+    return String(profile.email).toLowerCase() === String(user.email).toLowerCase();
+  }
+  return false;
+}
+
+function getStudentProfileForUser(db = {}, user = {}) {
+  const profiles = sanitizeStudentProfiles(db.studentProfiles);
+  const matchingProfile = profiles.find((profile) => profileBelongsToUser(profile, user));
+  return {
+    ...createStudentProfileForUser(user),
+    ...(matchingProfile || {}),
+    userId: user.id || matchingProfile?.userId || '',
+    name: matchingProfile?.name || user.name || '',
+    email: matchingProfile?.email || user.email || '',
+  };
+}
+
+function upsertStudentProfileForUser(db = {}, user = {}, profile = {}) {
+  const profiles = sanitizeStudentProfiles(db.studentProfiles);
+  const incomingProfile = sanitizeStudentProfile(profile);
+  const normalizedProfile = {
+    ...createStudentProfileForUser(user),
+    ...incomingProfile,
+    userId: user.id,
+    email: incomingProfile.email || user.email || '',
+    name: incomingProfile.name || user.name || '',
+  };
+  const existingIndex = profiles.findIndex((entry) => profileBelongsToUser(entry, user));
+
+  if (existingIndex >= 0) {
+    profiles[existingIndex] = normalizedProfile;
+  } else {
+    profiles.push(normalizedProfile);
+  }
+
+  db.studentProfiles = profiles;
+  db.studentProfile = DEFAULT_STUDENT_PROFILE;
+  return normalizedProfile;
+}
+
 function sanitizeDemoContent(db = {}) {
   return {
     ...db,
@@ -217,6 +281,7 @@ function sanitizeDemoContent(db = {}) {
     students: sanitizeSeededStudents(db.students),
     announcements: sanitizeSeededAnnouncements(db.announcements),
     studentProfile: sanitizeStudentProfile(db.studentProfile),
+    studentProfiles: sanitizeStudentProfiles(db.studentProfiles),
   };
 }
 
@@ -253,6 +318,8 @@ async function ensureMongoIndexes(db) {
   await Promise.all([
     db.collection(COLLECTIONS.storage).createIndex({ key: 1 }, { unique: true }),
     db.collection(COLLECTIONS.users).createIndex({ email: 1 }, { unique: true }),
+    db.collection(COLLECTIONS.studentProfiles).createIndex({ userId: 1 }, { unique: true, sparse: true }),
+    db.collection(COLLECTIONS.studentProfiles).createIndex({ email: 1 }, { sparse: true }),
     db.collection(COLLECTIONS.sessions).createIndex({ token: 1 }, { unique: true }),
     db.collection(COLLECTIONS.sessions).createIndex({ userId: 1 }),
   ]);
@@ -283,14 +350,6 @@ async function replaceMongoCollection(db, name, docs = []) {
   if (docs.length > 0) {
     await collection.insertMany(docs);
   }
-}
-
-async function replaceMongoSingleton(db, name, document = {}) {
-  await db.collection(COLLECTIONS[name]).replaceOne(
-    { _id: PROFILE_DOCUMENT_ID },
-    { _id: PROFILE_DOCUMENT_ID, ...document },
-    { upsert: true }
-  );
 }
 
 async function replaceMongoStorage(db, storage = {}) {
@@ -334,7 +393,7 @@ async function seedMongoDatabase(db, seedState = createDefaultDb()) {
   await replaceMongoCollection(db, 'emails', normalized.emails || []);
   await replaceMongoCollection(db, 'calendarEvents', normalized.calendarEvents || []);
   await replaceMongoCollection(db, 'reports', normalized.reports || []);
-  await replaceMongoSingleton(db, 'studentProfiles', normalized.studentProfile || DEFAULT_STUDENT_PROFILE);
+  await replaceMongoCollection(db, 'studentProfiles', normalized.studentProfiles || []);
   await replaceMongoStorage(db, normalized.storage || {});
 }
 
@@ -438,7 +497,8 @@ async function readDb() {
         emails: emails.map(stripMongoMeta),
         calendarEvents: calendarEvents.map(stripMongoMeta),
         reports: reports.map(stripMongoMeta),
-        studentProfile: stripMongoMeta(studentProfiles[0] || DEFAULT_STUDENT_PROFILE),
+        studentProfile: DEFAULT_STUDENT_PROFILE,
+        studentProfiles: studentProfiles.map(stripMongoMeta).map(sanitizeStudentProfile),
       };
     }
   }
@@ -458,7 +518,11 @@ async function readDb() {
     companies: Array.isArray(parsed.companies) ? parsed.companies : DEFAULT_COMPANIES,
     students: Array.isArray(parsed.students) ? parsed.students : DEFAULT_STUDENTS,
     announcements: Array.isArray(parsed.announcements) ? parsed.announcements : DEFAULT_ANNOUNCEMENTS,
-    studentProfile: parsed.studentProfile || DEFAULT_STUDENT_PROFILE,
+    studentProfile: DEFAULT_STUDENT_PROFILE,
+    studentProfiles: [
+      ...(Array.isArray(parsed.studentProfiles) ? parsed.studentProfiles : []),
+      ...(parsed.studentProfile?.userId || parsed.studentProfile?.email ? [parsed.studentProfile] : []),
+    ],
   });
   syncUsersToStorage(db, db.users);
   syncCollectionStorage(db);
@@ -516,7 +580,7 @@ async function writeDb(db) {
         await replaceMongoCollection(mongoDb, 'emails', sanitizedDb.emails || []);
         await replaceMongoCollection(mongoDb, 'calendarEvents', sanitizedDb.calendarEvents || []);
         await replaceMongoCollection(mongoDb, 'reports', sanitizedDb.reports || []);
-        await replaceMongoSingleton(mongoDb, 'studentProfiles', sanitizedDb.studentProfile || DEFAULT_STUDENT_PROFILE);
+        await replaceMongoCollection(mongoDb, 'studentProfiles', sanitizedDb.studentProfiles || []);
         await replaceMongoStorage(mongoDb, sanitizedDb.storage || {});
         return sanitizedDb;
       }
@@ -800,18 +864,8 @@ function applyStorageValue(db, key, incomingValue) {
         ? parseStoredJsonValue(value, [])
         : [];
       break;
-    case 'studentProfile':
-      db.studentProfile = parseStoredJsonValue(value, DEFAULT_STUDENT_PROFILE) || DEFAULT_STUDENT_PROFILE;
-      break;
     default:
       break;
-  }
-
-  if (key === 'careerpilot_student_onboarding_complete') {
-    db.studentProfile = {
-      ...(db.studentProfile || DEFAULT_STUDENT_PROFILE),
-      onboardingComplete: Boolean(parseStoredJsonValue(value, false)),
-    };
   }
 }
 
@@ -826,9 +880,6 @@ function removeStorageValue(db, key) {
     case 'students':
     case 'announcements':
       db[COLLECTION_STORAGE_KEY_MAP[key]] = [];
-      break;
-    case 'studentProfile':
-      db.studentProfile = DEFAULT_STUDENT_PROFILE;
       break;
     default:
       break;
@@ -1227,19 +1278,37 @@ app.put('/api/announcements', async (req, res) => {
   res.json({ ok: true, count: db.announcements.length });
 });
 
-app.get('/api/student-profile', async (_req, res) => {
+app.get('/api/student-profile', async (req, res) => {
   const db = await readDb();
-  res.json(db.studentProfile);
+  const user = await requireAuthenticatedUser(req, res, db);
+  if (!user) return;
+  if (user.role !== 'student') {
+    return res.status(403).json({ error: 'Student profile is available only for student accounts.' });
+  }
+  res.json(getStudentProfileForUser(db, user));
 });
 
 app.put('/api/student-profile', async (req, res) => {
+  let result, status = 200;
   await withDbLock(async () => {
     const db = await readDb();
-    db.studentProfile = req.body?.profile || req.body || DEFAULT_STUDENT_PROFILE;
+    const user = await getAuthenticatedUser(req, db);
+    if (!user) {
+      status = 401;
+      result = { error: 'Authentication required.' };
+      return;
+    }
+    if (user.role !== 'student') {
+      status = 403;
+      result = { error: 'Student profile is available only for student accounts.' };
+      return;
+    }
+    const profile = upsertStudentProfileForUser(db, user, req.body?.profile || req.body || {});
     syncCollectionStorage(db);
     await writeDb(db);
+    result = { ok: true, profile };
   });
-  res.json({ ok: true });
+  res.status(status).json(result);
 });
 
 app.post('/api/auth/login', async (req, res) => {
@@ -1294,6 +1363,9 @@ app.post('/api/auth/register', async (req, res) => {
     syncUsersToStorage(db, updatedUsers);
     const session = createSession(user);
     db.sessions.push(session);
+    if (role === 'student') {
+      upsertStudentProfileForUser(db, user, { name: user.name, email: user.email, onboardingComplete: false });
+    }
     await persistUser(user);
     await writeDb(db);
     result = { user: sanitizeUser(user), sessionToken: session.token };
@@ -1323,9 +1395,12 @@ app.get('/api/auth/me', async (req, res) => {
 
 app.put('/api/auth/profile', async (req, res) => {
   const db = await readDb();
-  const { currentEmail, name, email } = req.body;
+  const authenticatedUser = await requireAuthenticatedUser(req, res, db);
+  if (!authenticatedUser) return;
+
+  const { name, email } = req.body;
   const users = db.users || parseUsersFromStorage(db.storage);
-  const existingUser = users.find((entry) => entry.email.toLowerCase() === String(currentEmail || '').toLowerCase());
+  const existingUser = users.find((entry) => entry.id === authenticatedUser.id);
 
   if (!existingUser) {
     return res.status(404).json({ error: 'User not found.' });
@@ -1349,12 +1424,13 @@ app.put('/api/auth/profile', async (req, res) => {
   };
 
   updateUserInStorage(db, existingUser.email, updatedUser);
-  if (db.studentProfile?.email?.toLowerCase() === existingUser.email.toLowerCase()) {
-    db.studentProfile = {
-      ...db.studentProfile,
+  if (existingUser.role === 'student') {
+    const existingProfile = getStudentProfileForUser(db, existingUser);
+    upsertStudentProfileForUser(db, updatedUser, {
+      ...existingProfile,
       name: updatedUser.name,
       email: updatedUser.email,
-    };
+    });
   }
   syncCollectionStorage(db);
   await persistUser(updatedUser);
