@@ -5,7 +5,7 @@ import {
   getApplicationStatsForJob,
   getDaysUntilDeadline,
   getJobStatusTone,
-  getStoredJobs,
+  getRecruiterOwnedJobs,
   normalizeJob,
   saveStoredJobs,
 } from '../lib/recruiterData';
@@ -44,7 +44,7 @@ function getCurrentUser() {
 }
 
 export function JobManagement({ applications = [] }) {
-  const [jobs, setJobs] = useState(() => getStoredJobs());
+  const [jobs, setJobs] = useState(() => getRecruiterOwnedJobs());
   const [showModal, setShowModal] = useState(false);
   const [editingJob, setEditingJob] = useState(null);
   const [analyticsJob, setAnalyticsJob] = useState(null);
@@ -52,7 +52,7 @@ export function JobManagement({ applications = [] }) {
   const [jobDraft, setJobDraft] = useState(createEmptyJobDraft());
 
   useEffect(() => {
-    const syncJobs = () => setJobs(getStoredJobs());
+    const syncJobs = () => setJobs(getRecruiterOwnedJobs());
     window.addEventListener('careerpilot:jobs-updated', syncJobs);
     return () => window.removeEventListener('careerpilot:jobs-updated', syncJobs);
   }, []);

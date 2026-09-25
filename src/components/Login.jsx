@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { saveStudentProfile } from '../lib/studentProfile';
 import { authApi } from '../lib/backendSync';
 
 // ─────────────────────────────────────────────
@@ -330,9 +329,6 @@ export function Login({ onLogin }) {
       }
 
       const newUser = { name: name.trim(), email: normalizedEmail, password, role };
-      if (role === 'student') {
-        await saveStudentProfile({ name: newUser.name, email: newUser.email, role: '', skills: [], onboardingComplete: false }, newUser);
-      }
 
       try {
         const { user: createdUser, sessionToken } = await authApi.register(newUser);

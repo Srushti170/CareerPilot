@@ -5,7 +5,7 @@ import { cn } from '../lib/utils';
 import {
   buildCandidateFromApplication,
   getApplicationStatsForJob,
-  getStoredJobs,
+  getRecruiterOwnedJobs,
 } from '../lib/recruiterData';
 
 function getStatusPill(status) {
@@ -18,7 +18,7 @@ function getStatusPill(status) {
 }
 
 export function RecruiterDashboard({ setActiveTab, applications = [] }) {
-  const [jobs, setJobs] = useState(() => getStoredJobs());
+  const [jobs, setJobs] = useState(() => getRecruiterOwnedJobs());
   const [minCgpa, setMinCgpa] = useState('All');
   const [branch, setBranch] = useState('All');
   const [matchPercent, setMatchPercent] = useState('All');
@@ -26,7 +26,7 @@ export function RecruiterDashboard({ setActiveTab, applications = [] }) {
   const [advancedRole, setAdvancedRole] = useState('All');
 
   useEffect(() => {
-    const syncJobs = () => setJobs(getStoredJobs());
+    const syncJobs = () => setJobs(getRecruiterOwnedJobs());
     window.addEventListener('careerpilot:jobs-updated', syncJobs);
     return () => window.removeEventListener('careerpilot:jobs-updated', syncJobs);
   }, []);

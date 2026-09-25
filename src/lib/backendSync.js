@@ -31,6 +31,11 @@ const STORAGE_SYNC_BLOCKLIST = new Set([
   'careerpilot_announcements',
   'careerpilot_student_profile',
   'careerpilot_student_onboarding_complete',
+  'careerpilot_interview_feedback',
+  'careerpilot_resume_versions',
+  'careerpilot_latest_resume_analysis',
+  'careerpilot_settings',
+  'careerpilot_notification_preferences',
 ]);
 const LEGACY_SHARED_CACHE_KEYS = [
   'careerpilot_applications',
@@ -49,6 +54,12 @@ function emitStorageSyncEvent(key, value = null, action = 'set') {
       detail: { key, value, action },
     }));
   }
+}
+
+function isStorageSyncBlocked(key) {
+  return Array.from(STORAGE_SYNC_BLOCKLIST).some(
+    (blockedKey) => key === blockedKey || key.startsWith(`${blockedKey}:`)
+  );
 }
 
 async function request(path, options = {}) {
@@ -74,12 +85,14 @@ function scheduleSync() {
   if (syncTimer) return;
   syncTimer = window.setTimeout(async () => {
     const entries = Object.fromEntries(
-      Array.from(pendingEntries).filter(([key]) => !STORAGE_SYNC_BLOCKLIST.has(key))
+      Array.from(pendingEntries).filter(([key]) => !isStorageSyncBlocked(key))
     );
-    const deletes = Array.from(pendingDeletes).filter((key) => !STORAGE_SYNC_BLOCKLIST.has(key));
+    const deletes = Array.from(pendingDeletes).filter((key) => !isStorageSyncBlocked(key));
     pendingEntries.clear();
     pendingDeletes.clear();
     syncTimer = null;
+
+    if (!rawLocalStorage.getItem('careerpilot_session_token')) return;
 
     try {
       if (Object.keys(entries).length > 0) {
@@ -102,7 +115,7 @@ function patchLocalStorage() {
 
   window.localStorage.setItem = (key, value) => {
     rawLocalStorage.setItem(key, value);
-    if (STORAGE_SYNC_BLOCKLIST.has(key)) {
+    if (isStorageSyncBlocked(key)) {
       emitStorageSyncEvent(key, String(value), 'set');
       return;
     }
@@ -114,7 +127,7 @@ function patchLocalStorage() {
 
   window.localStorage.removeItem = (key) => {
     rawLocalStorage.removeItem(key);
-    if (STORAGE_SYNC_BLOCKLIST.has(key)) {
+    if (isStorageSyncBlocked(key)) {
       emitStorageSyncEvent(key, null, 'remove');
       return;
     }
@@ -128,7 +141,7 @@ function patchLocalStorage() {
     const keys = Object.keys(window.localStorage);
     keys.forEach((key) => {
       rawLocalStorage.removeItem(key);
-      if (STORAGE_SYNC_BLOCKLIST.has(key)) {
+      if (isStorageSyncBlocked(key)) {
         emitStorageSyncEvent(key, null, 'remove');
         return;
       }
@@ -149,7 +162,7 @@ export async function initializeBackendPersistence() {
     const payload = await request('/bootstrap');
     const storage = payload?.storage || {};
     Object.entries(storage).forEach(([key, value]) => {
-      if (STORAGE_SYNC_BLOCKLIST.has(key)) return;
+      if (isStorageSyncBlocked(key)) return;
       rawLocalStorage.setItem(key, value);
     });
     rawLocalStorage.removeItem('careerpilot_users');

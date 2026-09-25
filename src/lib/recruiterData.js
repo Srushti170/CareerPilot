@@ -93,6 +93,21 @@ export function getPublishedJobs() {
   return getStoredJobs().filter((job) => job.status !== 'Draft');
 }
 
+export function getRecruiterOwnedJobs() {
+  let recruiter = null;
+  try {
+    recruiter = JSON.parse(localStorage.getItem('careerpilot_current_user') || 'null');
+  } catch {
+    recruiter = null;
+  }
+  if (!recruiter || recruiter.role !== 'recruiter') return [];
+  return getStoredJobs().filter((job) => (
+    job.recruiterId === recruiter.id ||
+    job.recruiterEmail?.toLowerCase() === String(recruiter.email || '').toLowerCase() ||
+    job.postedBy?.toLowerCase() === String(recruiter.email || '').toLowerCase()
+  ));
+}
+
 export function getApplicationStatsForJob(job, applications = []) {
   const matches = applications.filter(
     (app) =>

@@ -1,3 +1,5 @@
+import { getScopedJson, setScopedJson } from './userScopedStorage';
+
 export const INTERVIEW_FEEDBACK_KEY = 'careerpilot_interview_feedback';
 
 const SEEDED_FEEDBACK_IDS = new Set(['fb1', 'fb2', 'fb3']);
@@ -18,21 +20,16 @@ export function normalizeInterviewFeedback(entry) {
 }
 
 export function getInterviewFeedbackHistory() {
-  const stored = localStorage.getItem(INTERVIEW_FEEDBACK_KEY);
-  if (!stored) {
-    return [];
-  }
-
-  const normalized = JSON.parse(stored)
+  const normalized = getScopedJson(INTERVIEW_FEEDBACK_KEY, [])
     .filter((entry = {}) => !SEEDED_FEEDBACK_IDS.has(String(entry.id || '')))
     .map(normalizeInterviewFeedback);
-  localStorage.setItem(INTERVIEW_FEEDBACK_KEY, JSON.stringify(normalized));
+  setScopedJson(INTERVIEW_FEEDBACK_KEY, normalized);
   return normalized;
 }
 
 export function saveInterviewFeedbackHistory(history) {
   const normalized = history.map(normalizeInterviewFeedback);
-  localStorage.setItem(INTERVIEW_FEEDBACK_KEY, JSON.stringify(normalized));
+  setScopedJson(INTERVIEW_FEEDBACK_KEY, normalized);
   return normalized;
 }
 

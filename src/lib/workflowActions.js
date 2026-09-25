@@ -16,9 +16,11 @@ function readNotifications() {
 
 function isVisibleToCurrentUser(notification, currentUser) {
   if (!currentUser) return true;
-  if (notification.recipientId) return notification.recipientId === currentUser.id;
+  if (notification.recipientId === currentUser.id) return true;
   if (notification.recipientEmail) return notification.recipientEmail.toLowerCase() === String(currentUser.email || '').toLowerCase();
-  if (notification.recipientRole) return notification.recipientRole === currentUser.role;
+  if (!notification.recipientId && !notification.recipientEmail && notification.recipientRole) {
+    return notification.recipientRole === currentUser.role;
+  }
   return false;
 }
 

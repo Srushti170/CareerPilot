@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Card } from './ui/Card';
-import { getStudentProfile, saveStudentProfile } from '../lib/studentProfile';
+import { getStudentProfile, hydrateStudentProfile, saveStudentProfileAndSync } from '../lib/studentProfile';
 import { authApi } from '../lib/backendSync';
 
 const inputClass = "w-full px-4 py-2.5 rounded-lg bg-white border border-slate-200 focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-colors text-sm";
@@ -26,8 +26,53 @@ export function Profile({ currentUser, setCurrentUser }) {
   const [editGraduation, setEditGraduation] = useState(profile.graduation);
   const [newSkillText, setNewSkillText] = useState('');
 
+  useEffect(() => {
+    const userScope = currentUser?.id || currentUser?.email;
+    const syncEditableFields = (nextProfile) => {
+      if (isEditOpen) return;
+      setEditName(nextProfile.name || '');
+      setEditLocation(nextProfile.location || '');
+      setEditSummary(nextProfile.summary || '');
+      setEditUniversity(nextProfile.university || '');
+      setEditGpa(nextProfile.gpa || nextProfile.cgpa || '');
+      setEditCoursework(nextProfile.coursework || '');
+      setEditGraduation(nextProfile.graduation || '');
+    };
+
+    const cachedProfile = getStudentProfile(currentUser);
+    setProfile(cachedProfile);
+    syncEditableFields(cachedProfile);
+
+    let isMounted = true;
+    hydrateStudentProfile(currentUser)
+      .then((freshProfile) => {
+        if (!isMounted) return;
+        setProfile(freshProfile);
+        syncEditableFields(freshProfile);
+      })
+      .catch((error) => {
+        console.warn('Profile hydrate fallback to scoped browser cache.', error);
+      });
+
+    const handleProfileUpdate = (event) => {
+      const nextProfile = event?.detail?.profile;
+      if (!nextProfile) return;
+      const nextScope = nextProfile.userId || nextProfile.email;
+      if (userScope && nextScope && nextScope !== userScope) return;
+      setProfile(nextProfile);
+      syncEditableFields(nextProfile);
+    };
+
+    window.addEventListener('careerpilot:student-profile-updated', handleProfileUpdate);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener('careerpilot:student-profile-updated', handleProfileUpdate);
+    };
+  }, [currentUser?.id, currentUser?.email, isEditOpen]);
+
   const saveProfile = async (updated) => {
-    const normalized = saveStudentProfile(updated, currentUser);
+    const normalized = await saveStudentProfileAndSync(updated, currentUser);
     setProfile(normalized);
 
     if (currentUser && (normalized.name !== currentUser.name || normalized.email !== currentUser.email)) {

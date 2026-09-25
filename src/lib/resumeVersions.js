@@ -1,18 +1,14 @@
 import { resumeDraftToText } from './resumeTools';
+import { getScopedJson, setScopedJson } from './userScopedStorage';
 
 const RESUME_VERSIONS_KEY = 'careerpilot_resume_versions';
 
 function readVersions() {
-  try {
-    const stored = localStorage.getItem(RESUME_VERSIONS_KEY);
-    return stored ? JSON.parse(stored) : [];
-  } catch {
-    return [];
-  }
+  return getScopedJson(RESUME_VERSIONS_KEY, []);
 }
 
 function writeVersions(versions) {
-  localStorage.setItem(RESUME_VERSIONS_KEY, JSON.stringify(versions));
+  setScopedJson(RESUME_VERSIONS_KEY, versions);
   return versions;
 }
 

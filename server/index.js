@@ -72,7 +72,18 @@ const BLOCKED_STORAGE_KEYS = new Set([
   'careerpilot_notifications',
   'careerpilot_student_profile',
   'careerpilot_student_onboarding_complete',
+  'careerpilot_interview_feedback',
+  'careerpilot_resume_versions',
+  'careerpilot_latest_resume_analysis',
+  'careerpilot_settings',
+  'careerpilot_notification_preferences',
 ]);
+
+function isBlockedStorageKey(key) {
+  return Array.from(BLOCKED_STORAGE_KEYS).some(
+    (blockedKey) => key === blockedKey || key.startsWith(`${blockedKey}:`)
+  );
+}
 
 const DEFAULT_USERS = [];
 const LEGACY_DEMO_EMAILS = new Set([]);
@@ -296,10 +307,10 @@ async function getMongoCollection() {
     mongoClientPromise = MongoClient.connect(mongoUri, {
       maxPoolSize: 10,
     }).catch((error) => {
-      mongoConnectionState = 'disabled';
+      mongoConnectionState = 'error';
       mongoClientPromise = null;
-      console.error('MongoDB connection failed, using JSON fallback:', error.message);
-      return null;
+      console.error('MongoDB connection failed:', error.message);
+      throw error;
     });
   }
 
@@ -310,7 +321,7 @@ async function getMongoCollection() {
 }
 
 function stripMongoMeta(document = {}) {
-  const { _id, createdAt, updatedAt, ...rest } = document || {};
+  const { _id, ...rest } = document || {};
   return rest;
 }
 
@@ -327,14 +338,98 @@ async function ensureMongoIndexes(db) {
     }
   };
 
+  const ensureUniqueFieldIndex = async (collectionName, field, indexName) => {
+    const collection = db.collection(collectionName);
+    const duplicates = await collection.aggregate([
+      { $match: { [field]: { $exists: true, $nin: ['', null] } } },
+      { $group: { _id: `$${field}`, count: { $sum: 1 } } },
+      { $match: { count: { $gt: 1 } } },
+    ]).toArray();
+
+    if (duplicates.length) {
+      console.warn(
+        `MongoDB ${collectionName}.${field} has ${duplicates.length} duplicate value(s); ` +
+        'preserving all documents and leaving the existing index unchanged.'
+      );
+      return;
+    }
+
+    let indexes = [];
+    try {
+      indexes = await collection.indexes();
+    } catch (error) {
+      if (error.codeName !== 'NamespaceNotFound' && error.code !== 26) throw error;
+    }
+    const conflictingIndex = indexes.find((index) => index.name === indexName && !index.unique);
+    if (conflictingIndex) {
+      await collection.dropIndex(indexName);
+    }
+    await collection.createIndex({ [field]: 1 }, { name: indexName, unique: true, sparse: true });
+  };
+
+  await ensureUniqueFieldIndex(COLLECTIONS.studentProfiles, 'userId', 'userId_1');
+  await ensureUniqueFieldIndex(COLLECTIONS.applications, 'id', 'application_id_unique');
+  await ensureUniqueFieldIndex(COLLECTIONS.jobs, 'id', 'job_id_unique');
+  await ensureUniqueFieldIndex(COLLECTIONS.notifications, 'id', 'notification_id_unique');
+
   await Promise.all([
     createCompatibleIndex(COLLECTIONS.storage, { key: 1 }, { unique: true }),
     createCompatibleIndex(COLLECTIONS.users, { email: 1 }, { unique: true }),
-    createCompatibleIndex(COLLECTIONS.studentProfiles, { userId: 1 }, { unique: true, sparse: true }),
     createCompatibleIndex(COLLECTIONS.studentProfiles, { email: 1 }, { sparse: true }),
     createCompatibleIndex(COLLECTIONS.sessions, { token: 1 }, { unique: true }),
     createCompatibleIndex(COLLECTIONS.sessions, { userId: 1 }),
+    createCompatibleIndex(COLLECTIONS.applications, { studentId: 1 }),
+    createCompatibleIndex(COLLECTIONS.applications, { studentEmail: 1 }),
+    createCompatibleIndex(COLLECTIONS.applications, { recruiterId: 1 }),
+    createCompatibleIndex(COLLECTIONS.applications, { recruiterEmail: 1 }),
+    createCompatibleIndex(COLLECTIONS.applications, { jobId: 1 }),
+    createCompatibleIndex(COLLECTIONS.notifications, { recipientId: 1, recipientRole: 1 }),
+    createCompatibleIndex(COLLECTIONS.notifications, { recipientEmail: 1 }),
+    createCompatibleIndex(COLLECTIONS.jobs, { recruiterId: 1 }),
+    createCompatibleIndex(COLLECTIONS.jobs, { recruiterEmail: 1 }),
   ]);
+}
+
+async function migrateMongoOwnershipRecords(db) {
+  const [users, jobs, applications, notifications] = await Promise.all([
+    db.collection(COLLECTIONS.users).find({}).toArray(),
+    db.collection(COLLECTIONS.jobs).find({}).toArray(),
+    db.collection(COLLECTIONS.applications).find({}).toArray(),
+    db.collection(COLLECTIONS.notifications).find({}).toArray(),
+  ]);
+  const usersByEmail = new Map(users.map((user) => [String(user.email || '').toLowerCase(), user]));
+  const jobsById = new Map(jobs.map((job) => [job.id, job]));
+
+  const jobOperations = jobs.flatMap((job) => {
+    const recruiter = usersByEmail.get(String(job.recruiterEmail || job.postedBy || '').toLowerCase());
+    if (!recruiter || recruiter.role !== 'recruiter' || job.recruiterId === recruiter.id) return [];
+    return [{ updateOne: { filter: { _id: job._id }, update: { $set: { recruiterId: recruiter.id, recruiterEmail: recruiter.email, postedBy: recruiter.email } } } }];
+  });
+
+  const applicationOperations = applications.flatMap((application) => {
+    const updates = {};
+    const student = usersByEmail.get(String(application.studentEmail || '').toLowerCase());
+    const job = jobsById.get(application.jobId);
+    const recruiter = usersByEmail.get(String(job?.recruiterEmail || job?.postedBy || application.recruiterEmail || '').toLowerCase());
+    if (student?.role === 'student' && application.studentId !== student.id) updates.studentId = student.id;
+    if (recruiter?.role === 'recruiter' && application.recruiterId !== recruiter.id) {
+      updates.recruiterId = recruiter.id;
+      updates.recruiterEmail = recruiter.email;
+    }
+    return Object.keys(updates).length
+      ? [{ updateOne: { filter: { _id: application._id }, update: { $set: updates } } }]
+      : [];
+  });
+
+  const notificationOperations = notifications.flatMap((notification) => {
+    const recipient = usersByEmail.get(String(notification.recipientEmail || '').toLowerCase());
+    if (!recipient || notification.recipientId === recipient.id) return [];
+    return [{ updateOne: { filter: { _id: notification._id }, update: { $set: { recipientId: recipient.id, recipientRole: recipient.role } } } }];
+  });
+
+  if (jobOperations.length) await db.collection(COLLECTIONS.jobs).bulkWrite(jobOperations);
+  if (applicationOperations.length) await db.collection(COLLECTIONS.applications).bulkWrite(applicationOperations);
+  if (notificationOperations.length) await db.collection(COLLECTIONS.notifications).bulkWrite(notificationOperations);
 }
 
 async function migrateLegacyStudentProfileSingleton(db) {
@@ -343,16 +438,23 @@ async function migrateLegacyStudentProfileSingleton(db) {
   if (!legacyProfile) return;
 
   const migratedProfile = sanitizeStudentProfile(stripMongoMeta(legacyProfile));
+  migratedProfile.userId ||= migratedProfile.legacyUserId;
   const hasOwner = migratedProfile.userId || migratedProfile.email;
+  if (!hasOwner) return;
 
-  if (hasOwner) {
-    const filter = migratedProfile.userId
-      ? { userId: migratedProfile.userId }
-      : { email: migratedProfile.email };
-    await collection.updateOne(filter, { $setOnInsert: migratedProfile }, { upsert: true });
+  const filter = migratedProfile.userId
+    ? { userId: migratedProfile.userId }
+    : { email: migratedProfile.email };
+  const existingProfile = await collection.findOne({ $and: [filter, { _id: { $ne: 'primary' } }] });
+  if (existingProfile) return;
+
+  if (legacyProfile.userId) {
+    await collection.updateOne(
+      { _id: 'primary' },
+      { $unset: { userId: '' }, $set: { legacyUserId: legacyProfile.userId } }
+    );
   }
-
-  await collection.deleteOne({ _id: 'primary' });
+  await collection.insertOne(migratedProfile);
 }
 
 async function ensureStudentProfilesForStudentUsers(db) {
@@ -381,43 +483,6 @@ async function ensureStudentProfilesForStudentUsers(db) {
   }
 }
 
-async function readFileSeedDb() {
-  await fs.mkdir(dataDir, { recursive: true });
-  try {
-    const raw = await fs.readFile(dbPath, 'utf8');
-    return JSON.parse(raw);
-  } catch {
-    return createDefaultDb();
-  }
-}
-
-function getPersistedStorageEntries(storage = {}) {
-  return Object.entries(storage)
-    .filter(([key]) => !DERIVED_STORAGE_KEYS.has(key) && !BLOCKED_STORAGE_KEYS.has(key))
-    .map(([key, value]) => ({
-      key,
-      value: typeof value === 'string' ? value : JSON.stringify(value),
-    }));
-}
-
-async function replaceMongoCollection(db, name, docs = []) {
-  const collection = db.collection(COLLECTIONS[name]);
-  const safeDocs = name === 'studentProfiles' ? sanitizeStudentProfiles(docs) : docs;
-  await collection.deleteMany({});
-  if (safeDocs.length > 0) {
-    await collection.insertMany(safeDocs);
-  }
-}
-
-async function replaceMongoStorage(db, storage = {}) {
-  const collection = db.collection(COLLECTIONS.storage);
-  await collection.deleteMany({});
-  const entries = getPersistedStorageEntries(storage);
-  if (entries.length > 0) {
-    await collection.insertMany(entries);
-  }
-}
-
 async function persistUser(user = {}) {
   if (!mongoUri) return;
   const mongoDb = await getMongoCollection();
@@ -429,29 +494,78 @@ async function persistUser(user = {}) {
   );
 }
 
-async function seedMongoDatabase(db, seedState = createDefaultDb()) {
-  const normalized = sanitizeDemoContent({
-    ...createDefaultDb(),
-    ...seedState,
-    users: Array.isArray(seedState.users)
-      ? seedState.users.map(normalizeStoredUser)
-      : parseUsersFromStorage(seedState.storage || DEFAULT_STORAGE),
-  });
+function getDocumentFilter(document = {}) {
+  if (document.id) return { id: document.id };
+  if (document.token) return { token: document.token };
+  if (document.key) return { key: document.key };
+  return null;
+}
 
-  await replaceMongoCollection(db, 'users', normalized.users);
-  await replaceMongoCollection(db, 'sessions', normalized.sessions || []);
-  await replaceMongoCollection(db, 'applications', normalized.applications || []);
-  await replaceMongoCollection(db, 'notifications', normalized.notifications || []);
-  await replaceMongoCollection(db, 'jobs', normalized.jobs || []);
-  await replaceMongoCollection(db, 'companies', normalized.companies || []);
-  await replaceMongoCollection(db, 'students', normalized.students || []);
-  await replaceMongoCollection(db, 'announcements', normalized.announcements || []);
-  await replaceMongoCollection(db, 'payments', normalized.payments || []);
-  await replaceMongoCollection(db, 'emails', normalized.emails || []);
-  await replaceMongoCollection(db, 'calendarEvents', normalized.calendarEvents || []);
-  await replaceMongoCollection(db, 'reports', normalized.reports || []);
-  await replaceMongoCollection(db, 'studentProfiles', normalized.studentProfiles || []);
-  await replaceMongoStorage(db, normalized.storage || {});
+async function upsertMongoDocuments(name, documents = []) {
+  if (!mongoUri || !documents.length) return;
+  const mongoDb = await getMongoCollection();
+  const operations = documents
+    .map((document) => {
+      const sanitized = stripMongoMeta(document);
+      const filter = getDocumentFilter(sanitized);
+      if (!filter) return null;
+      return { replaceOne: { filter, replacement: sanitized, upsert: true } };
+    })
+    .filter(Boolean);
+  if (operations.length) {
+    await mongoDb.collection(COLLECTIONS[name]).bulkWrite(operations, { ordered: true });
+  }
+}
+
+async function reconcileMongoDocuments(name, documents = [], scopeFilter = {}) {
+  if (!mongoUri) return;
+  const mongoDb = await getMongoCollection();
+  const sanitizedDocuments = documents.map(stripMongoMeta);
+  await upsertMongoDocuments(name, sanitizedDocuments);
+  const ids = sanitizedDocuments.map((document) => document.id).filter(Boolean);
+  const deletionFilter = ids.length
+    ? { $and: [scopeFilter, { id: { $nin: ids } }] }
+    : scopeFilter;
+  await mongoDb.collection(COLLECTIONS[name]).deleteMany(deletionFilter);
+}
+
+async function persistStorageEntries(entries = {}) {
+  if (!mongoUri) return;
+  const mongoDb = await getMongoCollection();
+  const operations = Object.entries(entries)
+    .filter(([key]) => !DERIVED_STORAGE_KEYS.has(key) && !isBlockedStorageKey(key))
+    .map(([key, value]) => ({
+      replaceOne: {
+        filter: { key },
+        replacement: { key, value: typeof value === 'string' ? value : JSON.stringify(value) },
+        upsert: true,
+      },
+    }));
+  if (operations.length) {
+    await mongoDb.collection(COLLECTIONS.storage).bulkWrite(operations, { ordered: true });
+  }
+}
+
+async function deleteStorageEntry(key) {
+  if (!mongoUri || DERIVED_STORAGE_KEYS.has(key) || isBlockedStorageKey(key)) return;
+  const mongoDb = await getMongoCollection();
+  await mongoDb.collection(COLLECTIONS.storage).deleteOne({ key });
+}
+
+async function persistStudentProfile(profile = {}) {
+  if (!mongoUri) return;
+  const mongoDb = await getMongoCollection();
+  if (!mongoDb) return;
+  const sanitizedProfile = sanitizeStudentProfile(stripMongoMeta(profile));
+  const filter = sanitizedProfile.userId
+    ? { userId: sanitizedProfile.userId }
+    : { email: String(sanitizedProfile.email || '').toLowerCase() };
+  if (!filter.userId && !filter.email) return;
+  await mongoDb.collection(COLLECTIONS.studentProfiles).replaceOne(
+    filter,
+    sanitizedProfile,
+    { upsert: true }
+  );
 }
 
 async function readMongoCollectionDocs(db, name) {
@@ -466,7 +580,7 @@ async function readMongoCollectionDocs(db, name) {
 async function readMongoStorage(db) {
   const entries = await db.collection(COLLECTIONS.storage).find({}).toArray();
   return entries.reduce((acc, entry) => {
-    if (entry?.key && !BLOCKED_STORAGE_KEYS.has(entry.key)) {
+    if (entry?.key && !isBlockedStorageKey(entry.key)) {
       acc[entry.key] = typeof entry.value === 'string' ? entry.value : JSON.stringify(entry.value);
     }
     return acc;
@@ -488,17 +602,11 @@ async function doEnsureDb() {
   await fs.mkdir(reportsDir, { recursive: true });
   if (mongoUri) {
     const mongoDb = await getMongoCollection();
-    if (mongoDb) {
-      await ensureMongoIndexes(mongoDb);
-      await migrateLegacyStudentProfileSingleton(mongoDb);
-      await ensureStudentProfilesForStudentUsers(mongoDb);
-      const isSeeded = await mongoDb.collection(COLLECTIONS.jobs).countDocuments({}, { limit: 1 });
-      if (!isSeeded) {
-        const seedDb = await readFileSeedDb();
-        await seedMongoDatabase(mongoDb, seedDb);
-      }
-      return;
-    }
+    await ensureMongoIndexes(mongoDb);
+    await migrateLegacyStudentProfileSingleton(mongoDb);
+    await ensureStudentProfilesForStudentUsers(mongoDb);
+    await migrateMongoOwnershipRecords(mongoDb);
+    return;
   }
 
   await fs.mkdir(dataDir, { recursive: true });
@@ -514,8 +622,7 @@ async function readDb() {
   let parsed;
   if (mongoUri) {
     const mongoDb = await getMongoCollection();
-    if (mongoDb) {
-      const [
+    const [
         storage,
         users,
         sessions,
@@ -547,7 +654,7 @@ async function readDb() {
         readMongoCollectionDocs(mongoDb, 'studentProfiles'),
       ]);
 
-      parsed = {
+    parsed = {
         storage,
         users: users.map(stripMongoMeta).map(normalizeStoredUser),
         sessions: sessions.map(stripMongoMeta),
@@ -563,8 +670,7 @@ async function readDb() {
         reports: reports.map(stripMongoMeta),
         studentProfile: DEFAULT_STUDENT_PROFILE,
         studentProfiles: studentProfiles.map(stripMongoMeta).map(sanitizeStudentProfile),
-      };
-    }
+    };
   }
 
   if (!parsed) {
@@ -633,19 +739,6 @@ async function writeDb(db) {
     if (mongoUri) {
       const mongoDb = await getMongoCollection();
       if (mongoDb) {
-        await replaceMongoCollection(mongoDb, 'sessions', sanitizedDb.sessions || []);
-        await replaceMongoCollection(mongoDb, 'applications', sanitizedDb.applications || []);
-        await replaceMongoCollection(mongoDb, 'notifications', sanitizedDb.notifications || []);
-        await replaceMongoCollection(mongoDb, 'jobs', sanitizedDb.jobs || []);
-        await replaceMongoCollection(mongoDb, 'companies', sanitizedDb.companies || []);
-        await replaceMongoCollection(mongoDb, 'students', sanitizedDb.students || []);
-        await replaceMongoCollection(mongoDb, 'announcements', sanitizedDb.announcements || []);
-        await replaceMongoCollection(mongoDb, 'payments', sanitizedDb.payments || []);
-        await replaceMongoCollection(mongoDb, 'emails', sanitizedDb.emails || []);
-        await replaceMongoCollection(mongoDb, 'calendarEvents', sanitizedDb.calendarEvents || []);
-        await replaceMongoCollection(mongoDb, 'reports', sanitizedDb.reports || []);
-        await replaceMongoCollection(mongoDb, 'studentProfiles', sanitizedDb.studentProfiles || []);
-        await replaceMongoStorage(mongoDb, sanitizedDb.storage || {});
         return sanitizedDb;
       }
     }
@@ -718,9 +811,9 @@ async function getAuthenticatedUser(req, db) {
   if (!token) return null;
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    return (db.users || parseUsersFromStorage(db.storage)).find(
-      (entry) => entry.id === decoded.id || entry.email.toLowerCase() === String(decoded.email || '').toLowerCase()
-    ) || null;
+    const session = (db.sessions || []).find((entry) => entry.token === token && entry.userId === decoded.id);
+    if (!session) return null;
+    return (db.users || parseUsersFromStorage(db.storage)).find((entry) => entry.id === decoded.id) || null;
   } catch {
     return null;
   }
@@ -745,9 +838,9 @@ function getOwnedJobs(db, recruiter) {
   if (!recruiter || recruiter.role !== 'recruiter') return [];
   return (db.jobs || [])
     .filter((job = {}) => {
-      if (job.recruiterId) return job.recruiterId === recruiter.id;
-      if (job.recruiterEmail) return job.recruiterEmail.toLowerCase() === String(recruiter.email || '').toLowerCase();
-      if (job.postedBy) return job.postedBy.toLowerCase() === String(recruiter.email || '').toLowerCase();
+      if (job.recruiterId === recruiter.id) return true;
+      if (job.recruiterEmail?.toLowerCase() === String(recruiter.email || '').toLowerCase()) return true;
+      if (job.postedBy?.toLowerCase() === String(recruiter.email || '').toLowerCase()) return true;
       return false;
     });
 }
@@ -760,14 +853,17 @@ function sameCompanyRole(application = {}, job = {}) {
 }
 
 function applicationBelongsToStudent(application = {}, user = {}) {
-  if (application.studentId) return application.studentId === user.id;
-  if (application.studentEmail) return application.studentEmail.toLowerCase() === String(user.email || '').toLowerCase();
+  if (application.studentId === user.id) return true;
+  if (application.studentEmail?.toLowerCase() === String(user.email || '').toLowerCase()) return true;
   return false;
 }
 
 function applicationBelongsToRecruiter(application = {}, user = {}, db = {}) {
-  if (application.recruiterId) return application.recruiterId === user.id;
-  if (application.recruiterEmail) return application.recruiterEmail.toLowerCase() === String(user.email || '').toLowerCase();
+  if (application.recruiterId === user.id) return true;
+  if (
+    application.recruiterEmail &&
+    application.recruiterEmail.toLowerCase() === String(user.email || '').toLowerCase()
+  ) return true;
   const ownedJobIds = getOwnedJobIds(db, user);
   const applicationJobId = application.jobId || `${application.company}-${application.role}`;
   if (ownedJobIds.has(applicationJobId)) return true;
@@ -783,13 +879,77 @@ function scopeApplicationsForUser(applications = [], user = {}, db = {}) {
   return applications.filter((application) => applicationBelongsToStudent(application, user));
 }
 
-function prepareApplicationForUser(application = {}, user = {}) {
+function findApplicationJob(application = {}, db = {}) {
+  return (db.jobs || []).find((job = {}) => (
+    (application.jobId && job.id === application.jobId) || sameCompanyRole(application, job)
+  ));
+}
+
+function prepareApplicationForUser(application = {}, user = {}, db = {}) {
+  if (user.role === 'recruiter') {
+    return {
+      ...application,
+      recruiterId: user.id,
+      recruiterEmail: user.email,
+    };
+  }
   if (user.role !== 'student') return application;
+  const existing = (db.applications || []).find((entry = {}) => entry.id === application.id);
+  const job = findApplicationJob(application, db);
+  const recruiter = (db.users || []).find((entry = {}) => (
+    entry.role === 'recruiter' && (
+      entry.id === job?.recruiterId ||
+      entry.email?.toLowerCase() === String(job?.recruiterEmail || job?.postedBy || '').toLowerCase() ||
+      entry.id === existing?.recruiterId ||
+      entry.email?.toLowerCase() === String(existing?.recruiterEmail || application.recruiterEmail || '').toLowerCase()
+    )
+  ));
   return {
     ...application,
-    studentId: application.studentId || user.id,
-    studentEmail: application.studentEmail || user.email,
+    studentId: user.id,
+    studentEmail: user.email,
     studentName: application.studentName || user.name,
+    jobId: job?.id || existing?.jobId || application.jobId || '',
+    recruiterId: recruiter?.id || job?.recruiterId || existing?.recruiterId || application.recruiterId || '',
+    recruiterEmail: recruiter?.email || job?.recruiterEmail || existing?.recruiterEmail || application.recruiterEmail || '',
+  };
+}
+
+function applicationOwnerFilter(user = {}, db = {}) {
+  if (user.role === 'admin') return {};
+  if (user.role === 'recruiter') {
+    const ownedJobIds = Array.from(getOwnedJobIds(db, user));
+    const ownership = [
+      { recruiterId: user.id },
+      { recruiterEmail: String(user.email || '').toLowerCase() },
+    ];
+    if (ownedJobIds.length) ownership.push({ jobId: { $in: ownedJobIds } });
+    return { $or: ownership };
+  }
+  return {
+    $or: [
+      { studentId: user.id },
+      { studentEmail: String(user.email || '').toLowerCase() },
+    ],
+  };
+}
+
+function notificationOwnerFilter(user = {}) {
+  return {
+    $or: [
+      { recipientId: user.id },
+      { recipientEmail: String(user.email || '').toLowerCase() },
+    ],
+  };
+}
+
+function jobOwnerFilter(user = {}) {
+  return {
+    $or: [
+      { recruiterId: user.id },
+      { recruiterEmail: String(user.email || '').toLowerCase() },
+      { postedBy: String(user.email || '').toLowerCase() },
+    ],
   };
 }
 
@@ -797,16 +957,18 @@ function prepareJobForUser(job = {}, user = {}) {
   if (user.role !== 'recruiter') return job;
   return {
     ...job,
-    recruiterId: job.recruiterId || user.id,
-    recruiterEmail: job.recruiterEmail || user.email,
-    postedBy: job.postedBy || user.email,
+    recruiterId: user.id,
+    recruiterEmail: user.email,
+    postedBy: user.email,
   };
 }
 
 function notificationVisibleToUser(notification = {}, user = {}) {
-  if (notification.recipientId) return notification.recipientId === user.id;
-  if (notification.recipientEmail) return notification.recipientEmail.toLowerCase() === String(user.email || '').toLowerCase();
-  if (notification.recipientRole) return notification.recipientRole === user.role;
+  if (notification.recipientId === user.id) return true;
+  if (notification.recipientEmail?.toLowerCase() === String(user.email || '').toLowerCase()) return true;
+  if (!notification.recipientId && !notification.recipientEmail && notification.recipientRole) {
+    return notification.recipientRole === user.role;
+  }
   if (notification.broadcast === true || notification.audience === 'all') return true;
   return false;
 }
@@ -909,7 +1071,7 @@ function parseStoredJsonValue(value, fallback) {
 }
 
 function applyStorageValue(db, key, incomingValue) {
-  if (BLOCKED_STORAGE_KEYS.has(key) || DERIVED_STORAGE_KEYS.has(key)) {
+  if (isBlockedStorageKey(key) || DERIVED_STORAGE_KEYS.has(key)) {
     delete db.storage[key];
     return;
   }
@@ -977,7 +1139,7 @@ function syncCollectionStorage(db) {
 }
 
 function getPublicBootstrapStorage(storage = {}) {
-  return Object.fromEntries(Object.entries(storage).filter(([key]) => !BLOCKED_STORAGE_KEYS.has(key)));
+  return Object.fromEntries(Object.entries(storage).filter(([key]) => key === 'careerpilot_theme'));
 }
 
 function buildProviderStatus(db) {
@@ -1015,6 +1177,12 @@ function cleanJsonString(str = '') {
 
 function normalizeText(value = '') {
   return String(value).replace(/\s+/g, ' ').trim();
+}
+
+function getArrayPayload(body, key) {
+  if (Array.isArray(body)) return body;
+  if (body && Array.isArray(body[key])) return body[key];
+  return null;
 }
 
 function sentenceList(values = []) {
@@ -1155,6 +1323,7 @@ app.put('/api/storage/:key', async (req, res) => {
   applyStorageValue(db, req.params.key, req.body.value);
   syncUsersToStorage(db, db.users || parseUsersFromStorage(db.storage));
   syncCollectionStorage(db);
+  await persistStorageEntries({ [req.params.key]: db.storage[req.params.key] });
   await writeDb(db);
   res.json({ ok: true });
 });
@@ -1169,6 +1338,7 @@ app.post('/api/storage/bulk', async (req, res) => {
   });
   syncUsersToStorage(db, db.users || parseUsersFromStorage(db.storage));
   syncCollectionStorage(db);
+  await persistStorageEntries(entries);
   await writeDb(db);
   res.json({ ok: true, updated: Object.keys(entries).length });
 });
@@ -1180,6 +1350,7 @@ app.delete('/api/storage/:key', async (req, res) => {
   removeStorageValue(db, req.params.key);
   syncUsersToStorage(db, db.users || parseUsersFromStorage(db.storage));
   syncCollectionStorage(db);
+  await deleteStorageEntry(req.params.key);
   await writeDb(db);
   res.json({ ok: true });
 });
@@ -1192,6 +1363,8 @@ app.get('/api/applications', async (req, res) => {
 });
 
 app.put('/api/applications', async (req, res) => {
+  const payload = getArrayPayload(req.body, 'applications');
+  if (!payload) return res.status(400).json({ error: 'Applications must be provided as an array.' });
   let result, status = 200;
   await withDbLock(async () => {
     const db = await readDb();
@@ -1201,17 +1374,19 @@ app.put('/api/applications', async (req, res) => {
       result = { error: 'Authentication required.' };
       return;
     }
-    const incoming = Array.isArray(req.body) ? req.body : Array.isArray(req.body.applications) ? req.body.applications : [];
+    const incoming = payload;
     const ownedIncoming = incoming
-      .map((application) => prepareApplicationForUser(application, user))
       .filter((application) => (
         user.role === 'admin' ||
-        (user.role === 'recruiter' && applicationBelongsToRecruiter(application, user, db)) ||
-        (user.role === 'student' && applicationBelongsToStudent(application, user))
-      ));
+        user.role === 'student' ||
+        applicationBelongsToRecruiter(application, user, db)
+      ))
+      .map((application) => prepareApplicationForUser(application, user, db))
+      .filter((application) => user.role !== 'student' || applicationBelongsToStudent(application, user));
     const retained = (db.applications || []).filter((application) => !scopeApplicationsForUser([application], user, db).length);
     db.applications = [...ownedIncoming, ...retained];
     syncCollectionStorage(db);
+    await reconcileMongoDocuments('applications', ownedIncoming, applicationOwnerFilter(user, db));
     await writeDb(db);
     result = { ok: true, count: ownedIncoming.length };
   });
@@ -1253,6 +1428,8 @@ app.get('/api/notifications/stream', async (req, res) => {
 });
 
 app.put('/api/notifications', async (req, res) => {
+  const payload = getArrayPayload(req.body, 'notifications');
+  if (!payload) return res.status(400).json({ error: 'Notifications must be provided as an array.' });
   let result, status = 200;
   await withDbLock(async () => {
     const db = await readDb();
@@ -1262,7 +1439,7 @@ app.put('/api/notifications', async (req, res) => {
       result = { error: 'Authentication required.' };
       return;
     }
-    const incoming = Array.isArray(req.body) ? req.body : Array.isArray(req.body.notifications) ? req.body.notifications : [];
+    const incoming = payload;
     const ownedIncoming = incoming
       .filter((notification) => notificationCanBeSavedByUser(notification, user, db))
       .map((notification) => prepareNotificationForUser(notification, user, db));
@@ -1272,6 +1449,18 @@ app.put('/api/notifications', async (req, res) => {
     ));
     db.notifications = [...ownedIncoming, ...retained];
     syncCollectionStorage(db);
+    await upsertMongoDocuments('notifications', ownedIncoming);
+    const visibleIncomingIds = ownedIncoming
+      .filter((notification) => notificationVisibleToUser(notification, user))
+      .map((notification) => notification.id)
+      .filter(Boolean);
+    if (mongoUri) {
+      const mongoDb = await getMongoCollection();
+      const filter = visibleIncomingIds.length
+        ? { $and: [notificationOwnerFilter(user), { id: { $nin: visibleIncomingIds } }] }
+        : notificationOwnerFilter(user);
+      await mongoDb.collection(COLLECTIONS.notifications).deleteMany(filter);
+    }
     await writeDb(db);
     broadcastNotificationUpdates(db, ownedIncoming);
     result = { ok: true, count: ownedIncoming.length };
@@ -1279,12 +1468,16 @@ app.put('/api/notifications', async (req, res) => {
   res.status(status).json(result);
 });
 
-app.get('/api/jobs', async (_req, res) => {
+app.get('/api/jobs', async (req, res) => {
   const db = await readDb();
+  const user = await requireAuthenticatedUser(req, res, db);
+  if (!user) return;
   res.json(db.jobs);
 });
 
 app.put('/api/jobs', async (req, res) => {
+  const payload = getArrayPayload(req.body, 'jobs');
+  if (!payload) return res.status(400).json({ error: 'Jobs must be provided as an array.' });
   let result, status = 200;
   await withDbLock(async () => {
     const db = await readDb();
@@ -1299,8 +1492,15 @@ app.put('/api/jobs', async (req, res) => {
       result = { error: 'Only recruiters or placement heads can manage jobs.' };
       return;
     }
-    const incoming = Array.isArray(req.body) ? req.body : Array.isArray(req.body.jobs) ? req.body.jobs : [];
-    const ownedIncoming = incoming.map((job) => prepareJobForUser(job, user));
+    const incoming = payload;
+    const ownedIncoming = user.role === 'recruiter'
+      ? incoming
+        .filter((job) => {
+          const existing = (db.jobs || []).find((entry) => entry.id === job.id);
+          return !existing || getOwnedJobs({ jobs: [existing] }, user).length > 0;
+        })
+        .map((job) => prepareJobForUser(job, user))
+      : incoming;
     if (user.role === 'recruiter') {
       const retained = (db.jobs || []).filter((job) => !getOwnedJobs({ jobs: [job] }, user).length);
       db.jobs = [...ownedIncoming, ...retained];
@@ -1308,6 +1508,11 @@ app.put('/api/jobs', async (req, res) => {
       db.jobs = ownedIncoming;
     }
     syncCollectionStorage(db);
+    await reconcileMongoDocuments(
+      'jobs',
+      ownedIncoming,
+      user.role === 'recruiter' ? jobOwnerFilter(user) : {}
+    );
     await writeDb(db);
     result = { ok: true, count: db.jobs.length };
   });
@@ -1333,6 +1538,7 @@ app.put('/api/companies', async (req, res) => {
   }
   db.companies = Array.isArray(req.body) ? req.body : Array.isArray(req.body.companies) ? req.body.companies : [];
   syncCollectionStorage(db);
+  await reconcileMongoDocuments('companies', db.companies, {});
   await writeDb(db);
   res.json({ ok: true, count: db.companies.length });
 });
@@ -1356,12 +1562,15 @@ app.put('/api/students', async (req, res) => {
   }
   db.students = Array.isArray(req.body) ? req.body : Array.isArray(req.body.students) ? req.body.students : [];
   syncCollectionStorage(db);
+  await reconcileMongoDocuments('students', db.students, {});
   await writeDb(db);
   res.json({ ok: true, count: db.students.length });
 });
 
-app.get('/api/announcements', async (_req, res) => {
+app.get('/api/announcements', async (req, res) => {
   const db = await readDb();
+  const user = await requireAuthenticatedUser(req, res, db);
+  if (!user) return;
   res.json(db.announcements);
 });
 
@@ -1374,6 +1583,7 @@ app.put('/api/announcements', async (req, res) => {
   }
   db.announcements = Array.isArray(req.body) ? req.body : Array.isArray(req.body.announcements) ? req.body.announcements : [];
   syncCollectionStorage(db);
+  await reconcileMongoDocuments('announcements', db.announcements, {});
   await writeDb(db);
   res.json({ ok: true, count: db.announcements.length });
 });
@@ -1405,6 +1615,7 @@ app.put('/api/student-profile', async (req, res) => {
     }
     const profile = upsertStudentProfileForUser(db, user, req.body?.profile || req.body || {});
     syncCollectionStorage(db);
+    await persistStudentProfile(profile);
     await writeDb(db);
     result = { ok: true, profile };
   });
@@ -1432,6 +1643,7 @@ app.post('/api/auth/login', async (req, res) => {
 
     const session = createSession(user);
     db.sessions = [...db.sessions.filter((entry) => entry.userId !== user.id), session];
+    await reconcileMongoDocuments('sessions', [session], { userId: user.id });
     await writeDb(db);
     result = { user: sanitizeUser(user), sessionToken: session.token };
   });
@@ -1445,6 +1657,17 @@ app.post('/api/auth/register', async (req, res) => {
     const users = db.users || parseUsersFromStorage(db.storage);
     const { name, email, password, role } = req.body;
     const normalizedEmail = String(email || '').trim().toLowerCase();
+
+    if (!String(name || '').trim() || !normalizedEmail.includes('@') || String(password || '').length < 6) {
+      status = 400;
+      result = { error: 'Name, a valid email, and a password of at least 6 characters are required.' };
+      return;
+    }
+    if (!['student', 'recruiter', 'admin'].includes(role)) {
+      status = 400;
+      result = { error: 'A valid account role is required.' };
+      return;
+    }
 
     if (users.some((entry) => entry.email.toLowerCase() === normalizedEmail)) {
       status = 409;
@@ -1464,9 +1687,11 @@ app.post('/api/auth/register', async (req, res) => {
     const session = createSession(user);
     db.sessions.push(session);
     if (role === 'student') {
-      upsertStudentProfileForUser(db, user, { name: user.name, email: user.email, onboardingComplete: false });
+      const profile = upsertStudentProfileForUser(db, user, { name: user.name, email: user.email, onboardingComplete: false });
+      await persistStudentProfile(profile);
     }
     await persistUser(user);
+    await reconcileMongoDocuments('sessions', [session], { userId: user.id });
     await writeDb(db);
     result = { user: sanitizeUser(user), sessionToken: session.token };
   });
@@ -1475,22 +1700,9 @@ app.post('/api/auth/register', async (req, res) => {
 
 app.get('/api/auth/me', async (req, res) => {
   const db = await readDb();
-  const token = req.headers.authorization?.replace('Bearer ', '') || req.query.token;
-  if (!token) {
-    return res.status(401).json({ error: 'No active session.' });
-  }
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    const user = (db.users || parseUsersFromStorage(db.storage)).find(
-      (entry) => entry.id === decoded.id || entry.email.toLowerCase() === decoded.email.toLowerCase()
-    );
-    if (!user) {
-      return res.status(404).json({ error: 'User not found.' });
-    }
-    return res.json({ user: sanitizeUser(user) });
-  } catch (jwtError) {
-    return res.status(401).json({ error: 'Invalid or expired session token.' });
-  }
+  const user = await getAuthenticatedUser(req, db);
+  if (!user) return res.status(401).json({ error: 'Invalid, expired, or logged-out session.' });
+  return res.json({ user: sanitizeUser(user) });
 });
 
 app.put('/api/auth/profile', async (req, res) => {
@@ -1526,11 +1738,12 @@ app.put('/api/auth/profile', async (req, res) => {
   updateUserInStorage(db, existingUser.email, updatedUser);
   if (existingUser.role === 'student') {
     const existingProfile = getStudentProfileForUser(db, existingUser);
-    upsertStudentProfileForUser(db, updatedUser, {
+    const profile = upsertStudentProfileForUser(db, updatedUser, {
       ...existingProfile,
       name: updatedUser.name,
       email: updatedUser.email,
     });
+    await persistStudentProfile(profile);
   }
   syncCollectionStorage(db);
   await persistUser(updatedUser);
@@ -1540,9 +1753,11 @@ app.put('/api/auth/profile', async (req, res) => {
 
 app.put('/api/auth/password', async (req, res) => {
   const db = await readDb();
-  const { email, currentPassword, newPassword } = req.body;
+  const authenticatedUser = await requireAuthenticatedUser(req, res, db);
+  if (!authenticatedUser) return;
+  const { currentPassword, newPassword } = req.body;
   const users = db.users || parseUsersFromStorage(db.storage);
-  const existingUser = users.find((entry) => entry.email.toLowerCase() === String(email || '').toLowerCase());
+  const existingUser = users.find((entry) => entry.id === authenticatedUser.id);
 
   if (!existingUser) {
     return res.status(404).json({ error: 'User not found.' });
@@ -1567,12 +1782,19 @@ app.post('/api/auth/logout', async (req, res) => {
   const db = await readDb();
   const token = req.headers.authorization?.replace('Bearer ', '') || req.body.token;
   db.sessions = db.sessions.filter((entry) => entry.token !== token);
+  if (mongoUri && token) {
+    const mongoDb = await getMongoCollection();
+    await mongoDb.collection(COLLECTIONS.sessions).deleteOne({ token });
+  }
   await writeDb(db);
   return res.json({ ok: true });
 });
 
 app.post('/api/integrations/payment/order', async (req, res) => {
   const db = await readDb();
+  const user = await requireAuthenticatedUser(req, res, db);
+  if (!user) return;
+  if (user.role !== 'recruiter') return res.status(403).json({ error: 'Only recruiters can create plan orders.' });
   const order = {
     id: `order_${Date.now()}`,
     provider: process.env.RAZORPAY_KEY_ID ? 'razorpay-configured' : 'dev-order-provider',
@@ -1583,12 +1805,15 @@ app.post('/api/integrations/payment/order', async (req, res) => {
     createdAt: new Date().toISOString(),
   };
   db.payments.unshift(order);
+  await upsertMongoDocuments('payments', [order]);
   await writeDb(db);
   res.status(201).json(order);
 });
 
 app.post('/api/integrations/email/send', async (req, res) => {
   const db = await readDb();
+  const user = await requireAuthenticatedUser(req, res, db);
+  if (!user) return;
   const email = {
     id: `email_${Date.now()}`,
     to: req.body.to,
@@ -1598,12 +1823,15 @@ app.post('/api/integrations/email/send', async (req, res) => {
     createdAt: new Date().toISOString(),
   };
   db.emails.unshift(email);
+  await upsertMongoDocuments('emails', [email]);
   await writeDb(db);
   res.status(201).json(email);
 });
 
 app.post('/api/integrations/calendar/event', async (req, res) => {
   const db = await readDb();
+  const user = await requireAuthenticatedUser(req, res, db);
+  if (!user) return;
   const event = {
     id: `event_${Date.now()}`,
     title: req.body.title,
@@ -1614,11 +1842,16 @@ app.post('/api/integrations/calendar/event', async (req, res) => {
     createdAt: new Date().toISOString(),
   };
   db.calendarEvents.unshift(event);
+  await upsertMongoDocuments('calendarEvents', [event]);
   await writeDb(db);
   res.status(201).json(event);
 });
 
 app.post('/api/ai/interview/opening', async (req, res) => {
+  const db = await readDb();
+  const user = await requireAuthenticatedUser(req, res, db);
+  if (!user) return;
+  if (user.role !== 'student') return res.status(403).json({ error: 'AI mock interviews are available only for students.' });
   const { target } = req.body || {};
 
   if (!serverAi) {
@@ -1648,6 +1881,10 @@ ${buildJobContext(target)}`,
 });
 
 app.post('/api/ai/interview/followup', async (req, res) => {
+  const db = await readDb();
+  const user = await requireAuthenticatedUser(req, res, db);
+  if (!user) return;
+  if (user.role !== 'student') return res.status(403).json({ error: 'AI mock interviews are available only for students.' });
   const { target, qaHistory = [] } = req.body || {};
 
   if (!serverAi) {
@@ -1686,6 +1923,10 @@ ${recentHistory}`,
 });
 
 app.post('/api/ai/interview/evaluate', async (req, res) => {
+  const db = await readDb();
+  const user = await requireAuthenticatedUser(req, res, db);
+  if (!user) return;
+  if (user.role !== 'student') return res.status(403).json({ error: 'AI mock interviews are available only for students.' });
   const { target, qaHistory = [] } = req.body || {};
 
   if (!serverAi) {
@@ -1736,6 +1977,10 @@ Return ONLY JSON:
 });
 
 app.post('/api/ai/interview/transcribe', async (req, res) => {
+  const db = await readDb();
+  const user = await requireAuthenticatedUser(req, res, db);
+  if (!user) return;
+  if (user.role !== 'student') return res.status(403).json({ error: 'AI mock interviews are available only for students.' });
   const { mimeType = 'audio/webm', data } = req.body || {};
 
   if (!serverAi) {
@@ -1774,6 +2019,9 @@ app.post('/api/ai/interview/transcribe', async (req, res) => {
 
 app.post('/api/reports/generate', async (req, res) => {
   const db = await readDb();
+  const user = await requireAuthenticatedUser(req, res, db);
+  if (!user) return;
+  if (user.role !== 'admin') return res.status(403).json({ error: 'Only placement heads can generate reports.' });
   const title = req.body.title || 'CareerPilot Placement Report';
   const lines = [
     title,
@@ -1794,6 +2042,7 @@ app.post('/api/reports/generate', async (req, res) => {
     createdAt: new Date().toISOString(),
   };
   db.reports.unshift(report);
+  await upsertMongoDocuments('reports', [report]);
   await writeDb(db);
   res.status(201).json(report);
 });
@@ -1824,8 +2073,16 @@ async function startServer() {
   }
 }
 
+async function closeDatabaseConnection() {
+  if (!mongoClientPromise) return;
+  const client = await mongoClientPromise;
+  await client?.close();
+  mongoClientPromise = null;
+  mongoConnectionState = mongoUri ? 'pending' : 'disabled';
+}
+
 if (process.env.NODE_ENV !== 'test') {
   startServer();
 }
 
-export { app, startServer };
+export { app, startServer, closeDatabaseConnection };

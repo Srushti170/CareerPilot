@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { getStudentProfile, saveStudentProfile } from '../lib/studentProfile';
 import { authApi } from '../lib/backendSync';
+import { getScopedJson, setScopedJson } from '../lib/userScopedStorage';
 
 const SETTINGS_KEY = 'careerpilot_settings';
 const NOTIFICATION_SETTINGS_KEY = 'careerpilot_notification_preferences';
@@ -57,9 +58,9 @@ export function Settings() {
       setName(parsed.name || '');
       setEmail(parsed.email || '');
 
-      const savedSettings = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
-      const roleSettings = { ...DEFAULT_ROLE_SETTINGS[parsed.role], ...(savedSettings[parsed.role] || {}) };
-      const savedNotifications = JSON.parse(localStorage.getItem(NOTIFICATION_SETTINGS_KEY) || '{}');
+      const savedSettings = getScopedJson(SETTINGS_KEY, {});
+      const roleSettings = { ...DEFAULT_ROLE_SETTINGS[parsed.role], ...savedSettings };
+      const savedNotifications = getScopedJson(NOTIFICATION_SETTINGS_KEY, {});
 
       if (parsed.role === 'student') {
         setJobType(roleSettings.jobType);
@@ -79,9 +80,7 @@ export function Settings() {
   }, []);
 
   const persistRoleSettings = (role, nextSettings) => {
-    const allSettings = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
-    const updated = { ...allSettings, [role]: nextSettings };
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(updated));
+    setScopedJson(SETTINGS_KEY, nextSettings);
   };
 
   const handleSaveProfile = async (e) => {
@@ -120,11 +119,11 @@ export function Settings() {
 
   const handleSaveNotifications = (e) => {
     e.preventDefault();
-    localStorage.setItem(NOTIFICATION_SETTINGS_KEY, JSON.stringify({
+    setScopedJson(NOTIFICATION_SETTINGS_KEY, {
       emailNotifications,
       smsNotifications,
       browserNotifications,
-    }));
+    });
     setSuccess('Notification preferences saved successfully!');
     setTimeout(() => setSuccess(''), 2000);
   };

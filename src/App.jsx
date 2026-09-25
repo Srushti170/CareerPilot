@@ -69,20 +69,24 @@ function applicationBelongsToUser(app = {}, user = getStoredCurrentUser()) {
   if (!user) return false;
   if (user.role === 'admin') return true;
   if (user.role === 'recruiter') {
-    if (app.recruiterId) return app.recruiterId === user.id;
-    if (app.recruiterEmail) return app.recruiterEmail.toLowerCase() === String(user.email || '').toLowerCase();
-    return true;
+    if (app.recruiterId === user.id) return true;
+    if (app.recruiterEmail) {
+      return app.recruiterEmail.toLowerCase() === String(user.email || '').toLowerCase();
+    }
+    return false;
   }
-  if (app.studentId) return app.studentId === user.id;
+  if (app.studentId === user.id) return true;
   if (app.studentEmail) return app.studentEmail.toLowerCase() === String(user.email || '').toLowerCase();
   return false;
 }
 
 function notificationBelongsToUser(notification = {}, user = getStoredCurrentUser()) {
   if (!user) return false;
-  if (notification.recipientId) return notification.recipientId === user.id;
+  if (notification.recipientId === user.id) return true;
   if (notification.recipientEmail) return notification.recipientEmail.toLowerCase() === String(user.email || '').toLowerCase();
-  if (notification.recipientRole) return notification.recipientRole === user.role;
+  if (!notification.recipientId && !notification.recipientEmail && notification.recipientRole) {
+    return notification.recipientRole === user.role;
+  }
   return false;
 }
 
@@ -138,11 +142,18 @@ export default function App() {
   };
 
   const refreshOwnedState = async (user = currentUser) => {
-    if (!user) return;
+    const activeUser = getStoredCurrentUser();
+    const token = localStorage.getItem('careerpilot_session_token');
+    const sameUser = activeUser && (
+      activeUser.id === user?.id ||
+      String(activeUser.email || '').toLowerCase() === String(user?.email || '').toLowerCase()
+    );
+    if (!user || !token || !sameUser) return;
     try {
-      const [nextApplications, nextNotifications] = await Promise.all([
+      const [nextApplications, nextNotifications, nextJobs] = await Promise.all([
         stateApi.getApplications(),
         stateApi.getNotifications(),
+        stateApi.getJobs(),
       ]);
       const scopedApps = scopeApplications(nextApplications, user);
       const scopedNotifs = scopeNotifications(nextNotifications, user);
@@ -150,10 +161,15 @@ export default function App() {
       setNotifications(scopedNotifs);
       setScopedJson('careerpilot_applications', scopedApps, getUserScope(user));
       setScopedJson('careerpilot_notifications', scopedNotifs, getUserScope(user));
+      if (Array.isArray(nextJobs)) {
+        localStorage.setItem('careerpilot_jobs', JSON.stringify(nextJobs));
+        window.dispatchEvent(new CustomEvent('careerpilot:jobs-updated', { detail: nextJobs }));
+      }
       if (user.role === 'student') {
         await hydrateStudentProfile(user);
       }
     } catch (error) {
+      if (!localStorage.getItem('careerpilot_session_token')) return;
       console.warn('Unable to refresh user-owned state.', error);
     }
   };
@@ -162,10 +178,21 @@ export default function App() {
     const hydrateCoreState = async () => {
       try {
         const token = localStorage.getItem('careerpilot_session_token');
+        let activeUser = getStoredCurrentUser();
+        if (!token) {
+          if (activeUser) {
+            localStorage.removeItem('careerpilot_current_user');
+            setCurrentUser(null);
+            setIsAuthenticated(false);
+          }
+          return;
+        }
+
         if (token) {
           try {
             const sessionUser = await authApi.me(token);
             if (sessionUser?.user) {
+              activeUser = sessionUser.user;
               localStorage.setItem('careerpilot_current_user', JSON.stringify(sessionUser.user));
               setCurrentUser(sessionUser.user);
               setIsAuthenticated(true);
@@ -185,26 +212,31 @@ export default function App() {
             localStorage.removeItem('careerpilot_current_user');
             setCurrentUser(null);
             setIsAuthenticated(false);
+            return;
           }
         }
 
-        const [nextApplications, nextNotifications] = await Promise.all([
+        const [nextApplications, nextNotifications, nextJobs] = await Promise.all([
           stateApi.getApplications(),
           stateApi.getNotifications(),
+          stateApi.getJobs(),
         ]);
 
         if (Array.isArray(nextApplications)) {
-          const activeUser = getStoredCurrentUser();
           const sanitizedApplications = scopeApplications(nextApplications, activeUser);
           setApplications(sanitizedApplications);
           setScopedJson('careerpilot_applications', sanitizedApplications, getUserScope(activeUser));
         }
 
         if (Array.isArray(nextNotifications)) {
-          const activeUser = getStoredCurrentUser();
           const sanitizedNotifications = scopeNotifications(nextNotifications, activeUser);
           setNotifications(sanitizedNotifications);
           setScopedJson('careerpilot_notifications', sanitizedNotifications, getUserScope(activeUser));
+        }
+
+        if (Array.isArray(nextJobs)) {
+          localStorage.setItem('careerpilot_jobs', JSON.stringify(nextJobs));
+          window.dispatchEvent(new CustomEvent('careerpilot:jobs-updated', { detail: nextJobs }));
         }
       } catch (error) {
         console.warn('Core state hydrate fallback to local cache.', error);
@@ -356,14 +388,18 @@ export default function App() {
         console.warn('Student profile hydrate fallback to scoped browser cache.', error);
       });
     }
-    Promise.all([stateApi.getApplications(), stateApi.getNotifications()])
-      .then(([nextApplications, nextNotifications]) => {
+    Promise.all([stateApi.getApplications(), stateApi.getNotifications(), stateApi.getJobs()])
+      .then(([nextApplications, nextNotifications, nextJobs]) => {
         const scopedApps = scopeApplications(nextApplications, user);
         const scopedNotifs = scopeNotifications(nextNotifications, user);
         setApplications(scopedApps);
         setNotifications(scopedNotifs);
         setScopedJson('careerpilot_applications', scopedApps, getUserScope(user));
         setScopedJson('careerpilot_notifications', scopedNotifs, getUserScope(user));
+        if (Array.isArray(nextJobs)) {
+          localStorage.setItem('careerpilot_jobs', JSON.stringify(nextJobs));
+          window.dispatchEvent(new CustomEvent('careerpilot:jobs-updated', { detail: nextJobs }));
+        }
       })
       .catch((error) => {
         console.warn('User-owned state hydrate fallback to scoped browser cache.', error);

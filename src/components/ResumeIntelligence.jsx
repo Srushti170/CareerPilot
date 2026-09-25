@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { getStudentProfile } from '../lib/studentProfile';
 import { analyzeResumeWithAI, isCareerAiAvailable } from '../lib/aiCareerTools';
+import { setScopedJson } from '../lib/userScopedStorage';
 
 export function ResumeIntelligence({ targetJob = null, resumeTextOverride = '', embedded = false }) {
   const studentProfile = getStudentProfile();
@@ -75,7 +76,7 @@ export function ResumeIntelligence({ targetJob = null, resumeTextOverride = '', 
         });
 
         if (activeRequestRef.current === requestId) {
-          localStorage.setItem('careerpilot_latest_resume_analysis', JSON.stringify(aiAnalysis));
+          setScopedJson('careerpilot_latest_resume_analysis', aiAnalysis);
           setAnalysis(aiAnalysis);
           setIsAnalyzing(false);
         }

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { motion } from 'motion/react';
-import { getStudentProfile, saveStudentProfile } from '../lib/studentProfile';
+import { getStudentProfile, saveStudentProfileAndSync } from '../lib/studentProfile';
 import { authApi } from '../lib/backendSync';
 
 const DEFAULT_PROFILE = {
@@ -93,7 +93,13 @@ export function StudentOnboarding({ currentUser, onComplete }) {
       onboardingComplete: true,
     };
 
-    saveStudentProfile(profile, currentUser);
+    try {
+      await saveStudentProfileAndSync(profile, currentUser);
+    } catch (error) {
+      console.error('Onboarding profile sync error:', error);
+      setMessage('Could not save your profile yet. Please try again.');
+      return;
+    }
 
     if (currentUser) {
       const updatedUser = { ...currentUser, name: profile.name, email: profile.email, profileCompleted: true };

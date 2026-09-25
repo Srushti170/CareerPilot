@@ -16,6 +16,7 @@ const DEFAULT_CODING_PROFILES = {
   HackerRank: '',
 };
 const LEGACY_DEMO_ROLE = ['CS', 'Senior', 'Student'].join(' ');
+const STUDENT_PROFILE_UPDATED_EVENT = 'careerpilot:student-profile-updated';
 
 export const STUDENT_PROFILE_KEY = 'careerpilot_student_profile';
 export const STUDENT_ONBOARDING_KEY = 'careerpilot_student_onboarding_complete';
@@ -27,6 +28,12 @@ function getCurrentUser() {
   } catch {
     return {};
   }
+}
+
+function cacheStudentProfile(normalized, scope) {
+  setScopedJson(STUDENT_PROFILE_KEY, normalized, scope);
+  setScopedJson(STUDENT_ONBOARDING_KEY, normalized.onboardingComplete, scope);
+  window.dispatchEvent(new CustomEvent(STUDENT_PROFILE_UPDATED_EVENT, { detail: { profile: normalized } }));
 }
 
 export function createDefaultStudentProfile(user = {}) {
@@ -131,12 +138,21 @@ export function getStudentProfile(user = {}) {
 export function saveStudentProfile(profile, user = {}) {
   const normalized = normalizeStudentProfile(profile, user);
   const scope = user.id || user.email || normalized.userId || normalized.email;
-  setScopedJson(STUDENT_PROFILE_KEY, normalized, scope);
-  setScopedJson(STUDENT_ONBOARDING_KEY, normalized.onboardingComplete, scope);
+  cacheStudentProfile(normalized, scope);
   stateApi.saveStudentProfile(normalized).catch((error) => {
     console.error('Student profile sync error:', error);
   });
   return normalized;
+}
+
+export async function saveStudentProfileAndSync(profile, user = {}) {
+  const normalized = normalizeStudentProfile(profile, user);
+  const scope = user.id || user.email || normalized.userId || normalized.email;
+  cacheStudentProfile(normalized, scope);
+  const response = await stateApi.saveStudentProfile(normalized);
+  const persisted = normalizeStudentProfile(response?.profile || normalized, user);
+  cacheStudentProfile(persisted, scope);
+  return persisted;
 }
 
 export async function hydrateStudentProfile(user = {}) {
@@ -144,8 +160,7 @@ export async function hydrateStudentProfile(user = {}) {
   const profile = await stateApi.getStudentProfile();
   const normalized = normalizeStudentProfile(profile || {}, activeUser);
   const scope = activeUser.id || activeUser.email || normalized.userId || normalized.email;
-  setScopedJson(STUDENT_PROFILE_KEY, normalized, scope);
-  setScopedJson(STUDENT_ONBOARDING_KEY, normalized.onboardingComplete, scope);
+  cacheStudentProfile(normalized, scope);
   return normalized;
 }
 

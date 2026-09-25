@@ -10,6 +10,7 @@ import { getStudentProfile } from '../lib/studentProfile';
 import { getInterviewDashboardStats, getInterviewFeedbackHistory } from '../lib/interviewInsights';
 import { getStoredAnnouncements } from '../lib/adminData';
 import { getPublishedJobs } from '../lib/recruiterData';
+import { getScopedJson } from '../lib/userScopedStorage';
 
 export function StudentDashboard({ applications = [], setApplications, setActiveTab }) {
   const savedProfile = getStudentProfile();
@@ -17,7 +18,7 @@ export function StudentDashboard({ applications = [], setApplications, setActive
   const interviewStats = getInterviewDashboardStats(getInterviewFeedbackHistory());
   const [jobs, setJobs] = useState(() => getPublishedJobs().slice(0, 3));
   const [announcements, setAnnouncements] = useState(() => getStoredAnnouncements().slice(0, 3));
-  const latestResumeAnalysis = JSON.parse(localStorage.getItem('careerpilot_latest_resume_analysis') || 'null');
+  const latestResumeAnalysis = getScopedJson('careerpilot_latest_resume_analysis', null);
   const applicationMatchScores = applications.map((app) => app.matchScore).filter((score) => typeof score === 'number');
   const averageApplicationMatch = applicationMatchScores.length
     ? Math.round(applicationMatchScores.reduce((sum, score) => sum + score, 0) / applicationMatchScores.length)
